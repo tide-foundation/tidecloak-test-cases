@@ -1,11 +1,15 @@
 import pytest
 from playwright.sync_api import sync_playwright
-from keycloak import KeycloakAdmin
 import requests
+import os
+from dotenv import load_dotenv
 
-ADMIN_URL = "http://localhost:8080"
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "admin"
+load_dotenv()
+
+ADMIN_URL = os.getenv('ADMIN_URL')
+ADMIN_USERNAME = os.getenv('ADMIN_USERNAME')
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
+
 
 @pytest.fixture(scope="session", autouse=True)
 def check_tidecloak_running():
@@ -31,8 +35,8 @@ def logged_in_admin(browser_page):
     """Logs into Tidecloak as admin and returns a logged-in page."""
     page = browser_page
     page.goto(f"{ADMIN_URL}")
-    page.fill('input#username', ADMIN_USERNAME)
-    page.fill('input#password', ADMIN_PASSWORD)
-    page.click('button#kc-login')
-    page.wait_for_selector("text=Master")
+    page.get_by_role("textbox", name="username").fill(ADMIN_USERNAME)
+    page.get_by_role("textbox", name="password").fill(ADMIN_PASSWORD)
+    page.get_by_role("button", name="Sign In").click()
+    page.get_by_test_id("currentRealm").filter(has_text="Keycloak").wait_for()
     return page
