@@ -29,7 +29,6 @@ pyee==13.0.0
 Pygments==2.19.2
 pytest==8.4.1
 pytest-bdd==8.1.0
-python-keycloak==5.7.0
 requests==2.32.4
 requests-toolbelt==1.0.0
 six==1.17.0
