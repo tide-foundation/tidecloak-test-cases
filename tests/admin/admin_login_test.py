@@ -1,10 +1,15 @@
 from pytest_bdd import scenarios, given, when, then
+from dotenv import load_dotenv
+import os
+from playwright.sync_api import expect
 
-scenarios('../features/admin_login.feature')
+load_dotenv()
 
-ADMIN_URL = "http://localhost:8080"
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "admin"
+scenarios('admin/admin_login.feature')
+
+ADMIN_URL = os.getenv('ADMIN_URL')
+ADMIN_USERNAME = os.getenv('ADMIN_USERNAME')
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
 
 @given("I open the Tidecloak admin login page")
 def open_login_page(browser_page):
@@ -12,14 +17,18 @@ def open_login_page(browser_page):
 
 @when("I login as admin user")
 def login_admin(browser_page):
-    browser_page.fill('input#username', ADMIN_USERNAME)
-    browser_page.fill('input#password', ADMIN_PASSWORD)
-    browser_page.click('button#kc-login')
+    page = browser_page
+    page.goto(f"{ADMIN_URL}")
+    page.get_by_role("textbox", name="username").fill(ADMIN_USERNAME)
+    page.get_by_role("textbox", name="password").fill(ADMIN_PASSWORD)
+    page.get_by_role("button", name="Sign In").click()
 
 @then("I should see the admin dashboard")
 def verify_dashboard(browser_page):
-    assert browser_page.title() == "Keycloak Administration Console"
-    browser_page.click('button#nav-toggle')
-    assert browser_page.is_visible('button[data-testid="options-toggle"]:has-text("admin")')
-    assert browser_page.is_visible('a:has-text("Manage Realms")')
-    assert browser_page.is_visible('a:has-text("Realm settings")')
+    page = browser_page
+    
+    assert page.title() == "Keycloak Administration Console"
+    expect(page.get_by_test_id("currentRealm").filter(has_text="Keycloak")).to_be_visible()
+    expect(page.get_by_role("button", name="admin")).to_be_visible()
+    page.get_by_role("button", name="admin").click()
+    expect(page.get_by_role("menuitem", name="Sign out")).to_be_visible()
