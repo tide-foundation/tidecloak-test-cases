@@ -24,7 +24,8 @@ def create_realm(logged_in_admin):
 @then('the realm "testrealm" should be visible in the realm list')
 def verify_realm(logged_in_admin):
     page = logged_in_admin
-    table_locator = page.locator("table[aria-label='selectRealm']")
+
+    table_locator = page.locator("table[aria-label='selectRealm']") # no available playwright api to select the table hence the css selector
     expect(table_locator).to_contain_text(realm_name)
     expect(page.get_by_test_id("currentRealm").filter(has_text=realm_name)).to_be_visible()
     page.get_by_role("link", name="Realm settings").click()

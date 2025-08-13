@@ -31,6 +31,6 @@ def create_realm(logged_in_admin):
 @then('the realm "testrealm" should not be visible in the realm list')
 def verify_realm(logged_in_admin):
     page = logged_in_admin
-    table_locator = page.locator("table[aria-label='selectRealm']")
+    table_locator = page.locator("table[aria-label='selectRealm']") # no available playwright api to select the table hence the css selector
     expect(table_locator).not_to_contain_text(realm_name)
     
