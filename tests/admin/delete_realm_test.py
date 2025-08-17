@@ -12,7 +12,7 @@ def admin_logged_in(logged_in_admin):
     return logged_in_admin
 
 @when('the admin deletes a realm named "testrealm"')
-def create_realm(logged_in_admin):
+def delete_realm(logged_in_admin):
     
     page = logged_in_admin
     

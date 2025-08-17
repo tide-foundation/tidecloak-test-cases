@@ -29,5 +29,5 @@ if [ -n "$VIRTUAL_ENV" ]; then
         allure serve ./reports
         
 else 
-    echo "❌ Virtual environment not active..." && exit 1
+    echo "[+] Virtual environment not active..." && exit 1
 fi

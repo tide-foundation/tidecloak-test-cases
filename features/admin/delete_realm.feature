@@ -1,4 +1,6 @@
 Feature: Delete a realm in Tidecloak
+  As a Tide Cloak admin user
+  I want to delete a realm in Tidecloak
 
   Scenario: Admin delete a realm successfully
     Given the admin is logged in to the Tidecloak admin console
