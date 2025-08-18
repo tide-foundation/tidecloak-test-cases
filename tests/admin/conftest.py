@@ -9,7 +9,7 @@ ADMIN_USERNAME = os.getenv('ADMIN_USERNAME')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
 
 
-@pytest.fixture
+@pytest.fixture()
 def logged_in_admin(browser_page):
     page = browser_page
     page.goto(f"{ADMIN_URL}")

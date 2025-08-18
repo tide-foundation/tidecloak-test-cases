@@ -1,5 +1,6 @@
 from pytest_bdd import given, when, then, scenarios
 from playwright.sync_api import expect 
+import pytest
 
 scenarios("admin/get_license.feature")
 
@@ -9,6 +10,7 @@ test_user_email = "admin@admin.com"
 tidecloak_url = "localhost:8080"
 stripe_url = "checkout.stripe.com"
 
+@pytest.mark.dependency(name="get_license", depends=["create_realm"], scope="session")
 @given("the admin is logged in to the Tidecloak admin console")
 def admin_logged_in(logged_in_admin):
     return logged_in_admin

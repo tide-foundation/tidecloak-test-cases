@@ -1,7 +1,8 @@
 from pytest_bdd import given, when, then, scenarios
 from playwright.sync_api import expect 
+import pytest
 
-scenarios("admin/get_license.feature")
+scenarios("admin/delete_license.feature")
 
 # GLOBAL VARIABLES
 realm_name = "testrealm"
@@ -9,11 +10,12 @@ test_user_email = "admin@admin.com"
 tidecloak_url = "localhost:8080"
 stripe_url = "billing.stripe.com"
 
+@pytest.mark.dependency(name="delete_license", depends=["get_license"], scope="session")
 @given("the admin is logged in to the Tidecloak admin console")
 def admin_logged_in(logged_in_admin):
     return logged_in_admin
 
-@when('the admin adds Tide provider to "testrealm" and get license')
+@when('the admin deletes license and deletes Tide provider in "testrealm"')
 def add_license_to_realm(logged_in_admin):
     page = logged_in_admin
     

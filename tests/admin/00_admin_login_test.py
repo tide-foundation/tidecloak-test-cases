@@ -2,6 +2,7 @@ from pytest_bdd import scenarios, given, when, then
 from dotenv import load_dotenv
 import os
 from playwright.sync_api import expect
+import pytest
 
 load_dotenv()
 
@@ -11,6 +12,7 @@ ADMIN_URL = os.getenv('ADMIN_URL')
 ADMIN_USERNAME = os.getenv('ADMIN_USERNAME')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
 
+@pytest.mark.dependency(name="admin_login", scope="session")
 @given("I open the Tidecloak admin login page")
 def open_login_page(browser_page):
     browser_page.goto(ADMIN_URL)

@@ -1,11 +1,13 @@
 from pytest_bdd import given, when, then, scenarios
 from playwright.sync_api import expect 
+import pytest
 
 scenarios("admin/create_realm.feature")
 
 # GLOBAL VARIABLES
 realm_name = "testrealm"
 
+@pytest.mark.dependency(name="create_realm", scope="session")
 @given("the admin is logged in to the Tidecloak admin console")
 def admin_logged_in(logged_in_admin):
     return logged_in_admin
