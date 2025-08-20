@@ -2,7 +2,7 @@
 
 if [ -n "$VIRTUAL_ENV" ]; then
     echo "[+] Running tests and generating reports..."
-    pytest -v -s --rich --alluredir=./reports
+    pytest -v -s --rich --alluredir=./allure-reports
     
     TEST_EXIT_CODE=$?
     if [ $TEST_EXIT_CODE -eq 0 ]; then
@@ -19,14 +19,15 @@ if [ -n "$VIRTUAL_ENV" ]; then
         cleanup() {
             echo ""
             echo "[+] Stopping Allure server..."
-			rm -rf ./reports
+			rm -rf ./allure-reports
+			rm -rf ./screenshots
             echo "[+] Cleanup completed. Goodbye!"
             exit 0
         }
         
         trap cleanup SIGINT SIGTERM
         
-        allure serve ./reports
+        allure serve ./allure-reports
         
 else 
     echo "[+] Virtual environment not active..." && exit 1
