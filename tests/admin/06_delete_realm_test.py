@@ -8,7 +8,6 @@ scenarios("admin/delete_realm.feature")
 # GLOBAL VARIABLES
 realm_name = "testrealm"
 
-@pytest.mark.dependency(name="delete_realm", depends=["delete_license"], scope="session")
 @given("the admin is logged in to the Tidecloak admin console")
 def admin_logged_in(logged_in_admin):
     return logged_in_admin

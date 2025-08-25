@@ -9,7 +9,6 @@ scenarios("admin/create_realm.feature")
 realm_name = "testrealm"
 
 
-@pytest.mark.dependency(name="create_realm", scope="session")
 @given("the admin is logged in to the Tidecloak admin console")
 def admin_logged_in(logged_in_admin):
     return logged_in_admin

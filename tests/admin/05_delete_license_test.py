@@ -11,7 +11,6 @@ test_user_email = "admin@admin.com"
 tidecloak_url = "localhost:8080"
 billing_stripe_url = "billing.stripe.com"
 
-@pytest.mark.dependency(name="delete_license", depends=["get_license"], scope="session")
 @given("the admin is logged in to the Tidecloak admin console")
 def admin_logged_in(logged_in_admin):
     return logged_in_admin
