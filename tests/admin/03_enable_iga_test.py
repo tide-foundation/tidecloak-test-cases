@@ -31,9 +31,10 @@ def verify_iga(logged_in_admin):
     page = logged_in_admin
 
     try:
+        expect(page.locator("label[for='tide-realm-iga-switch']")).to_be_checked()
+        
         take_screenshot(page, "Enable IGA Successful")
 
-        expect(page.locator("label[for='tide-realm-iga-switch']")).to_be_checked()
         page.get_by_role("link", name="Change Requests").click()
         page.get_by_role("tab", name="Clients").click()
 

@@ -1,6 +1,7 @@
 from pytest_bdd import given, when, then, scenarios
 from playwright.sync_api import expect 
 import pytest
+from conftest import take_screenshot
 
 scenarios("admin/delete_license.feature")
 
@@ -8,7 +9,7 @@ scenarios("admin/delete_license.feature")
 realm_name = "testrealm"
 test_user_email = "admin@admin.com"
 tidecloak_url = "localhost:8080"
-stripe_url = "billing.stripe.com"
+billing_stripe_url = "billing.stripe.com"
 
 @pytest.mark.dependency(name="delete_license", depends=["get_license"], scope="session")
 @given("the admin is logged in to the Tidecloak admin console")
@@ -16,7 +17,7 @@ def admin_logged_in(logged_in_admin):
     return logged_in_admin
 
 @when('the admin deletes license and deletes Tide provider in "testrealm"')
-def add_license_to_realm(logged_in_admin):
+def delete_license_in_realm(logged_in_admin):
     page = logged_in_admin
     
     page.get_by_role("link", name="Manage realms").click()
@@ -29,9 +30,10 @@ def add_license_to_realm(logged_in_admin):
     page.get_by_role("button", name="Manage").click()
 
     # Wait for redirection to Stipe gateway
-    page.wait_for_url(f"**/{stripe_url}/**")
+    page.wait_for_url(f"**/{billing_stripe_url}/**")
 
     # Remove subscription Stipe gateway
+    page.get_by_role("link", name="Cancel Subscription").wait_for(state="visible")
     page.get_by_role("link", name="Cancel Subscription").click()
     page.get_by_role("button", name="Cancel Subscription").click()
     page.get_by_role("button", name="No thanks").click()
@@ -56,5 +58,12 @@ def add_license_to_realm(logged_in_admin):
 def verify_license(logged_in_admin):
     page = logged_in_admin
 
-    expect(page.get_by_role("heading", name="User-defined")).to_be_visible()
-    expect(page.get_by_role("heading", name="Social")).to_be_visible()
+    try:
+        expect(page.get_by_role("heading", name="User-defined")).to_be_visible()
+        expect(page.get_by_role("heading", name="Social")).to_be_visible()
+
+        take_screenshot(page, "Delete License Successful")
+    
+    except:
+        take_screenshot(page, "Deletes License Failure")
+        raise    

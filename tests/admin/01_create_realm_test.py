@@ -1,11 +1,13 @@
 from pytest_bdd import given, when, then, scenarios
 from playwright.sync_api import expect 
 import pytest
+from conftest import take_screenshot
 
 scenarios("admin/create_realm.feature")
 
 # GLOBAL VARIABLES
 realm_name = "testrealm"
+
 
 @pytest.mark.dependency(name="create_realm", scope="session")
 @given("the admin is logged in to the Tidecloak admin console")
@@ -27,9 +29,17 @@ def create_realm(logged_in_admin):
 def verify_realm(logged_in_admin):
     page = logged_in_admin
 
-    table_locator = page.locator("table[aria-label='selectRealm']") # no available playwright api to select the table hence the css selector
-    expect(table_locator).to_contain_text(realm_name)
-    expect(page.get_by_test_id("currentRealm").filter(has_text=realm_name)).to_be_visible()
-    page.get_by_role("link", name="Realm settings").click()
-    expect(page.get_by_role("heading", name=realm_name)).to_be_visible()
-
+    try:
+        table_locator = page.locator("table[aria-label='selectRealm']") # no available playwright api to select the table hence the css selector
+        expect(table_locator).to_contain_text(realm_name)
+        expect(page.get_by_test_id("currentRealm").filter(has_text=realm_name)).to_be_visible()
+        page.get_by_role("link", name="Realm settings").click()
+        expect(page.get_by_role("heading", name=realm_name)).to_be_visible()
+        page.get_by_role("textbox", name="Copyable input").wait_for(state="visible")
+        expect(page.get_by_role("textbox", name="Copyable input")).to_be_visible()
+        
+        take_screenshot(page, "Create Realm Successful")
+    
+    except:
+        take_screenshot(page, "Create Realm Failure")
+        raise

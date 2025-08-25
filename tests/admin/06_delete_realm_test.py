@@ -1,6 +1,7 @@
 from pytest_bdd import given, when, then, scenarios
 from playwright.sync_api import expect
 import pytest
+from conftest import take_screenshot
 
 scenarios("admin/delete_realm.feature")
 
@@ -32,6 +33,13 @@ def delete_realm(logged_in_admin):
 @then('the realm "testrealm" should not be visible in the realm list')
 def verify_realm(logged_in_admin):
     page = logged_in_admin
-    table_locator = page.locator("table[aria-label='selectRealm']") # no available playwright api to select the table hence the css selector
-    expect(table_locator).not_to_contain_text(realm_name)
     
+    try:
+        table_locator = page.locator("table[aria-label='selectRealm']") # no available playwright api to select the table hence the css selector
+        expect(table_locator).not_to_contain_text(realm_name)
+
+        take_screenshot(page, "Delete Realm Successful")
+    
+    except:
+        take_screenshot(page, "Delete Realm Failure")
+        raise

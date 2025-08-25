@@ -1,6 +1,7 @@
 from pytest_bdd import given, when, then, scenarios
 from playwright.sync_api import expect 
 import pytest
+from conftest import take_screenshot
 
 scenarios("admin/get_license.feature")
 
@@ -44,7 +45,6 @@ def add_license_to_realm(logged_in_admin):
     # Waiting for spinner to load the detail and check for visiblity state of "License Details"
     page.get_by_role("progressbar", name="Contents").wait_for(state="visible")
     page.get_by_role("progressbar", name="Contents").wait_for(state="detached")
-    page.get_by_text("License Details").wait_for(state="visible")
 
 
 
@@ -52,8 +52,16 @@ def add_license_to_realm(logged_in_admin):
 def verify_license(logged_in_admin):
     page = logged_in_admin
 
-    expect(page.get_by_role("textbox", name="Copyable input")).to_be_visible()
-    expect(page.get_by_role("button", name="Copy to clipboard")).to_be_visible()
-    expect(page.get_by_role("button", name="Export")).to_be_visible()
-    expect(page.get_by_role("button", name="Manage")).to_be_visible()
+    try:
+        page.get_by_text("License Details").wait_for(state="visible")
+        expect(page.get_by_role("textbox", name="Copyable input")).to_be_visible()
+        expect(page.get_by_role("button", name="Copy to clipboard")).to_be_visible()
+        expect(page.get_by_role("button", name="Export")).to_be_visible()
+        expect(page.get_by_role("button", name="Manage")).to_be_visible()
+
+        take_screenshot(page, "Get License Successful")
+    
+    except:
+        take_screenshot(page, "Get License Failure")
+        raise    
 
