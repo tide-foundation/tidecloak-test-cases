@@ -77,6 +77,9 @@ This magical script will:
 # Run tests and generate reports
 pytest -v -s --alluredir=./reports
 
+# Run rich tests and generate reports
+pytest -v -s --rich --alluredir=./reports
+
 # Serve the report
 allure serve ./reports
 ```

@@ -2,7 +2,7 @@
 
 if [ -n "$VIRTUAL_ENV" ]; then
     echo "[+] Running tests and generating reports..."
-    pytest -v -s --rich --alluredir=./reports
+    pytest
     
     TEST_EXIT_CODE=$?
     if [ $TEST_EXIT_CODE -eq 0 ]; then
