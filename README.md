@@ -46,7 +46,15 @@ This testing suite combines the power of **pytest-BDD** for readable test scenar
    playwright install
    ```
 
-4. **Make the script executable**
+4. **Create dotenv file**
+   ```bash
+   # Sample .env file
+   ADMIN_URL="<YOUR_TIDE_KEYCLOAK_INSTANCE_URL>"
+   ADMIN_USERNAME="<YOUR_ADMIN_USERNAME>"
+   ADMIN_PASSWORD="<YOUR_ADMIN_PASSWORD>"
+   ```
+   
+5. **Make the script executable**
    ```bash
    chmod +x allure-report.sh
    ```
