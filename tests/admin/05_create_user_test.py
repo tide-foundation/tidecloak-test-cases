@@ -1,0 +1,67 @@
+from pytest_bdd import given, when, then, scenarios, parsers
+from playwright.sync_api import expect 
+from conftest import take_screenshot
+
+scenarios("admin/create_user.feature")
+
+# GLOBAL VARIABLES
+realm_name = "testrealm"
+
+@given("the admin is logged in to the Tidecloak admin console")
+def admin_logged_in(logged_in_admin):
+    return logged_in_admin
+
+@when(parsers.parse("the admin creates a user with username {username}. email {email}, first name {first_name} and last name {last_name}"))
+def create_user(logged_in_admin, username, email, first_name, last_name):
+    
+    page = logged_in_admin
+    
+    page.get_by_test_id("nav-item-realms").click()
+    page.get_by_role("link", name=realm_name).click()
+    page.get_by_test_id("nav-item-users").click()
+
+    try:
+        # this button is only visible when creating first user
+        expect(page.get_by_test_id("no-users-found-empty-action")).to_be_visible()
+        page.get_by_test_id("no-users-found-empty-action").click()
+    except:
+        # this button is visible when creating next users
+        page.get_by_test_id("add-user").click()
+
+    page.get_by_role("combobox", name="Type to filter").click()
+    page.get_by_role("option", name="Update Password").click()
+    page.get_by_role("button", name="Menu toggle").click()
+
+    page.get_by_test_id("username").fill(username)
+    page.get_by_test_id("email").fill(email)
+    page.get_by_test_id("firstName").fill(first_name)
+    page.get_by_test_id("lastName").fill(last_name)
+
+    page.get_by_test_id("user-creation-save").click()
+    page.get_by_role("button", name="Close alert: The user has").click()
+
+    page.get_by_role("textbox", name="User ID").wait_for(state="visible")
+
+
+@then('the user tide id, created at and other settings tabs should be visible')
+def verify_user_creation(logged_in_admin):
+    page = logged_in_admin
+
+    try:
+
+        # Checking for tide id and created at visible
+        expect(page.get_by_role("textbox", name="User ID")).to_be_visible()
+        expect(page.get_by_role("textbox", name="Created at")).to_be_visible()
+        
+        # Checking for other setting tabs visible
+        expect(page.get_by_test_id("credentials")).to_be_visible()
+        expect(page.get_by_test_id("role-mapping-tab")).to_be_visible()
+        expect(page.get_by_test_id("user-groups-tab")).to_be_visible()
+        expect(page.get_by_test_id("user-sessions-tab")).to_be_visible()
+        expect(page.get_by_test_id("events-tab")).to_be_visible()
+        
+        take_screenshot(page, "Create User Successful")
+    
+    except:
+        take_screenshot(page, "Create User Failure")
+        raise
