@@ -30,8 +30,8 @@ This testing suite combines the power of **pytest-BDD** for readable test scenar
 
 1. **Clone the repository**
    ```bash
-   git clone <your-repo-url>
-   cd tide-cloak-ui-testing
+   git clone https://github.com/tide-foundation/tidecloak-test-cases
+   cd tidecloak-test-cases
    ```
 
 2. **Create and activate virtual environment**
@@ -46,7 +46,15 @@ This testing suite combines the power of **pytest-BDD** for readable test scenar
    playwright install
    ```
 
-4. **Make the script executable**
+4. **Create dotenv file**
+   ```bash
+   # Sample .env file
+   ADMIN_URL="<YOUR_TIDE_KEYCLOAK_INSTANCE_URL>"
+   ADMIN_USERNAME="<YOUR_ADMIN_USERNAME>"
+   ADMIN_PASSWORD="<YOUR_ADMIN_PASSWORD>"
+   ```
+   
+5. **Make the script executable**
    ```bash
    chmod +x allure-report.sh
    ```
@@ -73,7 +81,7 @@ pytest -v -s --alluredir=./reports
 allure serve ./reports
 ```
 
-<!-- ## 📁 Project Structure
+## 📁 Project Structure
 
 ```
 tide-cloak-ui-testing/
@@ -93,7 +101,7 @@ tide-cloak-ui-testing/
 ├── allure-report.sh          # One-click test execution
 ├── pytest.ini               # Pytest configuration
 └── requirements.txt          # Python dependencies
-``` -->
+```
 
 ## 📊 Beautiful Reports
 
