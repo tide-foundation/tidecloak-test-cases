@@ -2,7 +2,6 @@ from pytest_bdd import scenarios, given, when, then
 from dotenv import load_dotenv
 import os
 from playwright.sync_api import expect
-import pytest
 from conftest import take_screenshot
 
 

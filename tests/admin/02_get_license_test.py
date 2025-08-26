@@ -1,6 +1,5 @@
 from pytest_bdd import given, when, then, scenarios
 from playwright.sync_api import expect 
-import pytest
 from conftest import take_screenshot
 
 scenarios("admin/get_license.feature")
