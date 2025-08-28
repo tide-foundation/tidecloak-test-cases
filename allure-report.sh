@@ -20,7 +20,6 @@ if [ -n "$VIRTUAL_ENV" ]; then
             echo ""
             echo "[+] Stopping Allure server..."
 			rm -rf ./reports
-			rm -rf ./screenshots
             echo "[+] Cleanup completed. Goodbye!"
             exit 0
         }

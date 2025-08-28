@@ -209,5 +209,5 @@ __marimo__/
 # Custom
 run-tc.sh
 get_data.py
-screenshots/
-allure-reports/
+reports/
+auth.json
