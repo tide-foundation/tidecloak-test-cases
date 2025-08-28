@@ -49,9 +49,10 @@ This testing suite combines the power of **pytest-BDD** for readable test scenar
 4. **Create dotenv file**
    ```bash
    # Sample .env file
-   ADMIN_URL="<YOUR_TIDE_KEYCLOAK_INSTANCE_URL>"
-   ADMIN_USERNAME="<YOUR_ADMIN_USERNAME>"
-   ADMIN_PASSWORD="<YOUR_ADMIN_PASSWORD>"
+   TIDE_INSTANCE_URL="<YOUR_TIDE_INSTANCE_URL>"
+   ADMIN_USERNAME="<YOUR_TIDE_ADMIN_USERNAME>"
+   ADMIN_PASSWORD="<YOUR_TIDE_ADMIN_PASSWORD>"
+   ADMIN_DASHBOARD_URL="http://<YOUR_TIDE_INSTANCE_URL>/admin/master/console/"
    ```
    
 5. **Make the script executable**
@@ -89,21 +90,17 @@ allure serve ./reports
 ```
 tide-cloak-ui-testing/
 ├── features/                   # BDD feature files
-│   ├── login.feature          # User authentication scenarios
-│   ├── navigation.feature     # UI navigation tests
-│   └── dashboard.feature      # Dashboard functionality
-├── step_definitions/          # Step implementation
-│   ├── conftest.py           # Pytest fixtures & config
-│   ├── login_steps.py        # Login step definitions
-│   └── common_steps.py       # Shared step definitions
-├── pages/                     # Page Object Models
-│   ├── base_page.py          # Common page elements
-│   ├── login_page.py         # Login page interactions
-│   └── dashboard_page.py     # Dashboard page methods
-├── reports/                   # Generated test reports
-├── allure-report.sh          # One-click test execution
-├── pytest.ini               # Pytest configuration
-└── requirements.txt          # Python dependencies
+│   ├── admin_login.feature         
+│   ├── create_realm.feature     
+│   └── get_license.feature      
+├── tests/                       # test cases
+│   ├── 00_admin_login_test.py          
+│   ├── 01_create_realm_test.py         
+│   └── 02_get_license_test.py     
+├── reports/                     # Generated test reports
+├── allure-report.sh             # One-click test execution
+├── pytest.ini                   # Pytest configuration
+└── requirements.txt             # Python dependencies
 ```
 
 ## 📊 Beautiful Reports
@@ -112,9 +109,9 @@ Our Allure integration provides:
 
 - 📈 **Test Execution Trends** - Track your testing progress over time
 - 🏷️ **Categorized Results** - Organize tests by features and severity
-<!-- - 📸 **Screenshots on Failure** - Visual debugging made easy -->
-<!-- - ⏱️ **Performance Metrics** - Monitor test execution times -->
-<!-- - 📝 **Detailed Steps** - Follow exactly what happened during each test -->
+- 📸 **Screenshots on Failure** - Visual debugging made easy
+- ⏱️ **Performance Metrics** - Monitor test execution times
+- 📝 **Detailed Steps** - Follow exactly what happened during each test
 
 ## 🧪 Writing Tests
 
@@ -131,7 +128,7 @@ Feature: Admin login to Tidecloak
       Then I should see the admin dashboard
 ```
 
-<!-- ### Step Definitions (Python)
+### Step Definitions (Python)
 ```python
 from pytest_bdd import given, when, then
 from playwright.sync_api import expect
@@ -144,7 +141,7 @@ def navigate_to_login(page, login_page):
 def enter_credentials(page, login_page):
     login_page.enter_username("user@example.com")
     login_page.enter_password("password123")
-``` -->
+```
 
 ## 🔍 Key Features
 
@@ -152,7 +149,7 @@ def enter_credentials(page, login_page):
 - **🔄 Automatic Browser Management**: Playwright handles browser lifecycle
 - **📱 Cross-Browser Testing**: Test across Chrome, Firefox, Safari, and Edge
 <!-- - **🎯 Parallel Execution**: Run tests concurrently for faster feedback -->
-<!-- - **🐛 Debug-Friendly**: Verbose output and screenshot capture on failures -->
+- **🐛 Debug-Friendly**: Verbose output and screenshot capture on failures
 <!-- - **📋 CI/CD Ready**: Easy integration with GitHub Actions, Jenkins, etc. -->
 
 <!-- ## 🌟 Best Practices
