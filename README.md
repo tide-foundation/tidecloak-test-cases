@@ -23,8 +23,8 @@ This testing suite combines the power of **pytest-BDD** for readable test scenar
 
 - Python 3.8 or higher
 - Virtual environment (recommended)
-- Node.js (for Playwright browsers)
 - Allure (for serving reports)
+<!-- - Node.js (for Playwright browsers) -->
 
 ## 🔧 Quick Setup
 
