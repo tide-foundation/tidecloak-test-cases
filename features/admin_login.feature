@@ -11,5 +11,5 @@ Feature: Admin login to Tidecloak
     Examples:
 
       | username | password | path                                      | comments_for_testers                 |
-      | admin    | admin1   | /admin/master/console/                    | valid creds - redirects to dashboard |
-      | admin    | admin    | /realms/master/login-actions/authenticate | invalid creds - stays on login page  |
+      | admin    | admin    | /admin/master/console/                    | valid creds - redirects to dashboard |
+      | admin    | user     | /realms/master/login-actions/authenticate | invalid creds - stays on login page  |
