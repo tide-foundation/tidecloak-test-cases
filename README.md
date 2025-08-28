@@ -52,7 +52,7 @@ This testing suite combines the power of **pytest-BDD** for readable test scenar
    TIDE_INSTANCE_URL="<YOUR_TIDE_INSTANCE_URL>"
    ADMIN_USERNAME="<YOUR_TIDE_ADMIN_USERNAME>"
    ADMIN_PASSWORD="<YOUR_TIDE_ADMIN_PASSWORD>"
-   ADMIN_DASHBOARD_URL="http://<YOUR_TIDE_INSTANCE_URL>/admin/master/console/"
+   ADMIN_DASHBOARD_URL="<YOUR_TIDE_INSTANCE_URL>/admin/master/console/"
    ```
    
 5. **Make the script executable**
