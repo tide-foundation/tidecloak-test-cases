@@ -148,8 +148,8 @@ def enter_credentials(page, login_page):
 - **🛡️ Environment Safety**: Script validates virtual environment before execution
 - **🔄 Automatic Browser Management**: Playwright handles browser lifecycle
 - **📱 Cross-Browser Testing**: Test across Chrome, Firefox, Safari, and Edge
-<!-- - **🎯 Parallel Execution**: Run tests concurrently for faster feedback -->
 - **🐛 Debug-Friendly**: Verbose output and screenshot capture on failures
+<!-- - **🎯 Parallel Execution**: Run tests concurrently for faster feedback -->
 <!-- - **📋 CI/CD Ready**: Easy integration with GitHub Actions, Jenkins, etc. -->
 
 <!-- ## 🌟 Best Practices
