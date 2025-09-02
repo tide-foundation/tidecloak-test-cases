@@ -10,6 +10,5 @@ Feature: Create a new user in testrealm realm
 
     Examples:
 
-      | realm_name | username | email               | first_name | last_name |
-      | testrealm  | user1    | testuser1@gmail.com | test1      | user1     |
-      | testrealm  | user2    | testuser2@gmail.com | test2      | user2     |
+      | realm_name | username | email                                                 | first_name | last_name |
+      | testrealm  | user1    | 0434f532-e2bf-4627-a944-f1b290afebde@app.debugmail.io | test1      | user1     |
