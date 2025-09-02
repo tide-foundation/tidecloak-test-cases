@@ -23,7 +23,9 @@ This testing suite combines the power of **pytest-BDD** for readable test scenar
 
 - Python 3.8 or higher
 - Virtual environment (recommended)
-- Allure (for serving reports)
+- Java runtime 18 or later
+- wget, tar, pip
+- Optional: Docker, if running a local instance of TideCloak
 <!-- - Node.js (for Playwright browsers) -->
 
 ## 🔧 Quick Setup
@@ -40,26 +42,48 @@ This testing suite combines the power of **pytest-BDD** for readable test scenar
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
-3. **Install dependencies**
+3. **Install Playwright and its dependencies**
    ```bash
    pip install -r requirements.txt
    playwright install
+   playwright install-deps
    ```
+
+3. **Install Allure**
+   ```bash
+   wget https://github.com/allure-framework/allure2/releases/download/2.34.1/allure-2.34.1.tgz
+   mkdir -p ~/tools
+   tar -xzf allure-2.34.1.tgz -C ~/tools/
+   echo 'export PATH=$PATH:$HOME/tools/allure-2.34.1/bin' >> ~/.bashrc
+   source ~/.bashrc
+   ```
+   You should be able to verify it's installed correctly by running:
+   ```bash
+   allure --version
+   ```
+   And seeing `2.34.1` as a result.
 
 4. **Create dotenv file**
+   Depending on where and how you set up your TideCloak server instance, you'll need to adjust this .env file accordingly. This example assumes you're running a local TideCloak-dev instance using this command:
+   ```bash
+   sudo docker run \
+    --name mytidecloak \
+    -d \
+    -v .:/opt/keycloak/data/h2 \
+    -p 8080:8080 \
+    -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+    -e KC_BOOTSTRAP_ADMIN_PASSWORD=password \
+    tideorg/tidecloak-dev:latest
+   ```
+   For this local instance, this is how your .env file should be:
    ```bash
    # Sample .env file
-   TIDE_INSTANCE_URL="<YOUR_TIDE_INSTANCE_URL>"
-   ADMIN_USERNAME="<YOUR_TIDE_ADMIN_USERNAME>"
-   ADMIN_PASSWORD="<YOUR_TIDE_ADMIN_PASSWORD>"
-   ADMIN_DASHBOARD_URL="<YOUR_TIDE_INSTANCE_URL>/admin/master/console/"
+   TIDE_INSTANCE_URL="http://localhost:8080"
+   ADMIN_USERNAME="admin"
+   ADMIN_PASSWORD="password"
+   ADMIN_DASHBOARD_URL="http://localhost:3000/admin/master/console/"
    ```
    
-5. **Make the script executable**
-   ```bash
-   chmod +x allure-report.sh
-   ```
-
 ## 🎯 Running Tests
 
 ### The Easy Way (Recommended)
