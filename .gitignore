@@ -211,3 +211,4 @@ run-tc.sh
 get_data.py
 reports/
 auth.json
+kcdatabase/

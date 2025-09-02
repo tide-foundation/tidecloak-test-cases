@@ -22,7 +22,7 @@ def browser_page(request):
     playwright.stop()
 
 @pytest.fixture()
-@allure.title("Logged In as admin")
+@allure.title("Log In as admin")
 def logged_in_admin(request):
 
     if not os.path.exists('auth.json'):
@@ -31,11 +31,12 @@ def logged_in_admin(request):
         check_for_auth_state_expiry()
 
     playwright = sync_playwright().start()
-    # browser = playwright.chromium.launch()
-    browser = playwright.chromium.launch(headless=False)
+    browser = playwright.chromium.launch()
+    # browser = playwright.chromium.launch(headless=False)
     context = browser.new_context(storage_state='auth.json')
+    context.grant_permissions(["clipboard-read", "clipboard-write"])
     page = context.new_page()
-    page.goto(f"{os.getenv('ADMIN_DASHBOARD_URL')}")
+    page.goto(f"{os.getenv('TIDE_INSTANCE_URL')}")
     
     # Store page reference for cleanup hook
     request.node.page = page
@@ -83,8 +84,8 @@ def check_for_auth_state_expiry() -> None:
         data = json.load(f)
     
     token_time = int(data["cookies"][1]['expires'])
-    # token_new_time = token_time + (60*60)
-    # if int(time.time()) - token_new_time >= 0:
+
+    # Recreates auth.json every 20 mins
     if int(time.time())-token_time >= 20*60:
         os.remove('auth.json')
         create_auth_state()
