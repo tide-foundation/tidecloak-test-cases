@@ -20,10 +20,9 @@ def login_admin(browser_page: Page, username: str, password: str) -> None:
     page.get_by_role("textbox", name="password").fill(password)
     page.get_by_role("button", name="Sign In").click()
 
-@then(parsers.parse("I should redirected to page {path} login page or dashboard page"))
-def verify_dashboard(browser_page: Page, path: str) -> None:
+@then(parsers.parse("I should redirected to page with heading {heading} login page or dashboard page"))
+def verify_dashboard(browser_page: Page, heading: str) -> None:
     
     page = browser_page
 
-    expect(page).to_have_url(re.compile(f".*{re.escape(path)}.*"))
-    time.sleep(2) # wait for dashboard page to load
+    expect(page.get_by_role("heading", name=heading)).to_be_visible()

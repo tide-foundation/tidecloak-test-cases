@@ -48,11 +48,11 @@ def verify_user_deletion(logged_in_admin: Page, username: str) -> None:
     page.get_by_role("button", name="Close alert: The user has been deleted").click()
 
     page.get_by_test_id("nav-item-users").click()
-    page.get_by_role("textbox", name="Search").click()
-    page.get_by_role("textbox", name="Search").fill(username)
-    page.get_by_test_id("table-search-input").get_by_role("button", name="Search").click()
 
     try:
+        page.get_by_role("textbox", name="Search").click(timeout=5000)
+        page.get_by_role("textbox", name="Search").fill(username)
+        page.get_by_test_id("table-search-input").get_by_role("button", name="Search").click(timeout=5000)
         expect(page.get_by_role("heading", name="No search results")).to_be_visible(timeout=5000)
     except:
         expect(page.get_by_role("heading", name="No users found")).to_be_visible(timeout=5000)

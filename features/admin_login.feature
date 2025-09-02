@@ -6,10 +6,10 @@ Feature: Admin login to Tidecloak
   Scenario: Login with admin credentials
     Given I open the tide admin login page
     When I login as admin user with <username> and <password>
-    Then I should redirected to page <path> login page or dashboard page
+    Then I should redirected to page with heading <heading> login page or dashboard page
 
     Examples:
 
-      | username | password | path                                      | comments_for_testers                 |
-      | admin    | admin    | /admin/master/console/                    | valid creds - redirects to dashboard |
-      | admin    | user     | /realms/master/login-actions/authenticate | invalid creds - stays on login page  |
+      | username | password | heading                 | comments_for_testers                 |
+      | admin    | admin    | master realm            | valid creds - redirects to dashboard |
+      | admin    | user     | Sign in to your account | invalid creds - stays on login page  |
