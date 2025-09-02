@@ -31,7 +31,7 @@ def delete_realm(logged_in_admin: Page) -> None:
 def verify_realm(logged_in_admin: Page, realm_name: str) -> None:
     page = logged_in_admin
     
-    expect(page.get_by_test_id("last-alert")).to_be_visible()
+    page.get_by_test_id("last-alert").wait_for(state="visible")
     expect(page.get_by_test_id("last-alert")).to_contain_text("The realm has been deleted")
     page.get_by_role("button", name="Close alert: The realm has").click()
 

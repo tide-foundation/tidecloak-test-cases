@@ -1,5 +1,9 @@
 from pytest_bdd import given, when, then, scenarios, parsers
 from playwright.sync_api import expect, Page
+import re, os, pytest
+from dotenv import load_dotenv
+
+load_dotenv()
 
 scenarios("create_realm.feature")
 
@@ -38,4 +42,42 @@ def verify_realm(logged_in_admin: Page, realm_name: str) -> None:
     expect(page.get_by_role("heading", name=realm_name)).to_be_visible()
     page.get_by_role("textbox", name="Copyable input").wait_for(state="visible")
     expect(page.get_by_role("textbox", name="Copyable input")).to_be_visible()
-        
+
+@then(parsers.parse("enable email verification and configure smtp server {admin_name}"))
+def configure_realm(logged_in_admin: Page, admin_name: str) -> None:
+    
+    configured: str = f"{os.getenv('CONFIGURED')}"
+
+    if configured.lower() == 'false':
+        pytest.skip(reason="SMPT server is not configured check the .env file!, if configured properly set 'CONFIGURED' value to 'true'")
+
+    mail_username = f"{str(os.getenv('TEMP_EMAIL_DEBUG_MAIL')).split('@')[0]}"
+    page = logged_in_admin
+
+    page.get_by_test_id("rs-login-tab").click()
+
+    page.locator("div").filter(has_text=re.compile(r"^Verify email OnOff$")).locator("label").nth(1).click()
+    expect(page.get_by_test_id("last-alert")).to_be_visible()
+    expect(page.get_by_test_id("last-alert")).to_contain_text("Verify email changed")
+    page.get_by_role("button", name="Close alert: Verify email").click()
+    
+    page.get_by_test_id("rs-email-tab").click()
+    page.get_by_test_id("smtpServer.from").fill(f"{os.getenv('TEMP_EMAIL_DEBUG_MAIL')}")
+    page.get_by_test_id("smtpServer.fromDisplayName").fill(f"{admin_name}")
+    page.get_by_test_id("smtpServer.host").fill(f"{os.getenv('SMTP_HOST')}")
+    page.get_by_test_id("smtpServer.port").fill(f"{os.getenv('SMTP_PORT')}")
+    page.locator("div").filter(has_text=re.compile(r"^Authentication EnabledDisabled$")).locator("span").nth(1).click()
+    page.get_by_test_id("smtpServer.user").fill(f"{mail_username}")
+    page.get_by_test_id("smtpServer.password").fill(f"{os.getenv('TEMP_EMAIL_PASSWORD')}")
+    page.get_by_test_id("email-tab-save").click()
+    page.get_by_test_id("test-connection-button").click()
+
+
+@then(parsers.parse("verify smtp configuration"))
+def verify_smtp(logged_in_admin: Page) -> None:
+
+    page = logged_in_admin
+
+    page.get_by_test_id("last-alert").wait_for(state="visible")
+    expect(page.get_by_test_id("last-alert")).to_contain_text("Success! SMTP connection")
+    page.get_by_role("button", name="Close alert: Success! SMTP").click()

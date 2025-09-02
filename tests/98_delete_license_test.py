@@ -55,7 +55,7 @@ def delete_license_in_realm(logged_in_admin: Page) -> None:
 def verify_license(logged_in_admin: Page, realm_name: str) -> None:
     page = logged_in_admin
 
-    expect(page.get_by_test_id("last-alert")).to_be_visible()
+    page.get_by_test_id("last-alert").wait_for(state="visible")
     expect(page.get_by_test_id("last-alert")).to_contain_text("Provider successfully deleted.")
     
     expect(page.get_by_role("heading", name=f"{realm_name} Current realm")).to_be_visible()

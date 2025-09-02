@@ -31,7 +31,7 @@ def enable_iga(logged_in_admin: Page) -> None:
 def verify_iga(logged_in_admin: Page) -> None:
     page = logged_in_admin
         
-    expect(page.get_by_test_id("last-alert")).to_be_visible()
+    page.get_by_test_id("last-alert").wait_for(state="visible")
     expect(page.get_by_test_id("last-alert")).to_contain_text("IGA changed successfully")
     page.get_by_role("button", name="Close alert: IGA changed").click()
 
