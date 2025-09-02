@@ -1,5 +1,5 @@
 from pytest_bdd import given, when, then, scenarios, parsers
-from playwright.sync_api import expect, Page 
+from playwright.sync_api import expect, Page
 
 scenarios("disable_user.feature")
 
@@ -18,7 +18,7 @@ def admin_logged_in(logged_in_admin: Page, realm_name: str) -> Page:
     return logged_in_admin
 
 @when(parsers.parse("the admin searches for user {username} goto user page and disables"))
-def search_user(logged_in_admin: Page, username: str) -> None:
+def disable_user(logged_in_admin: Page, username: str) -> None:
     page = logged_in_admin
     
     page.get_by_test_id("nav-item-users").click()
@@ -28,7 +28,7 @@ def search_user(logged_in_admin: Page, username: str) -> None:
 
     page.get_by_test_id("table-search-input").get_by_role("button", name="Search").click()
     page.get_by_role("link", name=username).click()
-
+    
     page.locator("label").filter(has_text="EnabledDisabled").locator("span").first.click()
     page.get_by_test_id("confirm").click()  
 

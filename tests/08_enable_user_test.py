@@ -18,7 +18,7 @@ def admin_logged_in(logged_in_admin: Page, realm_name: str) -> Page:
     return logged_in_admin
 
 @when(parsers.parse("the admin searches for user {username} goto user page and enables"))
-def search_user(logged_in_admin: Page, username: str) -> None:
+def enable_user(logged_in_admin: Page, username: str) -> None:
     page = logged_in_admin
     
     page.get_by_test_id("nav-item-users").click()
@@ -27,10 +27,10 @@ def search_user(logged_in_admin: Page, username: str) -> None:
     page.get_by_role("textbox", name="Search").fill(username)
 
     page.get_by_test_id("table-search-input").get_by_role("button", name="Search").click()
+    
     page.get_by_role("link", name=f"{username} Disabled").click()
 
     page.locator("label").filter(has_text="EnabledDisabled").locator("span").first.click()
-    # page.get_by_test_id("confirm").click()  
 
   
 @then(parsers.parse("the user {username} will have only username in the user list"))

@@ -2,7 +2,6 @@ Feature: Delete license  and delete tide as Identity provider in tidecloak
   As a tide cloak admin user
   I want to remove tide as am Identity provider
 
-  @delete_realm
   Scenario: Admin deletes the license and deletes tide provider
     Given the admin in the tide admin console selects realm <realm_name>
     When the admin deletes license with and deletes tide provider in realm

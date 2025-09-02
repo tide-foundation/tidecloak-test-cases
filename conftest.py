@@ -1,9 +1,7 @@
-import pytest
 from playwright.sync_api import sync_playwright, Page
-import allure
-import os
 from dotenv import load_dotenv
 from utils.screenshot import take_screenshot
+import pytest ,allure, os, json, time
 
 load_dotenv()
 
@@ -26,23 +24,15 @@ def browser_page(request):
 @pytest.fixture()
 @allure.title("Logged In as admin")
 def logged_in_admin(request):
+
     if not os.path.exists('auth.json'):
-        with sync_playwright() as p:
-            browser = p.chromium.launch()
-            context = browser.new_context()
-            page = context.new_page()
-            page.goto(f"{os.getenv('TIDE_INSTANCE_URL')}")
-            page.get_by_role("textbox", name="username").fill(f"{os.getenv('ADMIN_USERNAME')}")
-            page.get_by_role("textbox", name="password").fill(f"{os.getenv('ADMIN_PASSWORD')}")
-            page.get_by_role("button", name="Sign In").click()
-            page.get_by_test_id("currentRealm").filter(has_text="Keycloak").wait_for()
-            
-            context.storage_state(path='auth.json')
-            context.close()
-            browser.close()
+        create_auth_state()
+    else: 
+        check_for_auth_state_expiry()
 
     playwright = sync_playwright().start()
-    browser = playwright.chromium.launch()
+    # browser = playwright.chromium.launch()
+    browser = playwright.chromium.launch(headless=False)
     context = browser.new_context(storage_state='auth.json')
     page = context.new_page()
     page.goto(f"{os.getenv('ADMIN_DASHBOARD_URL')}")
@@ -71,3 +61,31 @@ def pytest_runtest_makereport(item, call):
             page = item.page
             test_name = item.nodeid.replace("::", "_").replace("/", "_")
             take_screenshot(page, f"FAILED_{test_name}")
+
+def create_auth_state() -> None:
+    with sync_playwright() as p:
+            browser = p.chromium.launch()
+            context = browser.new_context()
+            page = context.new_page()
+            page.goto(f"{os.getenv('TIDE_INSTANCE_URL')}")
+            page.get_by_role("textbox", name="username").fill(f"{os.getenv('ADMIN_USERNAME')}")
+            page.get_by_role("textbox", name="password").fill(f"{os.getenv('ADMIN_PASSWORD')}")
+            page.get_by_role("button", name="Sign In").click()
+            page.get_by_test_id("currentRealm").filter(has_text="Keycloak").wait_for()
+            
+            context.storage_state(path='auth.json')
+            context.close()
+            browser.close()
+
+def check_for_auth_state_expiry() -> None:
+    
+    with open('auth.json', 'r')as f:
+        data = json.load(f)
+    
+    token_time = int(data["cookies"][1]['expires'])
+    # token_new_time = token_time + (60*60)
+    # if int(time.time()) - token_new_time >= 0:
+    if int(time.time())-token_time >= 20*60:
+        os.remove('auth.json')
+        create_auth_state()
+
