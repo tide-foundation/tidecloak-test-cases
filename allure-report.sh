@@ -12,7 +12,7 @@ if [ -n "$VIRTUAL_ENV" ]; then
     fi
         echo "[+] Starting web server..."
         echo ""
-        echo "[+] Open the reports in your browser at http://127.0.01:3000"
+        echo "[+] Open the reports in your browser at http://0.0.0.0:3000"
         echo "[+] Press Ctrl+C when you're done viewing the report"
         echo ""
 
