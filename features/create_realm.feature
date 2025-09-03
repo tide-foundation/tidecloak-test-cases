@@ -7,8 +7,10 @@ Feature: Create a new realm in tidecloak
     Given the admin is logged in to the tide admin console
     When the admin creates a realm <realm_name>
     Then the realm <realm_name> should be visible in the realm list
+    And enable email verification and configure smtp server <admin_name>
+    And verify smtp configuration
 
     Examples:
 
-      | realm_name |
-      | testrealm  |
+      | realm_name | admin_name |
+      | testrealm  | Tide Admin |

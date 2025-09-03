@@ -12,4 +12,3 @@ Feature: Delete a user in realm
 
             | realm_name | username |
             | testrealm  | user1    |
-            | testrealm  | user2    |

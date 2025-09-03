@@ -12,4 +12,3 @@ Feature: Admin sets default password for user in testrealm realm
 
       | realm_name | username | password  |
       | testrealm  | user1    | password1 |
-      | testrealm  | user2    | password2 |

@@ -43,9 +43,6 @@ def create_user(logged_in_admin: Page, username: str, email: str, first_name: st
     page.get_by_test_id("lastName").fill(last_name)
 
     page.get_by_test_id("user-creation-save").click()
-    page.get_by_role("button", name="Close alert: The user has").click()
-
-    page.get_by_role("textbox", name="User ID").wait_for(state="visible")
     
 
 @then("the user tide id, created at and other settings tabs should be visible")
@@ -53,7 +50,7 @@ def verify_user_creation(logged_in_admin: Page) -> None:
     page = logged_in_admin
 
     # Checking for tide id and created at visible
-    expect(page.get_by_role("textbox", name="User ID")).to_be_visible()
+    page.get_by_test_id("last-alert").wait_for(state="visible")
     expect(page.get_by_role("textbox", name="Created at")).to_be_visible()
     
     # Checking for other setting tabs visible

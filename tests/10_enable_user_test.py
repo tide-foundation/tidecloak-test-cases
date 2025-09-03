@@ -38,7 +38,7 @@ def verify_user_status_from_user_list(logged_in_admin: Page, username: str) -> N
 
     page = logged_in_admin
 
-    expect(page.get_by_test_id("last-alert")).to_be_visible()
+    page.get_by_test_id("last-alert").wait_for(state="visible")
     expect(page.get_by_test_id("last-alert")).to_contain_text("The user has been saved")
     page.get_by_role("button", name="Close alert: The user has").click()
 
@@ -57,10 +57,10 @@ def verify_user_login(logged_in_admin: Page, username: str, password: str) -> No
 
     page.get_by_test_id("nav-item-clients").click()
 
-    with page.expect_popup() as page_info:
+    with page.expect_popup() as new_page:
         page.get_by_test_id("client-home-url-account").click()
 
-    client_account_page = page_info.value
+    client_account_page = new_page.value
     client_account_page.get_by_role("textbox", name="Username or email").click()
     client_account_page.get_by_role("textbox", name="Username or email").fill(username)
     client_account_page.get_by_role("textbox", name="Password").click()
