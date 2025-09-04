@@ -78,10 +78,25 @@ This testing suite combines the power of **pytest-BDD** for readable test scenar
    For this local instance, this is how your .env file should be:
    ```bash
    # Sample .env file
-   TIDE_INSTANCE_URL="http://localhost:8080"
-   ADMIN_USERNAME="admin"
-   ADMIN_PASSWORD="password"
-   ADMIN_DASHBOARD_URL="http://localhost:3000/admin/master/console/"
+   # Sample .env file
+   TIDE_INSTANCE_URL="<YOUR_TIDE_DOCKER_INSTANCE_URL>" # Default http://localhost:8080/
+   ADMIN_USERNAME="<YOUR_TIDE_ADMIN_USERNAME>" # admin
+   ADMIN_PASSWORD="<YOUR_TIDE_ADMIN_PASSWORD>" # password
+
+   # EMAIL CONFIG FOR MAIL DEBUG 
+   # SAME EMAIL WILL BE USED FOR TESTING USER INVITE
+   CONFIGURED=false # SET CONFIGURED TO 'true' ONCE SMTP IS CONFIGURED. DEFAULT VALUE WILL BE 'false'
+
+   # UUID EMAIL ADDRESS FROM PROJECT ex: 0434f532-e2bf-4627-a111-f1b290afebde@app.debugmail.io
+   TEMP_EMAIL_DEBUG_MAIL="<YOUR_MAIL_DEBUG_EMAIL_ADDR_TO_SEND_MAIL>" 
+   TEMP_EMAIL_PASSWORD="<YOUR_MAIL_DEBUG_EMAIL_PASSWORD>"
+   SMTP_PORT=9025 # SMTP PORT 25 or 9025(FOR MAILDEBUG)
+   SMTP_HOST="<YOUR_SMTP_HOST>"
+
+   # YOUR ACCOUNT EMAIL FOR VERYING THE MAIL SENT AND RECEIVED
+   # Account used to login into MailDebug and not project email
+   MAIL_DEBUG_EMAIL="<YOUR_DEBUG_MAIL_EMAIL_ID>" 
+   MAIL_DEBUG_PASSWORD="<YOUR_DEBUG_MAIL_PASSWORD>"
    ```
    
 ## 🎯 Running Tests
