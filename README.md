@@ -98,7 +98,28 @@ This testing suite combines the power of **pytest-BDD** for readable test scenar
    MAIL_DEBUG_EMAIL="<YOUR_DEBUG_MAIL_EMAIL_ID>" 
    MAIL_DEBUG_PASSWORD="<YOUR_DEBUG_MAIL_PASSWORD>"
    ```
-   
+5. **Change the email address in create_user.feature file**
+
+   To test email invite, you need to change the email in create_user.feature
+   ```gerkhin
+   Feature: Create a new user in testrealm realm
+      As a Tide Cloak admin user
+      I want to create a user in testrealm
+
+      Scenario: Admin creates a new user successfully
+         Given the admin in the tide admin console selects realm <realm_name>
+         When the admin creates a user with <username>, <email>,  <first_name> and <last_name> in realm
+         Then the user tide id, created at and other settings tabs should be visible
+      
+      Examples:
+
+         | realm_name | username | email                                     | first_name | last_name |
+         | testrealm  | user1    | <YOUR_MAIL_DEBUG_EMAIL_ADDR_TO_SEND_MAIL> | test1      | user1     |
+      
+   <!-- UUID EMAIL ADDRESS FROM PROJECT ex: 0434f532-e2bf-4627-a111-f1b290afebde@app.debugmail.io -->
+   <!-- TEMP_EMAIL_DEBUG_MAIL="<YOUR_MAIL_DEBUG_EMAIL_ADDR_TO_SEND_MAIL>" -->
+   ```
+
 ## 🎯 Running Tests
 
 ### The Easy Way (Recommended)
