@@ -101,7 +101,7 @@ This testing suite combines the power of **pytest-BDD** for readable test scenar
 5. **Change the email address in create_user.feature file**
 
    To test email invite, you need to change the email in create_user.feature
-   ```gerkhin
+   ```gherkin
    Feature: Create a new user in testrealm realm
       As a Tide Cloak admin user
       I want to create a user in testrealm
