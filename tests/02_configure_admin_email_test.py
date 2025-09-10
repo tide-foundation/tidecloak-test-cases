@@ -47,6 +47,8 @@ def configure_smtp(logged_in_admin: Page, admin_name: str) -> None:
     page.get_by_test_id("smtpServer.user").fill(f"{mail_username}")
     page.get_by_test_id("smtpServer.password").fill(f"{os.getenv('TEMP_EMAIL_PASSWORD')}")
     page.get_by_test_id("email-tab-save").click()
+
+    # This 
     # page.get_by_test_id("test-connection-button").click()
 
 @then("the verification of smtp configuration done via sending a test mail to email address")
