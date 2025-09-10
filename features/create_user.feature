@@ -1,6 +1,6 @@
 Feature: Create a new user in testrealm realm
   As a Tide Cloak admin user
-  I want to create a user in testrealm
+  I want to create a user in realm
 
   Scenario: Admin creates a new user successfully
     Given the admin in the tide admin console selects realm <realm_name>
