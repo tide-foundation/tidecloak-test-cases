@@ -25,7 +25,7 @@ def verify_realm(logged_in_admin: Page, realm_name: str) -> None:
     page = logged_in_admin
 
     # Checks for alert to have Realm created successful message
-    expect(page.get_by_test_id("last-alert")).to_be_visible()
+    page.get_by_test_id("last-alert").wait_for(state="visible")
     expect(page.get_by_test_id("last-alert")).to_contain_text("Realm created successfully")
     page.get_by_role("button", name="Close alert: Realm created").click()
 

@@ -64,3 +64,11 @@ def verify_license(logged_in_admin: Page, realm_name: str) -> None:
     expect(page.get_by_role("button", name="Manage")).to_be_visible()
 
 
+    # Enable the link tide account
+    page.get_by_test_id("nav-item-authentication").click()
+    page.get_by_test_id("requiredActions").click()
+    page.locator("[id=\"Link Tide Account\"]").get_by_text("OnOff").click()
+    
+    expect(page.get_by_test_id("last-alert")).to_be_visible()
+    expect(page.get_by_test_id("last-alert")).to_contain_text("Updated required action successfully")
+    page.get_by_role("button", name="Close alert: Updated required action successfully").click()

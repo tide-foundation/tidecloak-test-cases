@@ -12,6 +12,11 @@ scenarios("send_email_invite.feature")
 def admin_logged_in(logged_in_admin: Page, realm_name: str) -> Page:
 
     page = logged_in_admin
+
+    configured: str = f"{os.getenv('CONFIGURED')}"
+
+    if configured.lower() == 'false':
+        pytest.skip(reason="SMPT server is not configured check the .env file!, if configured properly set 'CONFIGURED' value to 'true'")
     
     page.get_by_test_id("nav-item-realms").click()
     page.get_by_role("textbox", name="Search").click()
@@ -23,11 +28,6 @@ def admin_logged_in(logged_in_admin: Page, realm_name: str) -> Page:
 
 @when(parsers.parse("the admin searches for user {username} and sends email for verification"))
 def send_email_invite(logged_in_admin: Page, username: str) -> None:
-
-    configured: str = f"{os.getenv('CONFIGURED')}"
-
-    if configured.lower() == 'false':
-        pytest.skip(reason="SMPT server is not configured check the .env file!, if configured properly set 'CONFIGURED' value to 'true'")
 
     page = logged_in_admin
     

@@ -60,3 +60,16 @@ def verify_smtp(logged_in_admin: Page) -> None:
     expect(page.get_by_test_id("last-alert")).to_contain_text("Realm successfully updated")
     page.get_by_role("button", name="Close alert: Realm successfully updated").click()
 
+    # Setting email address to admin in master realm for sending emails
+    page.get_by_test_id("nav-item-realms").click()
+    page.get_by_role("link", name="master").click()
+    page.get_by_test_id("nav-item-users").click()
+    page.get_by_role("link", name="admin").click()
+    page.get_by_test_id("email").fill(f"{os.getenv('TEMP_EMAIL_DEBUG_MAIL')}")
+    page.get_by_test_id("user-creation-save").click()
+    
+    expect(page.get_by_test_id("last-alert")).to_be_visible()
+    expect(page.get_by_test_id("last-alert")).to_contain_text("The user has been saved")
+    page.get_by_role("button", name="Close alert: The user has been saved").click()
+
+
