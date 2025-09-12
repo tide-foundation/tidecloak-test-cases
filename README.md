@@ -24,7 +24,7 @@ This testing suite combines the power of **pytest-BDD** for readable test scenar
 - Python 3.8 or higher
 - Virtual environment (recommended)
 - Java runtime 18 or later
-- wget, tar, pip
+- curl
 - Optional: Docker, if running a local instance of TideCloak
 <!-- - Node.js (for Playwright browsers) -->
 
@@ -36,32 +36,13 @@ This testing suite combines the power of **pytest-BDD** for readable test scenar
    cd tidecloak-test-cases
    ```
 
-2. **Create and activate virtual environment**
+2. **Run the setup-environment script**
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   chmod +x setup-environment.sh
+   # creates python virtual environment and installs required dependecies 
+   # downloads allure and installs it if not installed
+   ./setup-environment.sh  
    ```
-
-3. **Install Playwright and its dependencies**
-   ```bash
-   pip install -r requirements.txt
-   playwright install
-   playwright install-deps
-   ```
-
-3. **Install Allure**
-   ```bash
-   wget https://github.com/allure-framework/allure2/releases/download/2.34.1/allure-2.34.1.tgz
-   mkdir -p ~/tools
-   tar -xzf allure-2.34.1.tgz -C ~/tools/
-   echo 'export PATH=$PATH:$HOME/tools/allure-2.34.1/bin' >> ~/.bashrc
-   source ~/.bashrc
-   ```
-   You should be able to verify it's installed correctly by running:
-   ```bash
-   allure --version
-   ```
-   And seeing `2.34.1` as a result.
 
 4. **Create dotenv file**
    Depending on where and how you set up your TideCloak server instance, you'll need to adjust this .env file accordingly. This example assumes you're running a local TideCloak-dev instance using this command:
@@ -77,7 +58,6 @@ This testing suite combines the power of **pytest-BDD** for readable test scenar
    ```
    For this local instance, this is how your .env file should be:
    ```bash
-   # Sample .env file
    # Sample .env file
    TIDE_INSTANCE_URL="<YOUR_TIDE_DOCKER_INSTANCE_URL>" # Default http://localhost:8080/
    ADMIN_USERNAME="<YOUR_TIDE_ADMIN_USERNAME>" # admin
@@ -124,6 +104,8 @@ This testing suite combines the power of **pytest-BDD** for readable test scenar
 
 ### The Easy Way (Recommended)
 ```bash
+# starts tidecloak instance if not running and runs all the test cases
+# creates reports and serves the report
 ./allure-report.sh
 ```
 
