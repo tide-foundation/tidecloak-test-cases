@@ -2,7 +2,7 @@ Feature: Create a new realm in tidecloak
   As a tide Cloak admin user
   I want to create a realm in tidecloak
 
-  @realm_action
+  @realm_setup
   Scenario: Admin creates a new realm successfully
     Given the admin is logged in to the tide admin console
     When the admin creates a realm <realm_name>
@@ -10,5 +10,6 @@ Feature: Create a new realm in tidecloak
 
     Examples:
 
-      | realm_name | admin_name |
-      | testrealm  | Tide Admin |
+      | realm_name |
+      | testrealm  |
+      | testing  |

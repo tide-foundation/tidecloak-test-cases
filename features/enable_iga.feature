@@ -2,6 +2,7 @@ Feature: Enable IGA in admin console
   As a Tide Cloak admin user
   I want to enable Identity Governance and Administration (IGA)
 
+  @realm_setup
   Scenario: Admin enables IGA
     Given the admin in the tide admin console selects realm <realm_name>
     When the admin enables IGA for the realm
@@ -10,3 +11,4 @@ Feature: Enable IGA in admin console
     Examples:
       | realm_name |
       | testrealm  |
+      | testing  |
