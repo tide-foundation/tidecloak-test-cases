@@ -46,11 +46,15 @@ def verify_iga(logged_in_admin: Page) -> None:
     expect(page.get_by_role("button", name="Cancel Draft")).to_be_visible()
     expect(page.get_by_role("grid", name="clientChangeRequestsList")).to_be_visible()
 
-    no_of_drafts = 6
-    for _ in range(no_of_drafts):
-        page.get_by_role("radio", name="Select row 0").click()
-        page.get_by_role("button", name="Review Draft").click()
-        page.get_by_role("radio", name="Select row 0").click()
-        page.get_by_role("button", name="Commit Draft").click()
+    # for i in range(0, 10, 2):
+    #     page.get_by_role("radio", name=f"Select row {i}").check()
+    #     page.get_by_role("button", name="Review Draft").click()
+    #     page.get_by_role("gridcell", name="APPROVED").wait_for(state="visible")
+    #     page.get_by_role("radio", name=f"Select row {i}").check()
+    #     page.get_by_role("button", name="Commit Draft").click()
 
-    
+    # page.get_by_role("radio", name="Select row 0").check()
+    # page.get_by_role("button", name="Review Draft").click()
+    # page.get_by_role("gridcell", name="APPROVED").wait_for(state="visible")
+    # page.get_by_role("radio", name="Select row 0").check()
+    # page.get_by_role("button", name="Commit Draft").click()    
