@@ -1,7 +1,7 @@
 from pytest_bdd import given, when, then, scenarios, parsers
 from playwright.sync_api import expect, Page 
 
-scenarios("disable_iga.feature")
+scenarios("97_disable_iga.feature")
 
 
 @given(parsers.parse("the admin in the Tide admin console selects realm {realm_name}"))

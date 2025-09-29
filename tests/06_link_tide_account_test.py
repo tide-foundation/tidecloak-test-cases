@@ -1,8 +1,7 @@
 from pytest_bdd import given, when, then, scenarios, parsers
 from playwright.sync_api import expect, Page 
-import uuid, csv
 
-scenarios("link_tide_account.feature")
+scenarios("06_link_tide_account.feature")
 
 
 @given(parsers.parse("the admin in the tide admin console selects realm {realm_name}"))

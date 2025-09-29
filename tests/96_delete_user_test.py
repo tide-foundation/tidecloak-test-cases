@@ -2,7 +2,7 @@ from pytest_bdd import given, when, then, scenarios, parsers
 from playwright.sync_api import expect, Page, TimeoutError as PlaywrightTimeoutError 
 import pytest
 
-scenarios("delete_user.feature")
+scenarios("96_delete_user.feature")
 
 
 @given(parsers.parse("the admin in the tide admin console selects realm {realm_name}"))

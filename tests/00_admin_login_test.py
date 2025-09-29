@@ -6,7 +6,7 @@ from playwright.sync_api import expect, Page
 
 load_dotenv()
 
-scenarios('admin_login.feature')
+scenarios('00_admin_login.feature')
 
 @given("I open the tide admin login page")
 def open_login_page(browser_page: Page) -> Page:

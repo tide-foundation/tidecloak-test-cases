@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-scenarios("create_realm.feature")
+scenarios("01_create_realm.feature")
 
 @given("the admin is logged in to the tide admin console")
 def admin_logged_in(logged_in_admin: Page) -> Page:

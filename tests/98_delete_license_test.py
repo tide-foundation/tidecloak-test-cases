@@ -1,7 +1,7 @@
 from pytest_bdd import given, when, then, scenarios, parsers
 from playwright.sync_api import expect, Page 
 
-scenarios("delete_license.feature")
+scenarios("98_delete_license.feature")
 
 # GLOBAL VARIABLES
 tidecloak_url = "localhost:8080"

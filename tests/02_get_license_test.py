@@ -1,7 +1,7 @@
 from pytest_bdd import given, when, then, scenarios, parsers
 from playwright.sync_api import expect, Page 
 
-scenarios("get_license.feature")
+scenarios("02_get_license.feature")
 
 # GLOBAL VARIABLES
 tidecloak_url = "localhost:8080"
@@ -67,7 +67,7 @@ def verify_license(logged_in_admin: Page, realm_name: str) -> None:
     # Enable the link tide account
     page.get_by_test_id("nav-item-authentication").click()
     page.get_by_test_id("requiredActions").click()
-    page.locator("[id=\"Link Tide Account\"]").get_by_text("OnOff").click()
+    page.get_by_role("row", name="Draggable row draggable button Link Tide Account Link Tide Account Link Tide").locator("label").first.click()
     
     expect(page.get_by_test_id("last-alert")).to_be_visible()
     expect(page.get_by_test_id("last-alert")).to_contain_text("Updated required action successfully")

@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-scenarios("configure_admin_email.feature")
+scenarios("02_configure_admin_email.feature")
 
 @given(parsers.parse("the admin selects the {realm_name}"))
 def admin_logged_in(logged_in_admin: Page, realm_name : str) -> Page:

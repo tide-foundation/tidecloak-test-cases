@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-scenarios("send_email_invite.feature")
+scenarios("08_send_email_invite.feature")
 
 
 @given(parsers.parse("the admin in the tide admin console selects realm {realm_name}"))
