@@ -11,8 +11,9 @@ Feature: Admin sets default password for user in testrealm realm
 
     Examples:
 
-      | realm_name | username | password |
-      # | testing    | user1    | user1    |
-      | testrealm  | adminuser1    | adminuser1    |
-      | testrealm  | adminuser2    | adminuser2    |
-      | testrealm  | adminuser3    | adminuser3    |
+      | realm_name | username   | password   |
+      | testrealm  | adminuser1 | adminuser1 |
+      | testrealm  | adminuser2 | adminuser2 |
+      | testrealm  | adminuser3 | adminuser3 |
+      | testrealm  | adminuser4 | adminuser4 |
+      | testing    | testuser1  | testuser1  |
