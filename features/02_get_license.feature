@@ -7,6 +7,7 @@ Feature: Add Tide as Identity provider and get license in Tidecloak
     Given the admin in the tide admin console selects realm <realm_name>
     When the admin adds Tide provider to the realm and subscribe to tide with <email> and get license
     Then the realm <realm_name> should have a visible license details
+    And the realm <realm_name> configured to enable link tide account and set tide browser auth flow
 
     Examples:
       | realm_name | email          |
