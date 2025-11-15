@@ -2,26 +2,37 @@ name: Playwright E2E
 
 on:
   pull_request:
-    # Uncomment to restrict to certain branches:
     # branches:
     #   - main
     #   - 'release/*'
-  workflow_dispatch:      # manual trigger from Actions tab
-  workflow_call:          # allow other workflows/repos to reuse this
+  workflow_dispatch:
+  workflow_call:
 
 jobs:
   playwright-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      CI: true
+      # Used by your spec (with a default already set in code)
+      # GH_REPO: https://github.com/tide-foundation/tidecloak-playground.git
+      # LOCAL_APP_DIR: ""   # set this if you want to use a checked-out local app instead of cloning
+      # USE_SUDO: "false"  # leave unset so dockerCmd = "docker"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # --- Docker sanity check (for tidecloak_* container) -------------------
+      # --- Docker sanity check ----------------------------------------------
       - name: Verify Docker is available
         run: |
           docker --version
           docker info
+
+      # Optional but recommended: pre-pull to avoid doing it inside the test timeout
+      - name: Pre-pull Tidecloak image
+        run: docker pull tideorg/tidecloak-dev:latest
 
       # --- Node setup -------------------------------------------------------
       - name: Setup Node.js
@@ -32,11 +43,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # --- PLAYWRIGHT SETUP -------------------------------------------------
+      # --- Playwright setup -------------------------------------------------
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
 
-      # --- Allure Reporter (for allure-js-commons) --------------------------
+      # --- Allure Reporter --------------------------------------------------
       - name: Install Allure Playwright Reporter
         run: npm install -D allure-playwright allure-js-commons
 
@@ -46,24 +57,33 @@ jobs:
           npm install -g allure-commandline --force
           allure --version || true
 
-      # --- RUN TESTS (fail fast) --------------------------------------------
+      # --- RUN TESTS (fail fast) -------------------------------------------
       - name: Run Playwright E2E tests (Playground)
-        run: npx playwright test tests/playground/00_playground.spec.ts --max-failures=1 --retries=0 --project=chromium firefox
+        run: >
+          npx playwright test tests/playground/00_playground.spec.ts
+          --max-failures=1 --retries=0
+          --project=chromium --project=firefox
 
       - name: Run JS-SDK tests
         if: success()
-        run: npx playwright test tests/tidecloak-js-sdk/00_tidecloak-js.spec.ts --max-failures=1 --retries=0 --project=chromium firefox
-
+        run: >
+          npx playwright test tests/tidecloak-js-sdk/00_tidecloak-js.spec.ts
+          --max-failures=1 --retries=0
+          --project=chromium --project=firefox
 
       - name: Run React-SDK tests
         if: success()
-        run: npx playwright test tests/tidecloak-react-sdk/00_tidecloak-react-sdk.spec.ts --max-failures=1 --retries=0 --project=chromium firefox
-
+        run: >
+          npx playwright test tests/tidecloak-react-sdk/00_tidecloak-react-sdk.spec.ts
+          --max-failures=1 --retries=0
+          --project=chromium --project=firefox
 
       - name: Run NextJS-SDK tests
         if: success()
-        run: npx playwright test tests/tidecloak-nextjs-sdk/00_app_router.spec.ts --max-failures=1 --retries=0 --project=chromium firefox
-
+        run: >
+          npx playwright test tests/tidecloak-nextjs-sdk/00_app_router.spec.ts
+          --max-failures=1 --retries=0
+          --project=chromium --project=firefox
 
       # --- COLLECT REPORTS & ERROR CONTEXT ---------------------------------
       - name: Upload test artifacts
