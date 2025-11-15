@@ -1,0 +1,58 @@
+name: Playwright E2E
+
+on:
+  workflow_call:
+
+jobs:
+  playwright-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --- Node setup -------------------------------------------------------
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      # --- PLAYWRIGHT SETUP -------------------------------------------------
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+
+      # --- ALLURE INSTALL ---------------------------------------------------
+      - name: Install Allure CLI
+        run: |
+          sudo apt-add-repository ppa:qameta/allure -y
+          sudo apt-get update
+          sudo apt-get install allure -y
+      - name: Verify Allure install
+        run: allure --version
+
+      # --- RUN TESTS --------------------------------------------------------
+      - name: Run Playwright E2E tests (Playground)
+        run: npx playwright test tests/playground/00_playground.spec.ts
+
+      - name: Run JS-SDK tests
+        run: npx playwright test tests/tidecloak-js-sdk/00_tidecloak-js.spec.ts
+
+      - name: Run React-SDK tests
+        run: npx playwright test tests/tidecloak-react-sdk/00_tidecloak-react-sdk.spec.ts
+
+      - name: Run NextJS-SDK tests
+        run: npx playwright test tests/tidecloak-nextjs-sdk/00_app_router.spec.ts
+
+      # --- COLLECT ALLURE RESULTS ------------------------------------------
+      - name: Upload Allure Results
+        uses: actions/upload-artifact@v4
+        if: success() || failure()
+        with:
+          name: allure-results
+          path: |
+            ./allure-results
+            ./playwright-report
+          retention-days: 7
