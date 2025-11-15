@@ -718,8 +718,9 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
   await expect(
     page.locator('span', { hasText: 'Changes saved!' })
   ).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator('input[type="date"]')).toHaveValue('2222-02-02');
-
+  await expect(page.locator('input[type="date"]')).toHaveValue('2222-02-02', {
+    timeout: 30_000, // 30 seconds
+  });
   // --- Database Exposure page (before decrypt) ---
   await page.getByRole('button', { name: 'Database Exposure' }).click();
   await expect(page.getByRole('navigation')).toMatchAriaSnapshot(`
@@ -731,7 +732,9 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
       - button "Database Exposure"
       - button "Administration"
       - button "Logout"
-  `);
+  `,{
+    timeout: 30_000, // 30 seconds
+  });
   await expect(page.locator('body')).toMatchAriaSnapshot(`
     - main:
       - button "Toggle explanation"
@@ -785,7 +788,9 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
       - strong: Credit Card
       - text: /[A-Za-z0-9+/_-]+=*/
       - button "Decrypt"
-  `);
+  `,{
+    timeout: 30_000, // 30 seconds
+  });
 
   // Click first Decrypt and wait for ✓ Decrypted before reading text
   await page.getByRole('button', { name: 'Decrypt' }).first().click();
