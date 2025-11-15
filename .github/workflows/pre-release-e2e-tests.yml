@@ -25,11 +25,14 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # --- PLAYWRIGHT SETUP -------------------------------------------------
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
 
-      # --- ALLURE INSTALL (via npm, no PPA) ---------------------------------
+      # --- Allure Reporter (REQUIRED for allure-js-commons) ---
+      - name: Install Allure Playwright Reporter
+        run: npm install -D allure-playwright allure-js-commons
+
+      # --- Allure CLI ---
       - name: Install Allure CLI
         run: |
           npm install -g allure-commandline --force
