@@ -350,7 +350,6 @@ test('start Tidecloak', async ({}, testInfo) => {
     dockerCmd, 'run',
     '--name', tidecloakName,
     '-d',
-    '-v', `${dataDir}:/opt/keycloak/data/h2`,
     '-p', `${tidecloakPort}:8080`,
     '-e', 'KC_BOOTSTRAP_ADMIN_USERNAME=admin',
     '-e', 'KC_BOOTSTRAP_ADMIN_PASSWORD=password',
@@ -1135,6 +1134,7 @@ test.afterAll(async () => {
     try { execSync(`${dockerCmd} rm -f ${tidecloakName}`, { stdio: 'inherit' }); } catch { }
   }
 });
+
 
 
 
