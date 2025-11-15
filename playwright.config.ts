@@ -2,6 +2,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
+  reporter: [
+    ['list'],              // keeps the default console list reporter
+    ['allure-playwright'], // enables Allure reporter (outputs to ./allure-results)
+  ],
   projects: [
     {
       name: 'chromium',
