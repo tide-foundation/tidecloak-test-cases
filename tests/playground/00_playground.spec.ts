@@ -335,7 +335,7 @@ test.afterEach(async ({ page }, testInfo) => {
 // 1) start TideCloak (Keycloak) in Docker
 test('start Tidecloak', async ({}, testInfo) => {
   // CI can be slow: give this plenty of time
-  test.setTimeout(7 * 60_000); // 7 minutes
+  test.setTimeout(240_000); // 7 minutes
 
   tidecloakName = `tidecloak_${crypto.randomBytes(4).toString('hex')}`;
   tidecloakPort = await getScopedPort(8080, testInfo); // 8080/8180/8280..
@@ -350,7 +350,6 @@ test('start Tidecloak', async ({}, testInfo) => {
   const runCmd = [
     dockerCmd, 'run',
     '--name', tidecloakName,
-    '--rm',
     '-d',
     '-v', `${dataDir}:/opt/keycloak/data/h2`,
     '-p', `${tidecloakPort}:8080`,
@@ -1124,4 +1123,5 @@ test.afterAll(async () => {
     try { execSync(`${dockerCmd} rm -f ${tidecloakName}`, { stdio: 'inherit' }); } catch { }
   }
 });
+
 
