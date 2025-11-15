@@ -48,19 +48,22 @@ jobs:
 
       # --- RUN TESTS (fail fast) --------------------------------------------
       - name: Run Playwright E2E tests (Playground)
-        run: npx playwright test tests/playground/00_playground.spec.ts --max-failures=1 --retries=0
+        run: npx playwright test tests/playground/00_playground.spec.ts --max-failures=1 --retries=0 --project=chromium firefox
 
       - name: Run JS-SDK tests
         if: success()
-        run: npx playwright test tests/tidecloak-js-sdk/00_tidecloak-js.spec.ts --max-failures=1 --retries=0
+        run: npx playwright test tests/tidecloak-js-sdk/00_tidecloak-js.spec.ts --max-failures=1 --retries=0 --project=chromium firefox
+
 
       - name: Run React-SDK tests
         if: success()
-        run: npx playwright test tests/tidecloak-react-sdk/00_tidecloak-react-sdk.spec.ts --max-failures=1 --retries=0
+        run: npx playwright test tests/tidecloak-react-sdk/00_tidecloak-react-sdk.spec.ts --max-failures=1 --retries=0 --project=chromium firefox
+
 
       - name: Run NextJS-SDK tests
         if: success()
-        run: npx playwright test tests/tidecloak-nextjs-sdk/00_app_router.spec.ts --max-failures=1 --retries=0
+        run: npx playwright test tests/tidecloak-nextjs-sdk/00_app_router.spec.ts --max-failures=1 --retries=0 --project=chromium firefox
+
 
       # --- COLLECT REPORTS & ERROR CONTEXT ---------------------------------
       - name: Upload test artifacts
