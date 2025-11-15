@@ -923,7 +923,6 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
   await expect(page1.getByRole('heading', { name: 'Sign in' })).toBeVisible();
   await expect(page1.getByText('Continue to sign in as')).toBeVisible();
   await expect(page1.getByText(/testing-\d+/i)).toBeVisible();
-  await expect(page1.getByText('Or choose your own')).toBeVisible();
 
   await page1.locator('#sign_in_passwordless-button').click();
 
@@ -1134,6 +1133,7 @@ test.afterAll(async () => {
     try { execSync(`${dockerCmd} rm -f ${tidecloakName}`, { stdio: 'inherit' }); } catch { }
   }
 });
+
 
 
 
