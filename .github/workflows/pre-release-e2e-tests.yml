@@ -1,7 +1,11 @@
 name: Playwright E2E
 
 on:
-  workflow_call:
+  pull_request:
+    branches:
+      - main
+      - 'release/*'
+
 
 jobs:
   playwright-tests:
