@@ -332,10 +332,9 @@ test.afterEach(async ({ page }, testInfo) => {
 // ---------- TESTS ----------
 
 // 1) start TideCloak (Keycloak) in Docker
-// 1) start TideCloak (Keycloak) in Docker
 test('start Tidecloak', async ({}, testInfo) => {
-  // CI can be slow: give this plenty of time
-  test.setTimeout(240_000); // 7 minutes
+  // Make sure test timeout is comfortably above the HTTP wait
+  test.setTimeout(8 * 60_000); // 8 minutes
 
   tidecloakName = `tidecloak_${crypto.randomBytes(4).toString('hex')}`;
   tidecloakPort = await getScopedPort(8080, testInfo); // 8080/8180/8280..
@@ -364,7 +363,6 @@ test('start Tidecloak', async ({}, testInfo) => {
   });
 
   try {
-    // actually start the container
     execSync(runCmd, { stdio: 'inherit' });
   } catch (e) {
     throw new Error(
@@ -373,9 +371,19 @@ test('start Tidecloak', async ({}, testInfo) => {
     );
   }
 
-  // Now wait for HTTP, but if it fails, capture docker logs
+  // Extra: show container status early
   try {
-    await waitForHttp(`http://localhost:${tidecloakPort}/`, 300_000); // 5 minutes
+    const inspect = execSync(`${dockerCmd} ps -a --filter "name=${tidecloakName}" --format "table {{.Names}}\t{{.Status}}"`, { encoding: 'utf8' });
+    testInfo.attach('tidecloak-docker-ps', {
+      body: inspect,
+      contentType: 'text/plain',
+    });
+    console.log('Tidecloak container status:\n' + inspect);
+  } catch { /* ignore */ }
+
+  // SHORTER wait here so we fail quickly and get logs
+  try {
+    await waitForHttp(`http://localhost:${tidecloakPort}/`, 2 * 60_000); // 2 minutes
   } catch (e) {
     let logs = '';
     try {
@@ -389,12 +397,16 @@ test('start Tidecloak', async ({}, testInfo) => {
       contentType: 'text/plain',
     });
 
+    // ALSO dump logs into the Actions log
+    console.log('===== Tidecloak Docker Logs =====\n' + logs + '\n===== END LOGS =====');
+
     throw new Error(
       `Timeout waiting for TideCloak on http://localhost:${tidecloakPort}/\n` +
       `Original error: ${(e as Error).message}`,
     );
   }
 });
+
 
 // 2) clone/start your app with correct env + rewrite realm JSON (redirects/origins)
 test('clone & start app', async ({}, testInfo) => {
@@ -1123,5 +1135,6 @@ test.afterAll(async () => {
     try { execSync(`${dockerCmd} rm -f ${tidecloakName}`, { stdio: 'inherit' }); } catch { }
   }
 });
+
 
 
