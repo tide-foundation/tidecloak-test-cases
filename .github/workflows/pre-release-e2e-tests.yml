@@ -2,6 +2,7 @@ name: Playwright E2E
 
 on:
   pull_request:
+    # Uncomment to restrict to certain branches:
     # branches:
     #   - main
     #   - 'release/*'
@@ -16,48 +17,60 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # --- Docker sanity check (for tidecloak_* container) -------------------
+      - name: Verify Docker is available
+        run: |
+          docker --version
+          docker info
+
       # --- Node setup -------------------------------------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
       - name: Install dependencies
         run: npm install
 
+      # --- PLAYWRIGHT SETUP -------------------------------------------------
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
 
-      # --- Allure Reporter (REQUIRED for allure-js-commons) ---
+      # --- Allure Reporter (for allure-js-commons) --------------------------
       - name: Install Allure Playwright Reporter
         run: npm install -D allure-playwright allure-js-commons
 
-      # --- Allure CLI ---
+      # --- Allure CLI -------------------------------------------------------
       - name: Install Allure CLI
         run: |
           npm install -g allure-commandline --force
           allure --version || true
 
-      # --- RUN TESTS --------------------------------------------------------
+      # --- RUN TESTS (fail fast) --------------------------------------------
       - name: Run Playwright E2E tests (Playground)
-        run: npx playwright test tests/playground/00_playground.spec.ts
+        run: npx playwright test tests/playground/00_playground.spec.ts --max-failures=1 --retries=0
 
       - name: Run JS-SDK tests
-        run: npx playwright test tests/tidecloak-js-sdk/00_tidecloak-js.spec.ts
+        if: success()
+        run: npx playwright test tests/tidecloak-js-sdk/00_tidecloak-js.spec.ts --max-failures=1 --retries=0
 
       - name: Run React-SDK tests
-        run: npx playwright test tests/tidecloak-react-sdk/00_tidecloak-react-sdk.spec.ts
+        if: success()
+        run: npx playwright test tests/tidecloak-react-sdk/00_tidecloak-react-sdk.spec.ts --max-failures=1 --retries=0
 
       - name: Run NextJS-SDK tests
-        run: npx playwright test tests/tidecloak-nextjs-sdk/00_app_router.spec.ts
+        if: success()
+        run: npx playwright test tests/tidecloak-nextjs-sdk/00_app_router.spec.ts --max-failures=1 --retries=0
 
-      # --- COLLECT ALLURE RESULTS ------------------------------------------
-      - name: Upload Allure Results
+      # --- COLLECT REPORTS & ERROR CONTEXT ---------------------------------
+      - name: Upload test artifacts
         uses: actions/upload-artifact@v4
-        if: success() || failure()
+        if: always()
         with:
-          name: allure-results
+          name: e2e-artifacts
           path: |
             ./allure-results
             ./playwright-report
+            ./test-results
           retention-days: 7
