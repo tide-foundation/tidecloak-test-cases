@@ -332,15 +332,19 @@ test.afterEach(async ({ page }, testInfo) => {
 // ---------- TESTS ----------
 
 // 1) start TideCloak (Keycloak) in Docker
+// 1) start TideCloak (Keycloak) in Docker
 test('start Tidecloak', async ({}, testInfo) => {
-  test.setTimeout(240_000);
+  // CI can be slow: give this plenty of time
+  test.setTimeout(7 * 60_000); // 7 minutes
 
   tidecloakName = `tidecloak_${crypto.randomBytes(4).toString('hex')}`;
   tidecloakPort = await getScopedPort(8080, testInfo); // 8080/8180/8280..
 
   try {
     execSync(`${dockerCmd} pull tideorg/tidecloak-dev:latest`, { stdio: 'inherit' });
-  } catch {/* cached ok */ }
+  } catch {
+    // pull failure is non-fatal if image is already present
+  }
 
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), `${tidecloakName}_`));
   const runCmd = [
@@ -352,21 +356,45 @@ test('start Tidecloak', async ({}, testInfo) => {
     '-p', `${tidecloakPort}:8080`,
     '-e', 'KC_BOOTSTRAP_ADMIN_USERNAME=admin',
     '-e', 'KC_BOOTSTRAP_ADMIN_PASSWORD=password',
-    'tideorg/tidecloak-dev:latest'
+    'tideorg/tidecloak-dev:latest',
   ].join(' ');
 
   testInfo.attach('docker-run', {
     body: `${runCmd}\nProbing: http://localhost:${tidecloakPort}/`,
-    contentType: 'text/plain'
+    contentType: 'text/plain',
   });
 
   try {
+    // actually start the container
     execSync(runCmd, { stdio: 'inherit' });
   } catch (e) {
-    throw new Error(`Failed to start TideCloak on ${tidecloakPort}. Another process may hold the port.\n${(e as Error).message}`);
+    throw new Error(
+      `Failed to start TideCloak on ${tidecloakPort}. Another process may hold the port or Docker failed.\n` +
+      (e as Error).message,
+    );
   }
 
-  await waitForHttp(`http://localhost:${tidecloakPort}/`);
+  // Now wait for HTTP, but if it fails, capture docker logs
+  try {
+    await waitForHttp(`http://localhost:${tidecloakPort}/`, 300_000); // 5 minutes
+  } catch (e) {
+    let logs = '';
+    try {
+      logs = execSync(`${dockerCmd} logs ${tidecloakName}`, { encoding: 'utf8' });
+    } catch (logErr) {
+      logs = `Failed to read docker logs: ${(logErr as Error).message}`;
+    }
+
+    testInfo.attach('tidecloak-docker-logs', {
+      body: logs,
+      contentType: 'text/plain',
+    });
+
+    throw new Error(
+      `Timeout waiting for TideCloak on http://localhost:${tidecloakPort}/\n` +
+      `Original error: ${(e as Error).message}`,
+    );
+  }
 });
 
 // 2) clone/start your app with correct env + rewrite realm JSON (redirects/origins)
@@ -1096,3 +1124,4 @@ test.afterAll(async () => {
     try { execSync(`${dockerCmd} rm -f ${tidecloakName}`, { stdio: 'inherit' }); } catch { }
   }
 });
+
