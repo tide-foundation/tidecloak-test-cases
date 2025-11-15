@@ -5,7 +5,8 @@ on:
     branches:
       - main
       - 'release/*'
-
+  workflow_dispatch:      # manual trigger from Actions tab
+  workflow_call:          # allow other workflows/repos to reuse this
 
 jobs:
   playwright-tests:
@@ -28,14 +29,11 @@ jobs:
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
 
-      # --- ALLURE INSTALL ---------------------------------------------------
+      # --- ALLURE INSTALL (via npm, no PPA) ---------------------------------
       - name: Install Allure CLI
         run: |
-          sudo apt-add-repository ppa:qameta/allure -y
-          sudo apt-get update
-          sudo apt-get install allure -y
-      - name: Verify Allure install
-        run: allure --version
+          npm install -g allure-commandline --force
+          allure --version || true
 
       # --- RUN TESTS --------------------------------------------------------
       - name: Run Playwright E2E tests (Playground)
