@@ -1,10 +1,6 @@
 name: Playwright E2E
 
 on:
-  # pull_request:
-  #   branches:
-  #     - main
-  #     - 'release/*'
   workflow_dispatch:
   workflow_call:
 
@@ -15,29 +11,17 @@ jobs:
 
     env:
       CI: true
-      # Used by your spec (with a default already set in code)
-      # GH_REPO: https://github.com/tide-foundation/tidecloak-playground.git
-      # LOCAL_APP_DIR: ""   # set this if you want to use a checked-out local app instead of cloning
-      # USE_SUDO: "false"  # leave unset so dockerCmd = "docker"
 
     steps:
-      # Case 1: If running inside tidecloak-test-cases (normal PR run)
-      - name: Checkout PR branch of tidecloak-test-cases
-        if: ${{ github.repository == 'tide-foundation/tidecloak-test-cases' }}
+      # -------------------------------------------------------
+      # ALWAYS checkout THIS repo (tidecloak-test-cases)
+      # -------------------------------------------------------
+      # When running directly in this repo → PR branch is checked out
+      # When called from wrapper repo → reusable workflow's repo is checked out
+      # This works because actions/checkout defaults to "workflow's repo"
+      # -------------------------------------------------------
+      - name: Checkout tidecloak-test-cases
         uses: actions/checkout@v4
-    
-      # Case 2: If running from wrapper repo (reusable workflow call)
-      - name: Checkout main branch of tidecloak-test-cases
-        if: ${{ github.repository != 'tide-foundation/tidecloak-test-cases' }}
-        uses: actions/checkout@v4
-        with:
-          repository: tide-foundation/tidecloak-test-cases
-          ref: main
-
-
-          # NOTE: we intentionally do NOT set "ref" so:
-          # - direct PR runs use the PR merge ref
-          # - reusable-call runs use the default branch of tidecloak-test-cases (e.g. main)
 
       # --- Docker sanity check ---------------------------------------------
       - name: Verify Docker is available
