@@ -1,10 +1,10 @@
 name: Playwright E2E
 
 on:
-  pull_request:
-    branches:
-      - main
-      - 'release/*'
+  # pull_request:
+  #   branches:
+  #     - main
+  #     - 'release/*'
   workflow_dispatch:
   workflow_call:
 
@@ -25,11 +25,8 @@ jobs:
       - name: Checkout tidecloak-test-cases repo
         uses: actions/checkout@v4
         with:
-          # If this workflow is running *in* tidecloak-test-cases (normal PR),
-          # use the current repo/branch so you test the PR code.
-          # If it's being called from a wrapper repo, force checkout of the
-          # tidecloak-test-cases repo instead of the wrapper.
-          repository: ${{ github.repository == 'tide-foundation/tidecloak-test-cases' && github.repository || 'tide-foundation/tidecloak-test-cases' }}
+          repository: "${{ github.repository == 'tide-foundation/tidecloak-test-cases' ? github.repository : 'tide-foundation/tidecloak-test-cases' }}"
+
           # NOTE: we intentionally do NOT set "ref" so:
           # - direct PR runs use the PR merge ref
           # - reusable-call runs use the default branch of tidecloak-test-cases (e.g. main)
