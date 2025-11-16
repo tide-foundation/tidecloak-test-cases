@@ -995,7 +995,9 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
   await page.locator('input[type="text"]').press('ControlOrMeta+a');
   await page.locator('input[type="text"]').fill('22222222222222222222222222');
   await page.getByRole('button', { name: 'Save Changes' }).click();
+  await pause(2_000);
   await expect(page.locator('input[type="text"]')).toHaveValue('22222222222222222222222222');
+  
 
   // --- Database exposure after cleartext CC has been written ---
   await page.getByRole('button', { name: 'Database Exposure' }).click();
@@ -1055,7 +1057,7 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
   `);
 
   await page.getByRole('button', { name: 'Decrypt' }).first().click();
-  await pause(30_000);
+  await pause(2_000);
   await expect(page.getByText('✓ Decrypted')).toBeVisible({ timeout: 30_000 });
 
   const finalText = await page.locator('body').innerText();
