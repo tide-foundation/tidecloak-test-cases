@@ -2,9 +2,9 @@ name: Playwright E2E
 
 on:
   pull_request:
-    # branches:
-    #   - main
-    #   - 'release/*'
+    branches:
+      - main
+      - 'release/*'
   workflow_dispatch:
   workflow_call:
 
@@ -21,10 +21,20 @@ jobs:
       # USE_SUDO: "false"  # leave unset so dockerCmd = "docker"
 
     steps:
-      - name: Checkout repository
+      # --- CHECKOUT TEST REPO ----------------------------------------------
+      - name: Checkout tidecloak-test-cases repo
         uses: actions/checkout@v4
+        with:
+          # If this workflow is running *in* tidecloak-test-cases (normal PR),
+          # use the current repo/branch so you test the PR code.
+          # If it's being called from a wrapper repo, force checkout of the
+          # tidecloak-test-cases repo instead of the wrapper.
+          repository: ${{ github.repository == 'tide-foundation/tidecloak-test-cases' && github.repository || 'tide-foundation/tidecloak-test-cases' }}
+          # NOTE: we intentionally do NOT set "ref" so:
+          # - direct PR runs use the PR merge ref
+          # - reusable-call runs use the default branch of tidecloak-test-cases (e.g. main)
 
-      # --- Docker sanity check ----------------------------------------------
+      # --- Docker sanity check ---------------------------------------------
       - name: Verify Docker is available
         run: |
           docker --version
@@ -34,7 +44,7 @@ jobs:
       - name: Pre-pull Tidecloak image
         run: docker pull tideorg/tidecloak-dev:latest
 
-      # --- Node setup -------------------------------------------------------
+      # --- Node setup ------------------------------------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -43,21 +53,21 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # --- Playwright setup -------------------------------------------------
+      # --- Playwright setup ------------------------------------------------
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
 
-      # --- Allure Reporter --------------------------------------------------
+      # --- Allure Reporter -------------------------------------------------
       - name: Install Allure Playwright Reporter
         run: npm install -D allure-playwright allure-js-commons
 
-      # --- Allure CLI -------------------------------------------------------
+      # --- Allure CLI ------------------------------------------------------
       - name: Install Allure CLI
         run: |
           npm install -g allure-commandline --force
           allure --version || true
 
-      # --- RUN TESTS (fail fast) -------------------------------------------
+      # --- RUN TESTS (fail fast) ------------------------------------------
       - name: Run Playwright E2E tests (Playground)
         run: >
           npx playwright test tests/playground/00_playground.spec.ts
@@ -85,7 +95,7 @@ jobs:
           --max-failures=1 --retries=0
           --project=chromium --project=firefox
 
-      # --- COLLECT REPORTS & ERROR CONTEXT ---------------------------------
+      # --- COLLECT REPORTS & ERROR CONTEXT --------------------------------
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
         if: always()
