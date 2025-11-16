@@ -25,7 +25,8 @@ jobs:
       - name: Checkout tidecloak-test-cases repo
         uses: actions/checkout@v4
         with:
-          repository: "${{ github.repository == 'tide-foundation/tidecloak-test-cases' ? github.repository : 'tide-foundation/tidecloak-test-cases' }}"
+          repository: tide-foundation/tidecloak-test-cases
+          ref: ${{ github.ref }}   # ensures PRs use the correct branch
 
           # NOTE: we intentionally do NOT set "ref" so:
           # - direct PR runs use the PR merge ref
