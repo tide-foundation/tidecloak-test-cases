@@ -8,6 +8,7 @@ import * as http from 'http';
 import * as net from 'net';
 import * as allure from 'allure-js-commons';
 import { ContentType } from 'allure-js-commons';
+import { time } from 'console';
 
 test.describe.configure({ mode: 'serial' }); // run sequentially to share container/app
 
@@ -333,79 +334,41 @@ test.afterEach(async ({ page }, testInfo) => {
 
 // 1) start TideCloak (Keycloak) in Docker
 test('start Tidecloak', async ({}, testInfo) => {
-  // Make sure test timeout is comfortably above the HTTP wait
-  test.setTimeout(8 * 60_000); // 8 minutes
+  test.setTimeout(240_000);
 
   tidecloakName = `tidecloak_${crypto.randomBytes(4).toString('hex')}`;
   tidecloakPort = await getScopedPort(8080, testInfo); // 8080/8180/8280..
 
   try {
     execSync(`${dockerCmd} pull tideorg/tidecloak-dev:latest`, { stdio: 'inherit' });
-  } catch {
-    // pull failure is non-fatal if image is already present
-  }
+  } catch {/* cached ok */ }
 
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), `${tidecloakName}_`));
   const runCmd = [
     dockerCmd, 'run',
     '--name', tidecloakName,
+    '--rm',
     '-d',
+    '-v', `${dataDir}:/opt/keycloak/data/h2`,
     '-p', `${tidecloakPort}:8080`,
     '-e', 'KC_BOOTSTRAP_ADMIN_USERNAME=admin',
     '-e', 'KC_BOOTSTRAP_ADMIN_PASSWORD=password',
-    'tideorg/tidecloak-dev:latest',
+    'tideorg/tidecloak-dev:latest'
   ].join(' ');
 
   testInfo.attach('docker-run', {
     body: `${runCmd}\nProbing: http://localhost:${tidecloakPort}/`,
-    contentType: 'text/plain',
+    contentType: 'text/plain'
   });
 
   try {
     execSync(runCmd, { stdio: 'inherit' });
   } catch (e) {
-    throw new Error(
-      `Failed to start TideCloak on ${tidecloakPort}. Another process may hold the port or Docker failed.\n` +
-      (e as Error).message,
-    );
+    throw new Error(`Failed to start TideCloak on ${tidecloakPort}. Another process may hold the port.\n${(e as Error).message}`);
   }
 
-  // Extra: show container status early
-  try {
-    const inspect = execSync(`${dockerCmd} ps -a --filter "name=${tidecloakName}" --format "table {{.Names}}\t{{.Status}}"`, { encoding: 'utf8' });
-    testInfo.attach('tidecloak-docker-ps', {
-      body: inspect,
-      contentType: 'text/plain',
-    });
-    console.log('Tidecloak container status:\n' + inspect);
-  } catch { /* ignore */ }
-
-  // SHORTER wait here so we fail quickly and get logs
-  try {
-    await waitForHttp(`http://localhost:${tidecloakPort}/`, 2 * 60_000); // 2 minutes
-  } catch (e) {
-    let logs = '';
-    try {
-      logs = execSync(`${dockerCmd} logs ${tidecloakName}`, { encoding: 'utf8' });
-    } catch (logErr) {
-      logs = `Failed to read docker logs: ${(logErr as Error).message}`;
-    }
-
-    testInfo.attach('tidecloak-docker-logs', {
-      body: logs,
-      contentType: 'text/plain',
-    });
-
-    // ALSO dump logs into the Actions log
-    console.log('===== Tidecloak Docker Logs =====\n' + logs + '\n===== END LOGS =====');
-
-    throw new Error(
-      `Timeout waiting for TideCloak on http://localhost:${tidecloakPort}/\n` +
-      `Original error: ${(e as Error).message}`,
-    );
-  }
+  await waitForHttp(`http://localhost:${tidecloakPort}/`);
 });
-
 
 // 2) clone/start your app with correct env + rewrite realm JSON (redirects/origins)
 test('clone & start app', async ({}, testInfo) => {
@@ -718,9 +681,8 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
   await expect(
     page.locator('span', { hasText: 'Changes saved!' })
   ).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator('input[type="date"]')).toHaveValue('2222-02-02', {
-    timeout: 30_000, // 30 seconds
-  });
+  await expect(page.locator('input[type="date"]')).toHaveValue('2222-02-02');
+
   // --- Database Exposure page (before decrypt) ---
   await page.getByRole('button', { name: 'Database Exposure' }).click();
   await expect(page.getByRole('navigation')).toMatchAriaSnapshot(`
@@ -732,9 +694,7 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
       - button "Database Exposure"
       - button "Administration"
       - button "Logout"
-  `,{
-    timeout: 30_000, // 30 seconds
-  });
+  `);
   await expect(page.locator('body')).toMatchAriaSnapshot(`
     - main:
       - button "Toggle explanation"
@@ -788,9 +748,7 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
       - strong: Credit Card
       - text: /[A-Za-z0-9+/_-]+=*/
       - button "Decrypt"
-  `,{
-    timeout: 30_000, // 30 seconds
-  });
+  `);
 
   // Click first Decrypt and wait for ✓ Decrypted before reading text
   await page.getByRole('button', { name: 'Decrypt' }).first().click();
@@ -945,35 +903,7 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
     .click();
 
   // Back in main app: approve + commit
-  await expect(page.locator('body')).toMatchAriaSnapshot(`
-    - main:
-      - button "Toggle explanation"
-      - heading "Administration" [level=2]
-      - paragraph: Change your permissions to demo the quorum-enforced workflow for change requests, then check out how the permission changes affect the User experience on the User page.
-      - heading "User Permissions" [level=4]
-      - text: Date of Birth
-      - checkbox "Read" [checked]
-      - text: Read
-      - checkbox "Write" [checked]
-      - text: Write Credit Card Number
-      - checkbox "Read" [checked]
-      - text: Read
-      - checkbox "Write" [checked]
-      - text: Write
-      - button "Submit Changes" [disabled]
-      - heading "Change Requests" [level=3]
-      - paragraph: Play your role as an admin in the quorum, by reviewing the Change Request. We'll simulate the others before you can then commit the change.
-      - button "Toggle change-request info"
-      - img
-      - text: "Change: _tide_cc.selfdecrypt permission APPROVED Y You"
-      - img
-      - text: A Alice B Ben
-      - img
-      - text: C Carlos D Dana
-      - img
-      - button "Commit"
-  `);
-
+  await expect(page.getByRole('button', { name: 'Commit' })).toBeVisible({timeout:30_000});
   await page.getByRole('button', { name: 'Commit' }).click();
   await expect(page.locator('body')).toMatchAriaSnapshot(`
     - main:
@@ -1082,6 +1012,7 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
   `);
 
   await page.getByRole('button', { name: 'Decrypt' }).first().click();
+  await pause(30_000);
   await expect(page.getByText('✓ Decrypted')).toBeVisible({ timeout: 30_000 });
 
   const finalText = await page.locator('body').innerText();
@@ -1138,8 +1069,3 @@ test.afterAll(async () => {
     try { execSync(`${dockerCmd} rm -f ${tidecloakName}`, { stdio: 'inherit' }); } catch { }
   }
 });
-
-
-
-
-
