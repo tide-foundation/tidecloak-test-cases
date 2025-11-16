@@ -13,27 +13,43 @@ jobs:
       CI: true
 
     steps:
-      # -------------------------------------------------------
-      # ALWAYS checkout THIS repo (tidecloak-test-cases)
-      # -------------------------------------------------------
-      # When running directly in this repo → PR branch is checked out
-      # When called from wrapper repo → reusable workflow's repo is checked out
-      # This works because actions/checkout defaults to "workflow's repo"
-      # -------------------------------------------------------
-      - name: Checkout tidecloak-test-cases
+      # =====================================================================
+      # CHECKOUT LOGIC
+      # =====================================================================
+      # When running directly in tidecloak-test-cases (PR runs):
+      #   → GitHub provides the PR ref automatically.
+      #
+      # When called from private wrapper repo (workflow_call):
+      #   → GitHub sets workspace folder to wrapper repo name.
+      #   → THIS STEP forces checkout of the internal test repo.
+      # =====================================================================
+
+      - name: Checkout tidecloak-test-cases (PR run)
+        if: ${{ github.repository == 'tide-foundation/tidecloak-test-cases' }}
         uses: actions/checkout@v4
 
-      # --- Docker sanity check ---------------------------------------------
+      - name: Checkout tidecloak-test-cases (wrapper repo call)
+        if: ${{ github.repository != 'tide-foundation/tidecloak-test-cases' }}
+        uses: actions/checkout@v4
+        with:
+          repository: tide-foundation/tidecloak-test-cases
+          ref: main    # always run tests against main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # =====================================================================
+      # DOCKER CHECK
+      # =====================================================================
       - name: Verify Docker is available
         run: |
           docker --version
           docker info
 
-      # Optional but recommended: pre-pull to avoid doing it inside the test timeout
       - name: Pre-pull Tidecloak image
         run: docker pull tideorg/tidecloak-dev:latest
 
-      # --- Node setup ------------------------------------------------------
+      # =====================================================================
+      # NODE + DEPENDENCIES
+      # =====================================================================
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -42,21 +58,23 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # --- Playwright setup ------------------------------------------------
+      # =====================================================================
+      # PLAYWRIGHT SETUP
+      # =====================================================================
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
 
-      # --- Allure Reporter -------------------------------------------------
       - name: Install Allure Playwright Reporter
         run: npm install -D allure-playwright allure-js-commons
 
-      # --- Allure CLI ------------------------------------------------------
       - name: Install Allure CLI
         run: |
           npm install -g allure-commandline --force
           allure --version || true
 
-      # --- RUN TESTS (fail fast) ------------------------------------------
+      # =====================================================================
+      # RUN TEST SUITES
+      # =====================================================================
       - name: Run Playwright E2E tests (Playground)
         run: >
           npx playwright test tests/playground/00_playground.spec.ts
@@ -84,7 +102,9 @@ jobs:
           --max-failures=1 --retries=0
           --project=chromium --project=firefox
 
-      # --- COLLECT REPORTS & ERROR CONTEXT --------------------------------
+      # =====================================================================
+      # ARTIFACTS
+      # =====================================================================
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
         if: always()
