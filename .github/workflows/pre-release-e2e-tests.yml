@@ -21,12 +21,19 @@ jobs:
       # USE_SUDO: "false"  # leave unset so dockerCmd = "docker"
 
     steps:
-      # --- CHECKOUT TEST REPO ----------------------------------------------
-      - name: Checkout tidecloak-test-cases repo
+      # Case 1: If running inside tidecloak-test-cases (normal PR run)
+      - name: Checkout PR branch of tidecloak-test-cases
+        if: ${{ github.repository == 'tide-foundation/tidecloak-test-cases' }}
+        uses: actions/checkout@v4
+    
+      # Case 2: If running from wrapper repo (reusable workflow call)
+      - name: Checkout main branch of tidecloak-test-cases
+        if: ${{ github.repository != 'tide-foundation/tidecloak-test-cases' }}
         uses: actions/checkout@v4
         with:
           repository: tide-foundation/tidecloak-test-cases
-          ref: ${{ github.ref }}   # ensures PRs use the correct branch
+          ref: main
+
 
           # NOTE: we intentionally do NOT set "ref" so:
           # - direct PR runs use the PR merge ref
