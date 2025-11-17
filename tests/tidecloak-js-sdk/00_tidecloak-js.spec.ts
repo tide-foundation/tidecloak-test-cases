@@ -258,6 +258,7 @@ async function fetchAdapterJsonViaUI(page: Page, appOrigin: string): Promise<str
 
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('menuitem', { name: 'Download adapter config' }).click();
+  await pause(10_000); 
   await page.getByTestId('confirm').click();
 
   const download = await downloadPromise;
