@@ -13,32 +13,17 @@ jobs:
       CI: true
 
     steps:
-      # =====================================================================
-      # CHECKOUT LOGIC
-      # =====================================================================
-      # When running directly in tidecloak-test-cases (PR runs):
-      #   → GitHub provides the PR ref automatically.
-      #
-      # When called from private wrapper repo (workflow_call):
-      #   → GitHub sets workspace folder to wrapper repo name.
-      #   → THIS STEP forces checkout of the internal test repo.
-      # =====================================================================
-
-      - name: Checkout tidecloak-test-cases (PR run)
-        if: ${{ github.repository == 'tide-foundation/tidecloak-test-cases' }}
+      # ============================================================
+      # ALWAYS CHECKOUT THE WORKFLOW REPO (THIS repo)
+      # ------------------------------------------------------------
+      # - If running directly in this repo → gets PR branch
+      # - If called from ork repo → still checks out THIS repo
+      #   because reusable workflows are executed in workflow repo
+      #   and actions/checkout without "repository:" clones workflow repo
+      # ============================================================
+      - name: Checkout test repo
         uses: actions/checkout@v4
 
-      - name: Checkout tidecloak-test-cases (wrapper repo call)
-        if: ${{ github.repository != 'tide-foundation/tidecloak-test-cases' }}
-        uses: actions/checkout@v4
-        with:
-          repository: tide-foundation/tidecloak-test-cases
-          ref: main    # always run tests against main
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      # =====================================================================
-      # DOCKER CHECK
-      # =====================================================================
       - name: Verify Docker is available
         run: |
           docker --version
@@ -47,9 +32,6 @@ jobs:
       - name: Pre-pull Tidecloak image
         run: docker pull tideorg/tidecloak-dev:latest
 
-      # =====================================================================
-      # NODE + DEPENDENCIES
-      # =====================================================================
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -58,9 +40,6 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # =====================================================================
-      # PLAYWRIGHT SETUP
-      # =====================================================================
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
 
@@ -72,9 +51,6 @@ jobs:
           npm install -g allure-commandline --force
           allure --version || true
 
-      # =====================================================================
-      # RUN TEST SUITES
-      # =====================================================================
       - name: Run Playwright E2E tests (Playground)
         run: >
           npx playwright test tests/playground/00_playground.spec.ts
@@ -102,9 +78,6 @@ jobs:
           --max-failures=1 --retries=0
           --project=chromium --project=firefox
 
-      # =====================================================================
-      # ARTIFACTS
-      # =====================================================================
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
         if: always()
