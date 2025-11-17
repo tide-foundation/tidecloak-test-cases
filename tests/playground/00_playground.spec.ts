@@ -796,6 +796,7 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
   // Click first Decrypt and wait for ✓ Decrypted before reading text
   await page.getByRole('button', { name: 'Decrypt' }).first().click();
   await expect(page.getByText('✓ Decrypted')).toBeVisible({ timeout: 30_000 });
+  await pause(10_000);
 
   const afterDecryptText = await page.locator('body').innerText();
 
