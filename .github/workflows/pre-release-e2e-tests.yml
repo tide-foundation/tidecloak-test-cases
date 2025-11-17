@@ -3,15 +3,17 @@ name: Playwright E2E
 on:
   workflow_dispatch:
   workflow_call:
+    secrets:
+      CHECKOUT_TOKEN:
+        required: true
+        description: 'Token with access to the test repo'
 
 jobs:
   playwright-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-
     env:
       CI: true
-
     steps:
       # ===========================================================
       # ALWAYS CHECKOUT THE WORKFLOW REPO (NOT THE CALLER REPO)
@@ -22,8 +24,8 @@ jobs:
         with:
           repository: tide-foundation/tidecloak-test-cases
           ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
-
+          token: ${{ secrets.CHECKOUT_TOKEN }}
+      
       # ===========================================================
       # Rest of workflow...
       # ===========================================================
@@ -31,56 +33,56 @@ jobs:
         run: |
           docker --version
           docker info
-
+      
       - name: Pre-pull Tidecloak image
         run: docker pull tideorg/tidecloak-dev:latest
-
+      
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
+      
       - name: Install dependencies
         run: npm install
-
+      
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
-
+      
       - name: Install Allure Playwright Reporter
         run: npm install -D allure-playwright allure-js-commons
-
+      
       - name: Install Allure CLI
         run: |
           npm install -g allure-commandline --force
           allure --version || true
-
+      
       - name: Run Playwright E2E tests (Playground)
         run: >
           npx playwright test tests/playground/00_playground.spec.ts
           --max-failures=1 --retries=0
           --project=chromium --project=firefox
-
+      
       - name: Run JS-SDK tests
         if: success()
         run: >
           npx playwright test tests/tidecloak-js-sdk/00_tidecloak-js.spec.ts
           --max-failures=1 --retries=0
           --project=chromium --project=firefox
-
+      
       - name: Run React-SDK tests
         if: success()
         run: >
           npx playwright test tests/tidecloak-react-sdk/00_tidecloak-react-sdk.spec.ts
           --max-failures=1 --retries=0
           --project=chromium --project=firefox
-
+      
       - name: Run NextJS-SDK tests
         if: success()
         run: >
           npx playwright test tests/tidecloak-nextjs-sdk/00_app_router.spec.ts
           --max-failures=1 --retries=0
           --project=chromium --project=firefox
-
+      
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
         if: always()
