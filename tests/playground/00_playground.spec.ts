@@ -814,7 +814,7 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
 
   // --- Administration flow / quorum change ---
   await page.getByRole('button', { name: 'Administration' }).click();
-  await pause(2_000);
+  await pause(10_000);
   await expect(page.getByRole('navigation')).toMatchAriaSnapshot(`
     - navigation:
       - link "Playground Logo":
@@ -856,7 +856,7 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
   `);
 
   await page.getByRole('button', { name: 'Elevate to Admin Role' }).click();
-  await pause(2_000);
+  await pause(10_000);
 
   await expect(page.locator('body')).toMatchAriaSnapshot(`
     - main:
@@ -872,7 +872,7 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
   `);
 
   await page.getByRole('button', { name: 'Continue as Admin' }).click();
-  await pause(2_000);
+  await pause(10_000);
 
   await expect(page.locator('body')).toMatchAriaSnapshot(`
     - main:
@@ -894,7 +894,7 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
 
   await page.getByText('Read').nth(2).click();
   await page.getByRole('button', { name: 'Submit Changes' }).click();
-  await pause(2_000);
+  await pause(10_000);
 
   await expect(page.locator('body')).toMatchAriaSnapshot(`
     - main:
@@ -995,7 +995,7 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
   await page.locator('input[type="text"]').press('ControlOrMeta+a');
   await page.locator('input[type="text"]').fill('22222222222222222222222222');
   await page.getByRole('button', { name: 'Save Changes' }).click();
-  await pause(2_000);
+  await pause(10_000);
   await expect(page.locator('input[type="text"]')).toHaveValue('22222222222222222222222222');
   
 

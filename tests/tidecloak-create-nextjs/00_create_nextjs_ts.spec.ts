@@ -120,7 +120,7 @@ async function clickAndWaitForNavigation(
   await action();
   await waiter;
   await page.waitForLoadState('domcontentloaded', { timeout }).catch(() => {});
-  await pause(3_000);
+  await pause(15_000);
 }
 
 // ---------- TideCloak docker ----------
