@@ -13,17 +13,20 @@ jobs:
       CI: true
 
     steps:
-      # ============================================================
-      # ALWAYS CHECKOUT THE WORKFLOW REPO (THIS repo)
-      # ------------------------------------------------------------
-      # - If running directly in this repo → gets PR branch
-      # - If called from ork repo → still checks out THIS repo
-      #   because reusable workflows are executed in workflow repo
-      #   and actions/checkout without "repository:" clones workflow repo
-      # ============================================================
-      - name: Checkout test repo
+      # ===========================================================
+      # ALWAYS CHECKOUT THE WORKFLOW REPO (NOT THE CALLER REPO)
+      # REQUIRED FOR REUSABLE WORKFLOWS
+      # ===========================================================
+      - name: Checkout test repo (workflow repo)
         uses: actions/checkout@v4
+        with:
+          repository: tide-foundation/tidecloak-test-cases
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
 
+      # ===========================================================
+      # Rest of workflow...
+      # ===========================================================
       - name: Verify Docker is available
         run: |
           docker --version
