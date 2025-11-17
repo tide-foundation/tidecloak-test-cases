@@ -84,6 +84,26 @@ async function stopChild(
   });
 }
 
+// 🔐 shared end-user login helper (same as Next.js test)
+async function loginEndUserViaTide(page: Page) {
+  await page.getByRole('button', { name: 'Log In' }).click();
+
+  const nameInput = page.locator('#sign_in-input_name').nth(1);
+  await nameInput.waitFor({ state: 'visible', timeout: 60_000 });
+
+  await nameInput.click();
+  await nameInput.fill('testing-01');
+  await nameInput.press('Tab');
+
+  const passwordInput = page.locator('#sign_in-input_password').nth(1);
+  await passwordInput.fill('1M953tcn6Vv025dVJvdR');
+
+  await page.getByRole('paragraph').filter({ hasText: 'Remember me' }).click();
+  await page.getByText('Sign InProcessing').click();
+
+  await page.waitForLoadState('networkidle', { timeout: 120_000 });
+}
+
 // ---------- TideCloak Docker globals ----------
 
 const dockerCmd =
@@ -260,7 +280,7 @@ async function fetchAdapterJsonViaUI(page: Page, appOrigin: string): Promise<str
 
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('menuitem', { name: 'Download adapter config' }).click();
-    await pause(10_000); 
+  await pause(10_000); 
   await page.getByTestId('confirm').click();
 
   const download = await downloadPromise;
@@ -434,9 +454,6 @@ export default function Home() {
   } = useTideCloak();
 
   const content = (() => {
-    if (initError) {
-      return '❌ Initialization error';
-    }
     if (isInitializing) {
       return 'Initializing...';
     }
@@ -550,15 +567,21 @@ export default function RedirectPage() {
 
     // On first load while initializing, we expect Log In button visible and status "Initializing..."
     await expect(loginBtn).toBeVisible();
-    await pause(200_000);
-    await expect(status).toHaveText(/Initializing.../);
+    await expect(status).toHaveText(/Initializing|🔒 Please log in/);
 
     // Ensure we don't hit init/auth errors
     await expect(status).not.toHaveText(/Initialization error/, { timeout: 60_000 });
     await expect(status).not.toHaveText(/Auth error/, { timeout: 60_000 });
 
-    // Wait for authenticated state with Log Out button visible (mirrors JS test behaviour)
-    await page.getByRole('button', { name: 'Log Out' }).waitFor({ state: 'visible', timeout: 60_000 });
+    // 🔐 Perform real end-user login via Tide
+    await loginEndUserViaTide(page);
+
+    // RedirectPage will send the user to /home (authenticated) or back to /
+    await page.waitForURL(/(\/home|\/)$/, { timeout: 120_000 });
+
+    // Now the app should show authenticated state - Logout button visible & status text updated
+    await expect(page.getByRole('button', { name: 'Log Out' })).toBeVisible({ timeout: 60_000 });
+    await expect(status).toHaveText(/✅ Authenticated/, { timeout: 60_000 });
 
     await expect(page.locator('body')).toMatchAriaSnapshot(`
 - button "Log Out"

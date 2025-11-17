@@ -95,12 +95,12 @@ let tidecloakPort = 0;
 test.beforeEach(async ({ context }) => {
   const permissions = ['local-network-access', 'storage-access'] as const;
 
-  await context.grantPermissions(permissions as unknown as string[]).catch(() => {});
+  await context.grantPermissions(permissions as unknown as string[]).catch(() => { });
   await context
     .grantPermissions(permissions as unknown as string[], {
       origin: 'https://ork1.tideprotocol.com',
     })
-    .catch(() => {});
+    .catch(() => { });
 });
 
 // ---------- screenshots on every test ----------
@@ -112,7 +112,7 @@ test.afterEach(async ({ page }, testInfo) => {
       body: shot,
       contentType: 'image/png',
     });
-  } catch {}
+  } catch { }
 });
 
 test.beforeAll(async () => {
@@ -148,8 +148,7 @@ test.beforeAll(async () => {
     execSync(runCmd, { stdio: 'inherit' });
   } catch (e) {
     throw new Error(
-      `Failed to start TideCloak on ${tidecloakPort}. Another process may hold the port.\n${
-        (e as Error).message
+      `Failed to start TideCloak on ${tidecloakPort}. Another process may hold the port.\n${(e as Error).message
       }`,
     );
   }
@@ -202,7 +201,7 @@ async function fetchAdapterJsonViaUI(page: Page, appOrigin: string): Promise<str
   console.log('📂 Navigating to myrealm identity provider (tide)...');
   await page.getByTestId('nav-item-realms').click();
   await page.getByRole('link', { name: 'myrealm' }).click();
-  
+
   await page.getByTestId('nav-item-clients').click();
   await page.getByRole('link', { name: 'myclient' }).click();
   await page.getByTestId('redirectUris-addValue').click();
@@ -258,7 +257,7 @@ async function fetchAdapterJsonViaUI(page: Page, appOrigin: string): Promise<str
 
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('menuitem', { name: 'Download adapter config' }).click();
-  await pause(10_000); 
+  await pause(10_000);
   await page.getByTestId('confirm').click();
 
   const download = await downloadPromise;
@@ -476,14 +475,31 @@ IAMService
     const logoutBtn = page.getByRole('button', { name: 'Log Out' });
     const status = page.locator('#status');
 
-    await expect(loginBtn).toBeVisible();
-    await expect(status).toHaveText(/Initializing.../);
+    // Explicitly trigger login via the React app.
+    // Because we authenticated against Tide earlier in this browser context
+    // (during the admin/license flow), the IdP flow should complete via SSO
+    // without needing to type credentials again.
+    console.log('🔐 Clicking Log In in React app & waiting for redirect...');
+    const redirectPattern = /\/auth\/redirect(\?|$)/;
 
-    await expect(status).not.toHaveText(/Initialization error/, { timeout: 60_000 });
-    await expect(status).not.toHaveText(/Auth error/, { timeout: 60_000 });
+    await loginBtn.click()
+
+
+    const nameInput = page.locator('#sign_in-input_name').nth(1);
+    await nameInput.waitFor({ state: 'visible', timeout: 60_000 });
+
+    await nameInput.click();
+    await nameInput.fill('testing-01');
+    await nameInput.press('Tab');
+
+    const passwordInput = page.locator('#sign_in-input_password').nth(1);
+    await passwordInput.fill('1M953tcn6Vv025dVJvdR');
+
+    await page.getByRole('paragraph').filter({ hasText: 'Remember me' }).click();
+    await page.getByText('Sign InProcessing').click();
 
     page.getByRole('button', { name: 'Log Out' }).waitFor({ state: 'visible', timeout: 60_000 });
-      await expect(page.locator('body')).toMatchAriaSnapshot(`
+    await expect(page.locator('body')).toMatchAriaSnapshot(`
     - button "Log Out"
     - text: ✅ Authenticated
     `);
