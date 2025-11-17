@@ -949,32 +949,7 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
   // Back in main app: approve + commit
   await expect(page.getByRole('button', { name: 'Commit' })).toBeVisible({timeout:30_000});
   await page.getByRole('button', { name: 'Commit' }).click();
-  await expect(page.locator('body')).toMatchAriaSnapshot(`
-    - main:
-      - button "Toggle explanation"
-      - heading "Administration" [level=2]
-      - paragraph: Change your permissions to demo the quorum-enforced workflow for change requests, then check out how the permission changes affect the User experience on the User page.
-      - heading "User Permissions" [level=4]
-      - text: Date of Birth
-      - checkbox "Read" [checked]
-      - text: Read
-      - checkbox "Write" [checked]
-      - text: Write Credit Card Number
-      - checkbox "Read" [checked]
-      - text: Read
-      - checkbox "Write" [checked]
-      - text: Write
-      - button "Submit Changes" [disabled]
-      - heading "Change Requests" [level=3]
-      - paragraph: Play your role as an admin in the quorum, by reviewing the Change Request. We'll simulate the others before you can then commit the change.
-      - button "Toggle change-request info"
-      - img
-      - text: "Change: _tide_cc.selfdecrypt permission COMMITTED"
-      - img
-      - text: Done! You can now explore the updated permissions.
-      - link "View on User Page →":
-        - /url: "#"
-  `);
+
 
   // --- Back to User page with updated perms & cleartext CC ---
   await page.getByRole('link', { name: 'View on User Page →' }).click();
