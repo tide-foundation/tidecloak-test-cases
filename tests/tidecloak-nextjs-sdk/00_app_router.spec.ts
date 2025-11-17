@@ -229,7 +229,7 @@ async function fetchAdapterJsonViaUI(page: Page, appOrigin: string): Promise<str
   await emailInput.fill('test@tide.org');
   await page.getByTestId('hosted-payment-submit-button').click();
 
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(10_000);
 
   const secureText = page.getByText('Secure', { exact: true }).first();
   await secureText
@@ -237,12 +237,12 @@ async function fetchAdapterJsonViaUI(page: Page, appOrigin: string): Promise<str
     .then(() => console.log('✅ License page shows "Secure"'))
     .catch(() => console.warn('⚠️ Could not confirm "Secure" on license page, continuing'));
   await page.getByTestId('secure-config-retry').click();
-  await pause(2000);
+  await pause(10_000);
 
   console.log('📂 Navigating back to Clients → myclient...');
   await page.getByTestId('nav-item-clients').click();
   await page.getByRole('link', { name: 'myclient' }).click();
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(10_000);
 
   console.log('⬇️ Downloading adapter config (JSON)...');
   await page.getByTestId('action-dropdown').click();

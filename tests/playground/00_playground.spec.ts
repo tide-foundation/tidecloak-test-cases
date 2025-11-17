@@ -688,7 +688,7 @@ test('onboarding + auth + flows (with init & loaders)', async ({ page }) => {
   `);
 
   // --- User privacy page ---
-  await pause(3_000); // let encryption complete in background before navigating away
+  await pause(15_000); // let encryption complete in background before navigating away
   await page.getByRole('link', { name: 'User privacy' }).click();
   await expect(page.getByRole('navigation')).toMatchAriaSnapshot(`
     - navigation:
