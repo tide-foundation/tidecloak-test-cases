@@ -1,15 +1,21 @@
 services:
   tidecloak:
-    image: tideorg/tidecloak-dev:latest
+    image: tideorg/tidecloak-stg-dev:latest
     ports:
       - "8080:8080"
     #  - "8443:8443" # SSL
     environment:
       - KC_BOOTSTRAP_ADMIN_USERNAME=admin
-      - KC_BOOTSTRAP_ADMIN_PASSWORD=admin
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=password
+      - KC_HOSTNAME=http://localhost:8080
+      - SYSTEM_HOME_ORK=https://sork1.tideprotocol.com
+      - USER_HOME_ORK=https://sork1.tideprotocol.com
+      - THRESHOLD_T=3
+      - THRESHOLD_N=5
+      - PAYER_PUBLIC=20000011d6a0e8212d682657147d864b82d10e92776c15ead43dcfdc100ebf4dcfe6a8
     #  - KC_HTTPS_CERTIFICATE_FILE=/opt/keycloak/conf/certs/server.pem
     #  - KC_HTTPS_CERTIFICATE_KEY_FILE=/opt/keycloak/conf/certs/key.pem
-    volumes:
-      - ./kcdatabase:/opt/keycloak/data/h2
+    #volumes:
+    #  - ./kcdatabase:/opt/keycloak/data/h2
     #  - ./certs:/opt/keycloak/conf/certs	# SSL CERTS DIRECTORY
 

@@ -212,3 +212,6 @@ get_data.py
 reports/
 auth.json
 kcdatabase/
+debug_screenshots/
+failed_screenshots/
+node_modules/

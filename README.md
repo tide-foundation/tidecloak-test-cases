@@ -45,7 +45,7 @@ This testing suite combines the power of **pytest-BDD** for readable test scenar
    ```
 
 4. **Create dotenv file**
-   Depending on where and how you set up your TideCloak server instance, you'll need to adjust this .env file accordingly. This example assumes you're running a local TideCloak-dev instance using this command:
+   Depending on where and how you set up your TideCloak server instance, you'll need to adjust this .env file accordingly. This example assumes you're running a local TideCloak-stg-dev instance using this command:
    ```bash
    sudo docker run \
     --name mytidecloak \
@@ -54,7 +54,7 @@ This testing suite combines the power of **pytest-BDD** for readable test scenar
     -p 8080:8080 \
     -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
     -e KC_BOOTSTRAP_ADMIN_PASSWORD=password \
-    tideorg/tidecloak-dev:latest
+    tideorg/tidecloak-stg-dev:latest
    ```
    For this local instance, this is how your .env file should be:
    ```bash

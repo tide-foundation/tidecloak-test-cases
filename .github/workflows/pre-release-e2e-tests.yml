@@ -35,7 +35,7 @@ jobs:
           docker info
       
       - name: Pre-pull Tidecloak image
-        run: docker pull tideorg/tidecloak-dev:latest
+        run: docker pull tideorg/tidecloak-stg-dev:latest
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
