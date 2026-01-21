@@ -1,0 +1,26 @@
+{
+  "name": "tests",
+  "version": "1.0.0",
+  "description": "Playwright tests for TideCloak integration",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:setup": "playwright test 01-setup",
+    "report": "playwright show-report reports",
+    "setup": "bash scripts/setup.sh",
+    "setup:full": "bash scripts/setup.sh --full",
+    "cleanup": "bash scripts/setup.sh --cleanup"
+  },
+  "keywords": ["playwright", "testing", "tidecloak"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "playwright": "^1.52.0"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  }
+}

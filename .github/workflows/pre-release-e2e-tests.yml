@@ -58,6 +58,78 @@ on:
         description: 'SMTP password for email tests'
 
 jobs:
+  playwright-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CI: true
+      HEADLESS: true
+      TIDE_ENV: ${{ inputs.tide_env || 'staging' }}
+    steps:
+      - name: Checkout test repo
+        uses: actions/checkout@v4
+        with:
+          repository: tide-foundation/tidecloak-test-cases
+          ref: main
+          token: ${{ secrets.CHECKOUT_TOKEN || secrets.GH_TOKEN || github.token }}
+
+      - name: Verify Docker is available
+        run: |
+          docker --version
+          docker info
+
+      - name: Set Docker image based on environment
+        id: docker-image
+        run: |
+          if [ "${{ env.TIDE_ENV }}" = "production" ]; then
+            echo "image=tideorg/tidecloak-dev:latest" >> $GITHUB_OUTPUT
+          else
+            echo "image=tideorg/tidecloak-stg-dev:latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Pre-pull TideCloak image
+        run: docker pull ${{ steps.docker-image.outputs.image }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install test-app dependencies
+        run: |
+          cd test-app
+          npm install
+
+      - name: Install tests dependencies
+        run: |
+          cd tests
+          npm install
+
+      - name: Install Playwright Browsers
+        run: |
+          cd tests
+          npx playwright install chromium --with-deps
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y uuid-runtime jq
+
+      - name: Run Playwright tests (tests + test-app)
+        run: |
+          cd tests
+          ./scripts/setup.sh --full
+
+      - name: Upload Playwright test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-artifacts
+          path: |
+            ./tests/reports
+            ./tests/test-results
+          retention-days: 7
+
   cucumber-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 60
