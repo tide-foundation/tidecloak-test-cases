@@ -579,14 +579,15 @@ When('I sign up or sign in with Tide', async function() {
         }
 
         // Fill sign up form
-        const usernameInput = this.page.locator('#sign_up-input_username').first();
+        // Note: These are custom-input web components, so we need to target the inner input element
+        const usernameInput = this.page.locator('#sign_up-input_username input, #sign_up-input_username >> input').first();
         await usernameInput.waitFor({ state: 'visible', timeout: 30000 });
         await usernameInput.fill(creds.username);
 
-        const passwordInput = this.page.locator('#sign_up-input_password').first();
+        const passwordInput = this.page.locator('#sign_up-input_password input, #sign_up-input_password >> input').first();
         await passwordInput.fill(creds.password);
 
-        const repeatPasswordInput = this.page.locator('#sign_up-input_repeat_password').first();
+        const repeatPasswordInput = this.page.locator('#sign_up-input_repeat_password input, #sign_up-input_repeat_password >> input').first();
         await repeatPasswordInput.fill(creds.password);
 
         // Click Continue
@@ -595,8 +596,10 @@ When('I sign up or sign in with Tide', async function() {
         await pause(2000);
 
         // Add email if requested
-        const emailInput = this.page.locator('#sign_up-email-input-1').first();
-        if (await emailInput.isVisible({ timeout: 5000 }).catch(() => false)) {
+        // Note: This may also be a custom-input web component
+        const emailContainer = this.page.locator('#sign_up-email-input-1').first();
+        if (await emailContainer.isVisible({ timeout: 5000 }).catch(() => false)) {
+            const emailInput = this.page.locator('#sign_up-email-input-1 input, #sign_up-email-input-1 >> input').first();
             await emailInput.fill(creds.email);
             await this.page.locator('#sign_up_email-button').click();
             await pause(2000);
@@ -671,14 +674,15 @@ When('I sign up or sign in with Tide', async function() {
             console.log(`Creating new user: ${newCreds.username}`);
 
             // Fill sign up form
-            const usernameInput = this.page.locator('#sign_up-input_username').first();
+            // Note: These are custom-input web components, so we need to target the inner input element
+            const usernameInput = this.page.locator('#sign_up-input_username input, #sign_up-input_username >> input').first();
             await usernameInput.waitFor({ state: 'visible', timeout: 30000 });
             await usernameInput.fill(newCreds.username);
 
-            const passwordInput = this.page.locator('#sign_up-input_password').first();
+            const passwordInput = this.page.locator('#sign_up-input_password input, #sign_up-input_password >> input').first();
             await passwordInput.fill(newCreds.password);
 
-            const repeatPasswordInput = this.page.locator('#sign_up-input_repeat_password').first();
+            const repeatPasswordInput = this.page.locator('#sign_up-input_repeat_password input, #sign_up-input_repeat_password >> input').first();
             await repeatPasswordInput.fill(newCreds.password);
 
             // Click Continue
@@ -687,8 +691,10 @@ When('I sign up or sign in with Tide', async function() {
             await pause(2000);
 
             // Add email if requested
-            const emailInput = this.page.locator('#sign_up-email-input-1').first();
-            if (await emailInput.isVisible({ timeout: 5000 }).catch(() => false)) {
+            // Note: This may also be a custom-input web component
+            const emailContainer = this.page.locator('#sign_up-email-input-1').first();
+            if (await emailContainer.isVisible({ timeout: 5000 }).catch(() => false)) {
+                const emailInput = this.page.locator('#sign_up-email-input-1 input, #sign_up-email-input-1 >> input').first();
                 await emailInput.fill(newCreds.email);
                 await this.page.locator('#sign_up_email-button').click();
                 await pause(2000);
