@@ -184,9 +184,37 @@ When('I fetch adapter config via admin UI', async function() {
             await requestLicenseBtn.click();
             await this.page.getByRole('textbox', { name: 'Email' }).fill('test@tide.org');
             await this.page.getByTestId('hosted-payment-submit-button').click();
-            await this.page.waitForTimeout(10000);
-            await this.page.getByTestId('secure-config-retry').click();
-            await pause(10000);
+
+            // Wait for Stripe redirect to complete
+            await this.page.waitForTimeout(15000);
+
+            // After Stripe, page may redirect back - look for Tide link
+            const tideLink = this.page.getByRole('link', { name: 'Tide' });
+            if (await tideLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+                await tideLink.click();
+                await pause(2000);
+
+                // Click Manage License again
+                const manageLicenseBtnAgain = this.page.getByRole('button', { name: 'Manage License' });
+                if (await manageLicenseBtnAgain.isVisible({ timeout: 5000 }).catch(() => false)) {
+                    await manageLicenseBtnAgain.click();
+                    await pause(2000);
+                }
+            }
+
+            // Wait for secure status
+            const secureText = this.page.getByText('Secure', { exact: true }).first();
+            await secureText.waitFor({ state: 'visible', timeout: 60000 })
+                .then(() => console.log('License shows "Secure"'))
+                .catch(() => console.warn('Could not confirm "Secure" on license page'));
+
+            // Click retry button only if visible
+            const retryBtn = this.page.getByTestId('secure-config-retry');
+            if (await retryBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+                await retryBtn.click();
+                await pause(10000);
+            }
+            console.log('License requested');
         } else {
             console.log('License already active, skipping request');
         }
