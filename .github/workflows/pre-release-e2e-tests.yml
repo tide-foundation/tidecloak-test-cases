@@ -92,13 +92,9 @@ jobs:
         if: success() || failure()
         run: npm run test:cucumber:nextjs-sdk
 
-      - name: Run Cucumber E2E tests (tidecloak admin)
+      - name: Run Cucumber E2E tests (tidecloak admin + email)
         if: success() || failure()
         run: npm run test:cucumber:tidecloak
-
-      - name: Run Cucumber E2E tests (email)
-        if: success() || failure()
-        run: npm run test:cucumber:email
 
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
