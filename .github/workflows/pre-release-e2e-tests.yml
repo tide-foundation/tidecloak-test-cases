@@ -21,10 +21,41 @@ on:
         required: false
         default: 'staging'
         type: string
+      mailslurp_inbox_id:
+        description: 'MailSlurp inbox ID for email tests'
+        required: false
+        type: string
+      smtp_host:
+        description: 'SMTP host for email tests'
+        required: false
+        type: string
+      smtp_port:
+        description: 'SMTP port for email tests'
+        required: false
+        default: '2525'
+        type: string
+      temp_email_debug_mail:
+        description: 'SMTP auth user'
+        required: false
+        type: string
+      temp_email_from:
+        description: 'From email address'
+        required: false
+        type: string
+      test_user_email:
+        description: 'Test user email address'
+        required: false
+        type: string
     secrets:
       CHECKOUT_TOKEN:
         required: true
         description: 'Token with access to the test repo'
+      MAILSLURP_API:
+        required: false
+        description: 'MailSlurp API key for email tests'
+      TEMP_EMAIL_PASSWORD:
+        required: false
+        description: 'SMTP password for email tests'
 
 jobs:
   cucumber-tests:
@@ -33,18 +64,21 @@ jobs:
     env:
       CI: true
       HEADLESS: true
-      CONFIGURED: true
       TIDE_ENV: ${{ inputs.tide_env || 'staging' }}
-      # Email/SMTP configuration from repository variables
+      # Email/SMTP configuration
+      # For direct runs (push/workflow_dispatch): uses vars.* from this repo
+      # For workflow_call: uses inputs.* passed from caller
       MAILSLURP_API: ${{ secrets.MAILSLURP_API }}
-      MAILSLURP_INBOX_ID: ${{ vars.MAILSLURP_INBOX_ID }}
-      MAILSLURP_TIMEOUT_MS: ${{ vars.MAILSLURP_TIMEOUT_MS }}
-      SMTP_HOST: ${{ vars.SMTP_HOST }}
-      SMTP_PORT: ${{ vars.SMTP_PORT }}
-      TEMP_EMAIL_DEBUG_MAIL: ${{ vars.TEMP_EMAIL_DEBUG_MAIL }}
-      TEMP_EMAIL_FROM: ${{ vars.TEMP_EMAIL_FROM }}
+      MAILSLURP_INBOX_ID: ${{ inputs.mailslurp_inbox_id || vars.MAILSLURP_INBOX_ID || '' }}
+      MAILSLURP_TIMEOUT_MS: ${{ vars.MAILSLURP_TIMEOUT_MS || '60000' }}
+      SMTP_HOST: ${{ inputs.smtp_host || vars.SMTP_HOST || '' }}
+      SMTP_PORT: ${{ inputs.smtp_port || vars.SMTP_PORT || '587' }}
+      TEMP_EMAIL_DEBUG_MAIL: ${{ inputs.temp_email_debug_mail || vars.TEMP_EMAIL_DEBUG_MAIL || '' }}
+      TEMP_EMAIL_FROM: ${{ inputs.temp_email_from || vars.TEMP_EMAIL_FROM || '' }}
       TEMP_EMAIL_PASSWORD: ${{ secrets.TEMP_EMAIL_PASSWORD }}
-      TEST_USER_EMAIL: ${{ vars.TEST_USER_EMAIL }}
+      TEST_USER_EMAIL: ${{ inputs.test_user_email || vars.TEST_USER_EMAIL || '' }}
+      # Only enable email tests if we have the required config
+      CONFIGURED: ${{ (secrets.MAILSLURP_API != '' && (inputs.mailslurp_inbox_id != '' || vars.MAILSLURP_INBOX_ID != '')) && 'true' || 'false' }}
     steps:
       - name: Checkout test repo
         uses: actions/checkout@v4
@@ -52,6 +86,13 @@ jobs:
           repository: tide-foundation/tidecloak-test-cases
           ref: main
           token: ${{ secrets.CHECKOUT_TOKEN || secrets.GH_TOKEN || github.token }}
+
+      - name: Debug environment
+        run: |
+          echo "TIDE_ENV: $TIDE_ENV"
+          echo "CONFIGURED: $CONFIGURED"
+          echo "MAILSLURP_INBOX_ID: ${MAILSLURP_INBOX_ID:+set}"
+          echo "SMTP_HOST: ${SMTP_HOST:+set}"
 
       - name: Verify Docker is available
         run: |
