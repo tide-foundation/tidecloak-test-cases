@@ -530,6 +530,15 @@ When('I sign up or sign in with Tide', async function() {
         console.log('Detected Link Account page, clicking Link Account...');
         isLinkAccountFlow = true;
         await linkAccountBtn.click();
+
+        // Wait for redirect to tideprotocol.com after clicking Link Account
+        console.log('Waiting for redirect to tideprotocol.com...');
+        try {
+            await this.page.waitForURL(/tideprotocol\.com/, { timeout: 30000 });
+            console.log(`Redirected to Tide IDP: ${this.page.url()}`);
+        } catch (e) {
+            console.log(`Redirect to tideprotocol.com not detected, current URL: ${this.page.url()}`);
+        }
         await this.page.waitForLoadState('domcontentloaded', { timeout: 30000 });
         await pause(3000);
         console.log(`After Link Account click, URL: ${this.page.url()}`);
