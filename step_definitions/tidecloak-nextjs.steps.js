@@ -178,45 +178,59 @@ When('I fetch adapter config via admin UI', async function() {
         await manageLicenseBtn.click();
         await pause(1000);
 
+        // Check current page state
+        console.log(`After Manage License click, URL: ${this.page.url()}`);
+
         // Check if Request License button is visible (not already licensed)
         const requestLicenseBtn = this.page.getByRole('button', { name: 'Request License' });
         if (await requestLicenseBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+            console.log('Request License button visible, clicking...');
             await requestLicenseBtn.click();
-            await this.page.getByRole('textbox', { name: 'Email' }).fill('test@tide.org');
-            await this.page.getByTestId('hosted-payment-submit-button').click();
 
-            // Wait for Stripe redirect to complete
-            await this.page.waitForTimeout(15000);
+            const emailInput = this.page.getByRole('textbox', { name: 'Email' });
+            await emailInput.waitFor({ state: 'visible', timeout: 10000 });
+            await emailInput.fill('test@tide.org');
 
-            // After Stripe, page may redirect back - look for Tide link
-            const tideLink = this.page.getByRole('link', { name: 'Tide' });
-            if (await tideLink.isVisible({ timeout: 5000 }).catch(() => false)) {
-                await tideLink.click();
+            const submitBtn = this.page.getByTestId('hosted-payment-submit-button');
+            await submitBtn.waitFor({ state: 'visible', timeout: 5000 });
+            await submitBtn.click();
+            console.log('License form submitted, waiting for processing...');
+
+            // Wait for Stripe redirect/processing to complete
+            await this.page.waitForTimeout(20000);
+            console.log(`After license submit, URL: ${this.page.url()}`);
+
+            // After Stripe, navigate back to Identity Providers -> Tide -> Manage License
+            console.log('Navigating back to Identity Providers -> Tide -> Manage License...');
+            await this.page.getByTestId('nav-item-identity-providers').click();
+            await pause(1000);
+            await this.page.getByRole('link', { name: 'tide' }).click();
+            await pause(2000);
+
+            // Click Manage License
+            const manageLicenseBtnAgain = this.page.getByRole('button', { name: 'Manage License' });
+            if (await manageLicenseBtnAgain.isVisible({ timeout: 5000 }).catch(() => false)) {
+                console.log('Clicking Manage License...');
+                await manageLicenseBtnAgain.click();
                 await pause(2000);
-
-                // Click Manage License again
-                const manageLicenseBtnAgain = this.page.getByRole('button', { name: 'Manage License' });
-                if (await manageLicenseBtnAgain.isVisible({ timeout: 5000 }).catch(() => false)) {
-                    await manageLicenseBtnAgain.click();
-                    await pause(2000);
-                }
             }
 
-            // Wait for secure status
+            // Wait for "Secure" status to appear (may take some time for Tide initialization)
+            console.log('Waiting for license to show "Secure"...');
             const secureText = this.page.getByText('Secure', { exact: true }).first();
             await secureText.waitFor({ state: 'visible', timeout: 60000 })
                 .then(() => console.log('License shows "Secure"'))
-                .catch(() => console.warn('Could not confirm "Secure" on license page'));
+                .catch(() => console.warn('Could not confirm "Secure" on license page - Tide auth may fail'));
 
-            // Click retry button only if visible
-            const retryBtn = this.page.getByTestId('secure-config-retry');
-            if (await retryBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-                await retryBtn.click();
-                await pause(10000);
-            }
             console.log('License requested');
         } else {
-            console.log('License already active, skipping request');
+            // Check if already licensed
+            const secureTextExisting = this.page.getByText('Secure', { exact: true }).first();
+            if (await secureTextExisting.isVisible({ timeout: 3000 }).catch(() => false)) {
+                console.log('License already shows "Secure", skipping request');
+            } else {
+                console.log('Request License button not visible, license may be in unknown state');
+            }
         }
     } else {
         console.log('Manage License button not visible, checking license status...');

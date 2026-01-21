@@ -458,24 +458,49 @@ When('I sign up or sign in with Tide', async function() {
         return false;
     };
 
-    // Check for error page first
-    const errorPage = this.page.getByText(/We are sorry/i);
-    if (await errorPage.isVisible({ timeout: 2000 }).catch(() => false)) {
-        console.log('Error page detected, clicking back...');
-        const backLink = this.page.locator('a').filter({ hasText: /back/i }).first();
-        if (await backLink.isVisible({ timeout: 2000 }).catch(() => false)) {
-            await backLink.click();
-            await this.page.waitForLoadState('domcontentloaded', { timeout: 30000 });
-            await pause(3000);
+    // Check for error page first (Tide "We are sorry" page) with retry logic
+    const maxRetries = 3;
+    for (let retry = 0; retry < maxRetries; retry++) {
+        const errorPage = this.page.getByText(/We are sorry/i);
+        if (await errorPage.isVisible({ timeout: 2000 }).catch(() => false)) {
+            console.log(`Error page detected (attempt ${retry + 1}/${maxRetries}), navigating back to app to retry login...`);
 
-            // After going back, we may be on the app page - need to click Log In again
-            const loginBtn = this.page.getByRole('button', { name: /Log\s*In/i });
-            if (await loginBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-                console.log('Back at app page, clicking Log In again...');
-                await loginBtn.click();
-                await this.page.waitForLoadState('domcontentloaded', { timeout: 30000 });
-                await pause(3000);
+            // Navigate directly to app URL to start fresh
+            if (this.appUrl) {
+                await this.page.goto(this.appUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                // Wait progressively longer between retries (5s, 10s, 15s)
+                const waitTime = (retry + 1) * 5000;
+                console.log(`Waiting ${waitTime}ms before retry...`);
+                await pause(waitTime);
+
+                // Click Log In to start fresh OAuth flow
+                const loginBtn = this.page.getByRole('button', { name: /Log\s*In/i });
+                if (await loginBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                    console.log('Retrying login from app page...');
+                    await loginBtn.click();
+                    await this.page.waitForLoadState('domcontentloaded', { timeout: 30000 });
+                    await pause(3000);
+
+                    // Wait for redirect to Tide auth
+                    try {
+                        await this.page.waitForURL(/tideprotocol\.com|\/broker\/tide/, { timeout: 15000 });
+                        await pause(3000);
+                    } catch (e) {
+                        console.log('Did not redirect to Tide auth after retry');
+                    }
+                }
+            } else {
+                // Fallback: try clicking the back link
+                const backLink = this.page.locator('a').filter({ hasText: /back/i }).first();
+                if (await backLink.isVisible({ timeout: 2000 }).catch(() => false)) {
+                    await backLink.click();
+                    await this.page.waitForLoadState('domcontentloaded', { timeout: 30000 });
+                    await pause(3000);
+                }
             }
+        } else {
+            // No error page, break out of retry loop
+            break;
         }
     }
 
@@ -526,17 +551,41 @@ When('I sign up or sign in with Tide', async function() {
             // Take screenshot for debugging
             const { takeScreenshot } = require('../../support/helpers');
             await takeScreenshot(this.page, 'auth_forms_not_visible', true).catch(() => {});
-            console.log(`Current URL: ${this.page.url()}`);
+            const currentUrl = this.page.url();
+            console.log(`Current URL: ${currentUrl}`);
             console.log(`Page title: ${await this.page.title()}`);
 
-            // Check if we ended up back at the app
-            const loginBtn = this.page.getByRole('button', { name: /Log\s*In/i });
-            if (await loginBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-                console.log('Back at app page unexpectedly, clicking Log In...');
-                await loginBtn.click();
-                await this.page.waitForLoadState('domcontentloaded', { timeout: 30000 });
+            // Check if we're on TideCloak broker page but Tide IDP didn't load
+            if (currentUrl.includes('/broker/tide/login') || currentUrl.includes('/realms/')) {
+                console.log('On TideCloak broker page but Tide IDP not loaded, refreshing...');
+                await this.page.reload({ waitUntil: 'domcontentloaded' });
                 await pause(5000);
                 formsVisible = await checkAuthFormsVisible();
+
+                // If still not visible, try waiting for tideprotocol.com redirect
+                if (!formsVisible) {
+                    console.log('Forms still not visible after refresh, waiting for Tide redirect...');
+                    try {
+                        await this.page.waitForURL(/tideprotocol\.com/, { timeout: 15000 });
+                        await pause(3000);
+                        formsVisible = await checkAuthFormsVisible();
+                    } catch (e) {
+                        console.log('No redirect to tideprotocol.com, checking forms again...');
+                        formsVisible = await checkAuthFormsVisible();
+                    }
+                }
+            }
+
+            // Check if we ended up back at the app
+            if (!formsVisible) {
+                const loginBtn = this.page.getByRole('button', { name: /Log\s*In/i });
+                if (await loginBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                    console.log('Back at app page unexpectedly, clicking Log In...');
+                    await loginBtn.click();
+                    await this.page.waitForLoadState('domcontentloaded', { timeout: 30000 });
+                    await pause(5000);
+                    formsVisible = await checkAuthFormsVisible();
+                }
             }
         }
     }
