@@ -438,6 +438,26 @@ When('I sign up or sign in with Tide', async function() {
     await pause(2000);
     console.log(`Current URL: ${this.page.url()}`);
 
+    // Helper function to check if auth forms are visible
+    const checkAuthFormsVisible = async () => {
+        // Try multiple selector strategies for better reliability
+        const selectors = [
+            '#sign_in-input_name',
+            '#sign_up-input_username',
+            'input[name="username"]',
+            'input[name="password"]',
+            '[data-testid="sign-in-form"]',
+            '[data-testid="sign-up-form"]'
+        ];
+        for (const sel of selectors) {
+            const el = this.page.locator(sel).first();
+            if (await el.isVisible({ timeout: 1000 }).catch(() => false)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     // Check for error page first
     const errorPage = this.page.getByText(/We are sorry/i);
     if (await errorPage.isVisible({ timeout: 2000 }).catch(() => false)) {
@@ -446,7 +466,16 @@ When('I sign up or sign in with Tide', async function() {
         if (await backLink.isVisible({ timeout: 2000 }).catch(() => false)) {
             await backLink.click();
             await this.page.waitForLoadState('domcontentloaded', { timeout: 30000 });
-            await pause(2000);
+            await pause(3000);
+
+            // After going back, we may be on the app page - need to click Log In again
+            const loginBtn = this.page.getByRole('button', { name: /Log\s*In/i });
+            if (await loginBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+                console.log('Back at app page, clicking Log In again...');
+                await loginBtn.click();
+                await this.page.waitForLoadState('domcontentloaded', { timeout: 30000 });
+                await pause(3000);
+            }
         }
     }
 
@@ -486,9 +515,36 @@ When('I sign up or sign in with Tide', async function() {
     const needsSignUp = !creds || !creds.username;
     console.log(`Need to sign up: ${needsSignUp}, existing creds: ${creds?.username || 'none'}`);
 
+    // Wait for auth forms to be visible with retry
+    let formsVisible = await checkAuthFormsVisible();
+    if (!formsVisible) {
+        console.log('Auth forms not visible, waiting longer...');
+        await pause(5000);
+        formsVisible = await checkAuthFormsVisible();
+
+        if (!formsVisible) {
+            // Take screenshot for debugging
+            const { takeScreenshot } = require('../../support/helpers');
+            await takeScreenshot(this.page, 'auth_forms_not_visible', true).catch(() => {});
+            console.log(`Current URL: ${this.page.url()}`);
+            console.log(`Page title: ${await this.page.title()}`);
+
+            // Check if we ended up back at the app
+            const loginBtn = this.page.getByRole('button', { name: /Log\s*In/i });
+            if (await loginBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                console.log('Back at app page unexpectedly, clicking Log In...');
+                await loginBtn.click();
+                await this.page.waitForLoadState('domcontentloaded', { timeout: 30000 });
+                await pause(5000);
+                formsVisible = await checkAuthFormsVisible();
+            }
+        }
+    }
+
     // Check what form is visible - sign in or sign up
-    const signInForm = this.page.locator('#sign_in-input_name').nth(1);
-    const signUpForm = this.page.locator('#sign_up-input_username').nth(1);
+    // Use .first() instead of .nth(1) for more reliable matching
+    const signInForm = this.page.locator('#sign_in-input_name').first();
+    const signUpForm = this.page.locator('#sign_up-input_username').first();
 
     const signInVisible = await signInForm.isVisible({ timeout: 3000 }).catch(() => false);
     const signUpVisible = await signUpForm.isVisible({ timeout: 1000 }).catch(() => false);
@@ -523,14 +579,14 @@ When('I sign up or sign in with Tide', async function() {
         }
 
         // Fill sign up form
-        const usernameInput = this.page.locator('#sign_up-input_username').nth(1);
+        const usernameInput = this.page.locator('#sign_up-input_username').first();
         await usernameInput.waitFor({ state: 'visible', timeout: 30000 });
         await usernameInput.fill(creds.username);
 
-        const passwordInput = this.page.locator('#sign_up-input_password').nth(1);
+        const passwordInput = this.page.locator('#sign_up-input_password').first();
         await passwordInput.fill(creds.password);
 
-        const repeatPasswordInput = this.page.locator('#sign_up-input_repeat_password').nth(1);
+        const repeatPasswordInput = this.page.locator('#sign_up-input_repeat_password').first();
         await repeatPasswordInput.fill(creds.password);
 
         // Click Continue
@@ -539,7 +595,7 @@ When('I sign up or sign in with Tide', async function() {
         await pause(2000);
 
         // Add email if requested
-        const emailInput = this.page.locator('#sign_up-email-input-1').nth(1);
+        const emailInput = this.page.locator('#sign_up-email-input-1').first();
         if (await emailInput.isVisible({ timeout: 5000 }).catch(() => false)) {
             await emailInput.fill(creds.email);
             await this.page.locator('#sign_up_email-button').click();
@@ -564,12 +620,12 @@ When('I sign up or sign in with Tide', async function() {
             }
         }
 
-        const nameInput = this.page.locator('#sign_in-input_name').nth(1);
+        const nameInput = this.page.locator('#sign_in-input_name').first();
         await nameInput.waitFor({ state: 'visible', timeout: 30000 });
         await nameInput.fill(creds.username);
         await nameInput.press('Tab');
 
-        const passInput = this.page.locator('#sign_in-input_password').nth(1);
+        const passInput = this.page.locator('#sign_in-input_password').first();
         await passInput.fill(creds.password);
 
         // Enable Remember me if visible
@@ -615,14 +671,14 @@ When('I sign up or sign in with Tide', async function() {
             console.log(`Creating new user: ${newCreds.username}`);
 
             // Fill sign up form
-            const usernameInput = this.page.locator('#sign_up-input_username').nth(1);
+            const usernameInput = this.page.locator('#sign_up-input_username').first();
             await usernameInput.waitFor({ state: 'visible', timeout: 30000 });
             await usernameInput.fill(newCreds.username);
 
-            const passwordInput = this.page.locator('#sign_up-input_password').nth(1);
+            const passwordInput = this.page.locator('#sign_up-input_password').first();
             await passwordInput.fill(newCreds.password);
 
-            const repeatPasswordInput = this.page.locator('#sign_up-input_repeat_password').nth(1);
+            const repeatPasswordInput = this.page.locator('#sign_up-input_repeat_password').first();
             await repeatPasswordInput.fill(newCreds.password);
 
             // Click Continue
@@ -631,7 +687,7 @@ When('I sign up or sign in with Tide', async function() {
             await pause(2000);
 
             // Add email if requested
-            const emailInput = this.page.locator('#sign_up-email-input-1').nth(1);
+            const emailInput = this.page.locator('#sign_up-email-input-1').first();
             if (await emailInput.isVisible({ timeout: 5000 }).catch(() => false)) {
                 await emailInput.fill(newCreds.email);
                 await this.page.locator('#sign_up_email-button').click();
