@@ -8,8 +8,12 @@
     "test": "playwright test",
     "test:cucumber": "cucumber-js",
     "test:cucumber:create-nextjs": "cucumber-js --tags @create-nextjs",
+    "test:cucumber:sdk": "cucumber-js --tags '@create-nextjs and @tidecloak-js and @tidecloak-nextjs'",
     "test:cucumber:js-sdk": "cucumber-js --tags @tidecloak-js",
     "test:cucumber:nextjs-sdk": "cucumber-js --tags @tidecloak-nextjs",
+    "test:cucumber:tidecloak": "cucumber-js --tags @tidecloak",
+    "test:cucumber:admin": "cucumber-js --tags '@tidecloak and @admin'",
+    "test:cucumber:email": "cucumber-js --tags '@tidecloak and @email'",
     "test:dry": "cucumber-js --dry-run"
   },
   "devDependencies": {
@@ -18,7 +22,8 @@
     "@types/node": "^24.10.1",
     "allure-js-commons": "^3.4.2",
     "allure-playwright": "^3.4.2",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "mailslurp-client": "^16.0.0"
   },
   "dependencies": {
     "playwright": "^1.56.1",
@@ -28,4 +33,3 @@
   "author": "",
   "license": "ISC"
 }
-

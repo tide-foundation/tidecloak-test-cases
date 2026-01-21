@@ -1,17 +1,34 @@
-# Sample .env file
-TIDE_INSTANCE_URL="<YOUR_TIDE_INSTANCE_URL>"
-ADMIN_USERNAME="<YOUR_TIDE_ADMIN_USERNAME>"
-ADMIN_PASSWORD="<YOUR_TIDE_ADMIN_PASSWORD>"
+# Sample .env file for TideCloak Cucumber.js tests
 
-# EMAIL CONFIG FOR MAIL DEBUG 
-# SAME EMAIL WILL BE USED FOR TESTING USER INVITE
-CONFIGURED=false # SET CONFIGURED TO 'true' ONCE SMTP IS CONFIGURED. DEFAULT VALUE WILL BE 'false'
-TEMP_EMAIL_DEBUG_MAIL="<YOUR_MAIL_DEBUG_EMAIL_ADDR_TO_SEND_MAIL>"
-TEMP_EMAIL_PASSWORD="<YOUR_MAIL_DEBUG_EMAIL_PASSWORD>"
-SMTP_PORT=9025 # SMTP PORT 25 or 9025(FOR MAILDEBUG)
-SMTP_HOST="<YOUR_SMTP_HOST>"
+# Test execution options
+HEADLESS=true                    # Set to 'false' to see browser during tests
+PRESERVE_ENV=false               # Set to 'true' to reuse existing containers between runs
 
-# YOUR ACCOUNT EMAIL FOR VERYING THE MAIL SENT AND RECEIVED
-MAIL_DEBUG_EMAIL="<YOUR_DEBUG_MAIL_EMAIL_ID>"
-MAIL_DEBUG_PASSWORD="<YOUR_DEBUG_MAIL_PASSWORD>"
-PROJECT_NAME="<YOUR_PROJECT_NAME_DEBUG_MAIL>"
+# Playground app configuration (optional)
+LOCAL_APP_DIR=""                 # Path to local playground app directory (if not cloning)
+APP_START_SCRIPT="dev"           # npm script to start the app (default: dev)
+
+# File watching for WSL environments (optional)
+WATCHPACK_POLLING=true
+CHOKIDAR_USEPOLLING=1
+
+# EMAIL/SMTP CONFIG
+# Used for email verification and user invite tests
+CONFIGURED=false                 # Set to 'true' once SMTP is configured
+TEMP_EMAIL_DEBUG_MAIL=""         # SMTP auth user or email
+TEMP_EMAIL_FROM=""               # From email address
+TEST_USER_EMAIL=""               # Test user email address
+TEMP_EMAIL_PASSWORD=""           # SMTP password
+SMTP_PORT=587                    # SMTP port (587, 2525, or 25)
+SMTP_HOST=""                     # SMTP host
+
+# MailSlurp configuration (for email verification tests)
+MAILSLURP_API=""                 # MailSlurp API key
+MAILSLURP_INBOX_ID=""            # MailSlurp inbox ID
+MAILSLURP_TIMEOUT_MS=60000       # Timeout for waiting for emails
+
+# Optional: Override email used during Tide sign-up
+TIDE_SIGNUP_EMAIL=""
+
+# Optional: Override username/email for password recovery tests
+TIDE_RECOVERY_USERNAME=""

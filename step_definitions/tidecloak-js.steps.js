@@ -95,7 +95,7 @@ When('I create myrealm if it does not exist', async function() {
 
             // If using production ORKs (ork1, ork2), update to staging (sork1, sork2)
             if (currentOrk.includes('://ork1.') || currentOrk.includes('://ork2.')) {
-                console.log('Updating to staging ORK...');
+                console.log('Updating from production to staging ORK...');
                 await homeOrkInput.click();
                 await homeOrkInput.clear();
                 await homeOrkInput.fill('https://sork1.tideprotocol.com');
@@ -105,14 +105,16 @@ When('I create myrealm if it does not exist', async function() {
                 await saveBtn.click();
                 await pause(3000);
                 console.log('Updated to staging ORK URL');
-            } else {
+            } else if (currentOrk.includes('://sork1.') || currentOrk.includes('://sork2.')) {
                 console.log('Already using staging ORK, no update needed');
+            } else {
+                console.log(`Unknown ORK URL pattern: ${currentOrk}`);
             }
         } else {
             console.log('Home ORK URL input not found by value search');
             // Fallback: check page content and try to find input near "Home ORK" text
             const pageContent = await this.page.content();
-            if (pageContent.includes('ork1.tideprotocol') || pageContent.includes('ork2.tideprotocol')) {
+            if (pageContent.includes('sork1.tideprotocol') || pageContent.includes('sork2.tideprotocol')) {
                 console.log('Production ORK found in page - need manual update');
             }
         }

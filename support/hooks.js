@@ -40,7 +40,15 @@ function getFeatureTag(scenario) {
 }
 
 // BeforeAll - runs once before all scenarios
+// Set PRESERVE_ENV=true to skip cleanup and reuse existing containers/auth
+const PRESERVE_ENV = process.env.PRESERVE_ENV === 'true';
+
 BeforeAll(async function() {
+    if (PRESERVE_ENV) {
+        console.log('BeforeAll: PRESERVE_ENV=true - skipping cleanup, reusing existing environment');
+        return;
+    }
+
     // Clear saved credentials to ensure a fresh user is created for this test run
     const authFilePath = path.join(process.cwd(), 'auth.json');
     if (fs.existsSync(authFilePath)) {
@@ -106,7 +114,7 @@ Before(async function(scenario) {
     await this.context.grantPermissions([
         'local-network-access',
         'storage-access'
-    ], { origin: 'https://ork1.tideprotocol.com' }).catch(() => {});
+    ], { origin: 'https://sork1.tideprotocol.com' }).catch(() => {});
 
     await this.context.grantPermissions([
         'local-network-access',

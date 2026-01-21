@@ -121,6 +121,40 @@ When('I fetch adapter config via admin UI', async function() {
     // Update IDP
     await this.page.getByTestId('nav-item-identity-providers').click();
     await this.page.getByRole('link', { name: 'tide' }).click();
+    await pause(2000);
+
+    // Update Home ORK URL to staging if it's set to production
+    // First scroll up to see the Home ORK URL field
+    await this.page.evaluate(() => window.scrollTo(0, 0));
+    await pause(500);
+
+    // Find the Home ORK URL input (contains tideprotocol.com)
+    const allInputs = this.page.locator('input[type="text"], input:not([type])');
+    const inputCount = await allInputs.count();
+    let homeOrkInput = null;
+    let currentOrk = '';
+
+    for (let i = 0; i < inputCount; i++) {
+        const input = allInputs.nth(i);
+        const value = await input.inputValue().catch(() => '');
+        if (value.includes('tideprotocol.com')) {
+            currentOrk = value;
+            homeOrkInput = input;
+            console.log(`Found ORK input: "${value}"`);
+            break;
+        }
+    }
+
+    if (homeOrkInput && (currentOrk.includes('://ork1.') || currentOrk.includes('://ork2.'))) {
+        console.log('Updating from production to staging ORK...');
+        await homeOrkInput.click();
+        await homeOrkInput.clear();
+        await homeOrkInput.fill('https://sork1.tideprotocol.com');
+        console.log('Updated Home ORK URL to staging');
+    } else if (homeOrkInput) {
+        console.log(`ORK already on staging or unknown: ${currentOrk}`);
+    }
+
     const domainInput = this.page.getByTestId('CustomAdminUIDomain');
     await domainInput.fill(this.appUrl);
     await this.page.getByTestId('idp-details-save').click();

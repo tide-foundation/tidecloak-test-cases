@@ -217,6 +217,23 @@ Given('I am logged into the Playground app', async function() {
 });
 
 When('I click Log In and sign in', async function() {
+    // Check for and dismiss Next.js error overlay first
+    const errorOverlay = this.page.locator('button:has-text("×"), button[aria-label="Close"], [data-nextjs-dialog-close]').first();
+    if (await errorOverlay.isVisible({ timeout: 2000 }).catch(() => false)) {
+        console.log('Next.js error overlay detected, dismissing...');
+        await errorOverlay.click().catch(() => {});
+        await pause(1000);
+    }
+
+    // Also try to close the "1 error" indicator
+    const errorIndicator = this.page.locator('button:has-text("error")').first();
+    if (await errorIndicator.isVisible({ timeout: 1000 }).catch(() => false)) {
+        console.log('Error indicator visible, trying to dismiss...');
+        const closeBtn = this.page.locator('button:has(svg), button:has-text("×")').last();
+        await closeBtn.click().catch(() => {});
+        await pause(500);
+    }
+
     const loginBtn = this.page.getByRole('button', { name: 'Log In' });
     await loginBtn.waitFor({ state: 'visible', timeout: 30000 });
     console.log('Log In button visible, clicking...');
@@ -228,8 +245,24 @@ When('I click Log In and sign in', async function() {
     // Click Log In and wait for redirect to auth page
     await loginBtn.click();
 
-    // Wait for redirect to TideCloak/Tide auth
-    await this.page.waitForURL(/\/realms\/|tideprotocol\.com|\/auth\//i, { timeout: 30000 });
+    // Wait for redirect to TideCloak/Tide auth (with longer timeout and better error handling)
+    try {
+        await this.page.waitForURL(/\/realms\/|tideprotocol\.com|\/auth\//i, { timeout: 30000 });
+    } catch (e) {
+        // If redirect didn't happen, check if there's an error and log current URL
+        console.log(`Redirect timeout. Current URL: ${this.page.url()}`);
+
+        // Take screenshot for debugging
+        const { takeScreenshot } = require('../../support/helpers');
+        await takeScreenshot(this.page, 'login_redirect_failed', true).catch(() => {});
+
+        // Check if still on same page with error
+        const pageContent = await this.page.content();
+        if (pageContent.includes('error') || pageContent.includes('Error')) {
+            console.log('Page appears to have an error. Checking console logs...');
+        }
+        throw new Error(`Login redirect failed. Expected URL matching /realms/ or tideprotocol.com, got: ${this.page.url()}`);
+    }
     await pause(2000);
 
     const authUrl = this.page.url();

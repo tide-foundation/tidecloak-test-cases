@@ -25,10 +25,11 @@ const authFilePath = path.join(process.cwd(), 'auth.json');
  */
 function generateCredentials(prefix = 'user') {
     const timestamp = Date.now();
+    const forcedEmail = process.env.TIDE_SIGNUP_EMAIL || process.env.TEST_USER_EMAIL || '';
     return {
         username: `${prefix}_${timestamp}`,
         password: `Pass${timestamp}!`,
-        email: `${prefix}_${timestamp}@test.tidecloak.com`,
+        email: forcedEmail || `${prefix}_${timestamp}@test.tidecloak.com`,
         createdAt: new Date().toISOString()
     };
 }

@@ -31,5 +31,33 @@ module.exports = {
         require: ['step_definitions/**/*.js', 'support/**/*.js'],
         tags: '@tidecloak-nextjs',
         format: ['progress-bar']
+    },
+    'tidecloak': {
+        // Explicit ordering to ensure cleanup runs last
+        paths: [
+            'features-cucumber/tidecloak/admin.feature',
+            'features-cucumber/tidecloak/email.feature',
+            'features-cucumber/tidecloak/zz_cleanup.feature',
+        ],
+        require: ['step_definitions/**/*.js', 'support/**/*.js'],
+        tags: '@tidecloak',
+        format: ['progress-bar']
+    },
+    'tidecloak-admin': {
+        paths: ['features-cucumber/tidecloak/admin.feature'],
+        require: ['step_definitions/**/*.js', 'support/**/*.js'],
+        tags: '@admin',
+        format: ['progress-bar']
+    },
+    'tidecloak-email': {
+        // Include the SMTP setup scenario that lives in admin.feature
+        paths: [
+            'features-cucumber/tidecloak/admin.feature',
+            'features-cucumber/tidecloak/email.feature',
+            'features-cucumber/tidecloak/zz_cleanup.feature',
+        ],
+        require: ['step_definitions/**/*.js', 'support/**/*.js'],
+        tags: '@email',
+        format: ['progress-bar']
     }
 };
