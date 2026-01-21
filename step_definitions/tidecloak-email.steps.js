@@ -12,6 +12,13 @@ const { expect } = require('@playwright/test');
 const { pause, loadCredentials } = require('../support/helpers');
 const MailSlurp = require('mailslurp-client').default;
 
+// Environment configuration - affects recovery email count
+const TIDE_ENV = process.env.TIDE_ENV || 'staging';
+const isProduction = TIDE_ENV === 'production' || TIDE_ENV === 'prod';
+
+// Number of recovery emails expected: staging=3 (T=3), production=14 (more ORKs)
+const RECOVERY_EMAIL_COUNT = parseInt(process.env.RECOVERY_EMAIL_COUNT || (isProduction ? '14' : '3'), 10);
+
 // Environment variables for email
 const CONFIGURED = process.env.CONFIGURED === 'true';
 // Backwards-compatible variables:
@@ -138,6 +145,33 @@ When('I set admin email in master realm', async function() {
 When('I send email verification', async function() {
     if (!CONFIGURED) return 'skipped';
 
+    // First, ensure the user has an email address set (use MailSlurp email)
+    const testUserEmail = process.env.TEST_USER_EMAIL || '';
+    if (testUserEmail) {
+        // Go to Details tab to check/set email
+        await this.page.getByTestId('details').click({ timeout: 5000 }).catch(() => {});
+        await pause(1000);
+
+        const emailInput = this.page.getByTestId('email');
+        const currentEmail = await emailInput.inputValue().catch(() => '');
+
+        if (!currentEmail) {
+            console.log(`Setting user email to: ${testUserEmail}`);
+            await emailInput.fill(testUserEmail);
+            await this.page.getByTestId('user-creation-save').click();
+            await pause(2000);
+
+            // Close success alert if shown
+            const saveAlert = this.page.getByTestId('last-alert');
+            if (await saveAlert.isVisible({ timeout: 3000 }).catch(() => false)) {
+                await this.page.getByRole('button', { name: /Close alert/i }).click().catch(() => {});
+                await pause(500);
+            }
+        } else {
+            console.log(`User already has email: ${currentEmail}`);
+        }
+    }
+
     await this.page.getByTestId('credentials').click({ timeout: 5000 });
     await pause(1000);
     await this.page.getByTestId('credentialResetBtn').click({ timeout: 5000 });
@@ -149,7 +183,7 @@ When('I send email verification', async function() {
     await pause(3000);
 
     const alert = this.page.getByTestId('last-alert');
-    await expect(alert).toContainText('Email sent to user');
+    await expect(alert).toContainText('Email sent to user', { timeout: 10000 });
     await this.page.getByRole('button', { name: /Close alert.*Email sent/i }).click();
     console.log('Sent email verification');
 });
@@ -350,16 +384,18 @@ When('I collect recovery links from email', async function() {
         console.log(`Fetching emails from MailSlurp inbox: ${MAILSLURP_INBOX_ID}`);
 
         // Wait for emails to arrive
+        console.log(`Waiting for ${RECOVERY_EMAIL_COUNT} recovery emails (${TIDE_ENV} environment)...`);
         const emails = await mailslurp.waitController.waitForEmailCount({
             inboxId: MAILSLURP_INBOX_ID,
-            count: 3,  // Need at least 3 emails for recovery
+            count: RECOVERY_EMAIL_COUNT,  // staging=3, production=14
             timeout: MAILSLURP_TIMEOUT_MS,
             unreadOnly: true,
         }).catch(async () => {
             // Fallback: just get whatever emails are there
+            console.log('Timeout waiting for emails, fetching whatever is available...');
             return await mailslurp.inboxController.getEmails({
                 inboxId: MAILSLURP_INBOX_ID,
-                size: 10
+                size: Math.max(20, RECOVERY_EMAIL_COUNT + 5)
             });
         });
 
@@ -403,17 +439,19 @@ When('I collect recovery links from email', async function() {
 
         console.log(`Collected ${this.recoveryLinks.length} recovery links from email`);
 
-        if (this.recoveryLinks.length < 3) {
-            console.log('WARNING: Less than 3 recovery links found. Recovery may not succeed.');
+        if (this.recoveryLinks.length < RECOVERY_EMAIL_COUNT) {
+            console.log(`WARNING: Less than ${RECOVERY_EMAIL_COUNT} recovery links found. Recovery may not succeed.`);
         }
 
-        // Visit 3 random recovery links (required by Tide recovery process)
+        // Visit recovery links (required by Tide recovery process)
+        // staging=3, production=14
         const linksToVisit = [...this.recoveryLinks];
-        for (let i = 0; i < 3 && linksToVisit.length > 0; i++) {
+        const linksToClick = Math.min(RECOVERY_EMAIL_COUNT, linksToVisit.length);
+        for (let i = 0; i < linksToClick; i++) {
             const randomIndex = Math.floor(Math.random() * linksToVisit.length);
             const choice = linksToVisit.splice(randomIndex, 1)[0];
 
-            console.log(`Visiting recovery link ${i + 1}/3...`);
+            console.log(`Visiting recovery link ${i + 1}/${linksToClick}...`);
 
             // Open in a new page context and visit the link directly
             const newPage = await this.context.newPage();
@@ -422,7 +460,7 @@ When('I collect recovery links from email', async function() {
             await newPage.close();
         }
 
-        console.log('Visited 3 recovery links successfully');
+        console.log(`Visited ${linksToClick} recovery links successfully`);
     } catch (e) {
         console.log(`Error fetching recovery emails: ${e.message}`);
         this.recoveryLinks = [];

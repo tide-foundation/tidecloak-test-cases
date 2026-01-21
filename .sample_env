@@ -4,6 +4,21 @@
 HEADLESS=true                    # Set to 'false' to see browser during tests
 PRESERVE_ENV=false               # Set to 'true' to reuse existing containers between runs
 
+# TideCloak environment - defaults to staging
+# Set to 'production' or 'prod' to test against production Tide network
+TIDE_ENV=staging
+
+# Or override individual settings:
+# TIDECLOAK_IMAGE=tideorg/tidecloak-dev:latest          # Production image
+# TIDECLOAK_IMAGE=tideorg/tidecloak-stg-dev:latest      # Staging image (default)
+# SYSTEM_HOME_ORK=https://ork1.tideprotocol.com         # Production ORK
+# SYSTEM_HOME_ORK=https://sork1.tideprotocol.com        # Staging ORK (default)
+# USER_HOME_ORK=https://ork1.tideprotocol.com           # Production ORK
+# USER_HOME_ORK=https://sork1.tideprotocol.com          # Staging ORK (default)
+# PAYER_PUBLIC=...                                       # Payer public key
+# THRESHOLD_T=3                                          # Staging threshold T
+# THRESHOLD_N=5                                          # Staging threshold N
+
 # Playground app configuration (optional)
 LOCAL_APP_DIR=""                 # Path to local playground app directory (if not cloning)
 APP_START_SCRIPT="dev"           # npm script to start the app (default: dev)

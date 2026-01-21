@@ -43,6 +43,16 @@ function getFeatureTag(scenario) {
 // Set PRESERVE_ENV=true to skip cleanup and reuse existing containers/auth
 const PRESERVE_ENV = process.env.PRESERVE_ENV === 'true';
 
+// Environment configuration - defaults to staging, set TIDE_ENV=production for prod
+const TIDE_ENV = process.env.TIDE_ENV || 'staging';
+const isProduction = TIDE_ENV === 'production' || TIDE_ENV === 'prod';
+const TIDECLOAK_IMAGE = process.env.TIDECLOAK_IMAGE || (isProduction
+    ? 'tideorg/tidecloak-dev:latest'
+    : 'tideorg/tidecloak-stg-dev:latest');
+const TARGET_ORK = process.env.SYSTEM_HOME_ORK || (isProduction
+    ? 'https://ork1.tideprotocol.com'
+    : 'https://sork1.tideprotocol.com');
+
 BeforeAll(async function() {
     if (PRESERVE_ENV) {
         console.log('BeforeAll: PRESERVE_ENV=true - skipping cleanup, reusing existing environment');
@@ -73,9 +83,9 @@ BeforeAll(async function() {
         // No containers to stop
     }
 
-    console.log('BeforeAll: Pre-pulling TideCloak Docker image...');
+    console.log(`BeforeAll: Pre-pulling TideCloak Docker image (${TIDECLOAK_IMAGE})...`);
     try {
-        execSync(`${dockerCmd} pull tideorg/tidecloak-stg-dev:latest`, {
+        execSync(`${dockerCmd} pull ${TIDECLOAK_IMAGE}`, {
             stdio: 'inherit',
             timeout: 300000
         });
@@ -114,12 +124,7 @@ Before(async function(scenario) {
     await this.context.grantPermissions([
         'local-network-access',
         'storage-access'
-    ], { origin: 'https://sork1.tideprotocol.com' }).catch(() => {});
-
-    await this.context.grantPermissions([
-        'local-network-access',
-        'storage-access'
-    ], { origin: 'https://sork1.tideprotocol.com' }).catch(() => {});
+    ], { origin: TARGET_ORK }).catch(() => {});
 
     this.page = await this.context.newPage();
 

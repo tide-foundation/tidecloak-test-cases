@@ -12,6 +12,13 @@ const os = require('os');
 const assert = require('assert');
 const { getFreePort, waitForHttp, pause } = require('../support/helpers');
 
+// Environment configuration - defaults to staging
+const TIDE_ENV = process.env.TIDE_ENV || 'staging';
+const isProduction = TIDE_ENV === 'production' || TIDE_ENV === 'prod';
+const TARGET_ORK = process.env.SYSTEM_HOME_ORK || (isProduction
+    ? 'https://ork1.tideprotocol.com'
+    : 'https://sork1.tideprotocol.com');
+
 When('I run create-next-app with App Router', function() {
     this.projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tide-next-docs-'));
     const appName = 'my-next-app';
@@ -145,14 +152,19 @@ When('I fetch adapter config via admin UI', async function() {
         }
     }
 
-    if (homeOrkInput && (currentOrk.includes('://ork1.') || currentOrk.includes('://ork2.'))) {
-        console.log('Updating from production to staging ORK...');
-        await homeOrkInput.click();
-        await homeOrkInput.clear();
-        await homeOrkInput.fill('https://sork1.tideprotocol.com');
-        console.log('Updated Home ORK URL to staging');
-    } else if (homeOrkInput) {
-        console.log(`ORK already on staging or unknown: ${currentOrk}`);
+    if (homeOrkInput) {
+        // Check if current ORK matches target environment
+        const needsUpdate = !currentOrk.includes(TARGET_ORK.replace('https://', ''));
+
+        if (needsUpdate) {
+            console.log(`Updating ORK to target environment: ${TARGET_ORK}`);
+            await homeOrkInput.click();
+            await homeOrkInput.clear();
+            await homeOrkInput.fill(TARGET_ORK);
+            console.log('Updated Home ORK URL');
+        } else {
+            console.log('Already using correct ORK, no update needed');
+        }
     }
 
     const domainInput = this.page.getByTestId('CustomAdminUIDomain');

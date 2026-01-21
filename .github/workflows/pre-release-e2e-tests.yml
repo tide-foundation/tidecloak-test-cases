@@ -1,95 +1,112 @@
-name: Playwright E2E
+name: Cucumber E2E Tests
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
+    inputs:
+      tide_env:
+        description: 'Tide environment (staging or production)'
+        required: false
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
   workflow_call:
+    inputs:
+      tide_env:
+        description: 'Tide environment (staging or production)'
+        required: false
+        default: 'staging'
+        type: string
     secrets:
       CHECKOUT_TOKEN:
         required: true
         description: 'Token with access to the test repo'
 
 jobs:
-  playwright-tests:
+  cucumber-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
       CI: true
+      HEADLESS: true
+      CONFIGURED: true
+      TIDE_ENV: ${{ inputs.tide_env || 'staging' }}
+      # Email/SMTP configuration from repository variables
+      MAILSLURP_API: ${{ secrets.MAILSLURP_API }}
+      MAILSLURP_INBOX_ID: ${{ vars.MAILSLURP_INBOX_ID }}
+      MAILSLURP_TIMEOUT_MS: ${{ vars.MAILSLURP_TIMEOUT_MS }}
+      SMTP_HOST: ${{ vars.SMTP_HOST }}
+      SMTP_PORT: ${{ vars.SMTP_PORT }}
+      TEMP_EMAIL_DEBUG_MAIL: ${{ vars.TEMP_EMAIL_DEBUG_MAIL }}
+      TEMP_EMAIL_FROM: ${{ vars.TEMP_EMAIL_FROM }}
+      TEMP_EMAIL_PASSWORD: ${{ secrets.TEMP_EMAIL_PASSWORD }}
+      TEST_USER_EMAIL: ${{ vars.TEST_USER_EMAIL }}
     steps:
-      # ===========================================================
-      # ALWAYS CHECKOUT THE WORKFLOW REPO (NOT THE CALLER REPO)
-      # REQUIRED FOR REUSABLE WORKFLOWS
-      # ===========================================================
-      - name: Checkout test repo (workflow repo)
+      - name: Checkout test repo
         uses: actions/checkout@v4
         with:
           repository: tide-foundation/tidecloak-test-cases
           ref: main
-          token: ${{ secrets.CHECKOUT_TOKEN }}
-      
-      # ===========================================================
-      # Rest of workflow...
-      # ===========================================================
+          token: ${{ secrets.CHECKOUT_TOKEN || secrets.GH_TOKEN || github.token }}
+
       - name: Verify Docker is available
         run: |
           docker --version
           docker info
-      
-      - name: Pre-pull Tidecloak image
-        run: docker pull tideorg/tidecloak-stg-dev:latest
-      
+
+      - name: Set Docker image based on environment
+        id: docker-image
+        run: |
+          if [ "${{ env.TIDE_ENV }}" = "production" ]; then
+            echo "image=tideorg/tidecloak-dev:latest" >> $GITHUB_OUTPUT
+          else
+            echo "image=tideorg/tidecloak-stg-dev:latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Pre-pull TideCloak image
+        run: docker pull ${{ steps.docker-image.outputs.image }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-      
+
       - name: Install dependencies
         run: npm install
-      
+
       - name: Install Playwright Browsers
-        run: npx playwright install --with-deps
-      
-      - name: Install Allure Playwright Reporter
-        run: npm install -D allure-playwright allure-js-commons
-      
-      - name: Install Allure CLI
-        run: |
-          npm install -g allure-commandline --force
-          allure --version || true
-      
-      - name: Run Playwright E2E tests (Playground)
-        run: >
-          npx playwright test tests/playground/00_playground.spec.ts
-          --max-failures=1 --retries=3
-          --project=chromium --project=firefox
-      
-      - name: Run JS-SDK tests
-        if: success()
-        run: >
-          npx playwright test tests/tidecloak-js-sdk/00_tidecloak-js.spec.ts
-          --max-failures=1 --retries=3
-          --project=chromium --project=firefox
-      
-      - name: Run React-SDK tests
-        if: success()
-        run: >
-          npx playwright test tests/tidecloak-react-sdk/00_tidecloak-react-sdk.spec.ts
-          --max-failures=1 --retries=3
-          --project=chromium --project=firefox
-      
-      - name: Run NextJS-SDK tests
-        if: success()
-        run: >
-          npx playwright test tests/tidecloak-nextjs-sdk/00_app_router.spec.ts
-          --max-failures=1 --retries=3
-          --project=chromium --project=firefox
-      
+        run: npx playwright install chromium --with-deps
+
+      - name: Run Cucumber E2E tests (create-nextjs)
+        run: npm run test:cucumber:create-nextjs
+
+      - name: Run Cucumber E2E tests (tidecloak-js)
+        if: success() || failure()
+        run: npm run test:cucumber:js-sdk
+
+      - name: Run Cucumber E2E tests (tidecloak-nextjs)
+        if: success() || failure()
+        run: npm run test:cucumber:nextjs-sdk
+
+      - name: Run Cucumber E2E tests (tidecloak admin)
+        if: success() || failure()
+        run: npm run test:cucumber:tidecloak
+
+      - name: Run Cucumber E2E tests (email)
+        if: success() || failure()
+        run: npm run test:cucumber:email
+
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: e2e-artifacts
           path: |
-            ./allure-results
-            ./playwright-report
-            ./test-results
+            ./reports
+            ./failed_screenshots
+            ./debug_screenshots
           retention-days: 7

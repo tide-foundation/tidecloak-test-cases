@@ -12,6 +12,16 @@ const os = require('os');
 const assert = require('assert');
 const { getFreePort, waitForHttp, pause } = require('../support/helpers');
 
+// Environment configuration - defaults to staging
+const TIDE_ENV = process.env.TIDE_ENV || 'staging';
+const isProduction = TIDE_ENV === 'production' || TIDE_ENV === 'prod';
+const TARGET_ORK = process.env.SYSTEM_HOME_ORK || (isProduction
+    ? 'https://ork1.tideprotocol.com'
+    : 'https://sork1.tideprotocol.com');
+const TARGET_ORK_LIST = isProduction
+    ? 'https://ork1.tideprotocol.com,https://ork2.tideprotocol.com'
+    : 'https://sork1.tideprotocol.com,https://sork2.tideprotocol.com';
+
 When('I create myrealm if it does not exist', async function() {
     // Check if myrealm exists
     await this.page.getByTestId('nav-item-realms').click();
@@ -49,12 +59,12 @@ When('I create myrealm if it does not exist', async function() {
             await tideOption.click();
             await pause(1000);
 
-            // Configure staging ORKs before saving
-            // Look for ORK URL field and set to staging
+            // Configure ORKs before saving
+            // Look for ORK URL field and set to target environment
             const orkUrlInput = this.page.getByTestId('orkUrls');
             if (await orkUrlInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-                await orkUrlInput.fill('https://sork1.tideprotocol.com,https://sork2.tideprotocol.com');
-                console.log('Configured staging ORK URLs');
+                await orkUrlInput.fill(TARGET_ORK_LIST);
+                console.log(`Configured ORK URLs: ${TARGET_ORK_LIST}`);
             }
 
             await this.page.getByTestId('add').click().catch(() => {});
@@ -93,30 +103,25 @@ When('I create myrealm if it does not exist', async function() {
         if (homeOrkInput && currentOrk) {
             console.log(`Current Home ORK URL: "${currentOrk}"`);
 
-            // If using production ORKs (ork1, ork2), update to staging (sork1, sork2)
-            if (currentOrk.includes('://ork1.') || currentOrk.includes('://ork2.')) {
-                console.log('Updating from production to staging ORK...');
+            // Check if current ORK matches target environment
+            const needsUpdate = !currentOrk.includes(TARGET_ORK.replace('https://', ''));
+
+            if (needsUpdate) {
+                console.log(`Updating ORK to target environment: ${TARGET_ORK}`);
                 await homeOrkInput.click();
                 await homeOrkInput.clear();
-                await homeOrkInput.fill('https://sork1.tideprotocol.com');
+                await homeOrkInput.fill(TARGET_ORK);
 
                 // Click Save button
                 const saveBtn = this.page.getByRole('button', { name: 'Save' });
                 await saveBtn.click();
                 await pause(3000);
-                console.log('Updated to staging ORK URL');
-            } else if (currentOrk.includes('://sork1.') || currentOrk.includes('://sork2.')) {
-                console.log('Already using staging ORK, no update needed');
+                console.log('Updated ORK URL');
             } else {
-                console.log(`Unknown ORK URL pattern: ${currentOrk}`);
+                console.log('Already using correct ORK, no update needed');
             }
         } else {
             console.log('Home ORK URL input not found by value search');
-            // Fallback: check page content and try to find input near "Home ORK" text
-            const pageContent = await this.page.content();
-            if (pageContent.includes('sork1.tideprotocol') || pageContent.includes('sork2.tideprotocol')) {
-                console.log('Production ORK found in page - need manual update');
-            }
         }
     }
 

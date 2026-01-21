@@ -1,11 +1,42 @@
 /**
  * Docker-related step definitions for TideCloak container management
  */
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
+
 const { Given, When, Then } = require('@cucumber/cucumber');
 const { execSync } = require('child_process');
 const crypto = require('crypto');
 const assert = require('assert');
 const { dockerCmd, getScopedPort, waitForHttp } = require('../../support/helpers');
+
+// Environment configuration - defaults to staging, set TIDE_ENV=production for prod
+const TIDE_ENV = process.env.TIDE_ENV || 'staging';
+const isProduction = TIDE_ENV === 'production' || TIDE_ENV === 'prod';
+
+// TideCloak Docker image
+const TIDECLOAK_IMAGE = process.env.TIDECLOAK_IMAGE || (isProduction
+    ? 'tideorg/tidecloak-dev:latest'
+    : 'tideorg/tidecloak-stg-dev:latest');
+
+// ORK URLs
+const SYSTEM_HOME_ORK = process.env.SYSTEM_HOME_ORK || (isProduction
+    ? 'https://ork1.tideprotocol.com'
+    : 'https://sork1.tideprotocol.com');
+const USER_HOME_ORK = process.env.USER_HOME_ORK || (isProduction
+    ? 'https://ork1.tideprotocol.com'
+    : 'https://sork1.tideprotocol.com');
+
+// Payer public key
+const PAYER_PUBLIC = process.env.PAYER_PUBLIC || (isProduction
+    ? '200000b967a7799ffd4476e1074777ebc83bec23a3843cb2e5ca43c83561802c8e646b'
+    : '20000011d6a0e8212d682657147d864b82d10e92776c15ead43dcfdc100ebf4dcfe6a8');
+
+// Threshold settings (staging only)
+const THRESHOLD_T = process.env.THRESHOLD_T || (isProduction ? '' : '3');
+const THRESHOLD_N = process.env.THRESHOLD_N || (isProduction ? '' : '5');
+
+console.log(`TideCloak environment: ${TIDE_ENV} (image: ${TIDECLOAK_IMAGE}, ORK: ${SYSTEM_HOME_ORK})`);
 
 Given('I have a running TideCloak server', async function() {
     // Check if a TideCloak container is already running
@@ -33,20 +64,24 @@ Given('I have a running TideCloak server', async function() {
     this.tidecloakName = `tidecloak_${crypto.randomBytes(4).toString('hex')}`;
     this.tidecloakPort = await getScopedPort(8080);
 
+    const envArgs = [
+        '-e', 'KC_BOOTSTRAP_ADMIN_USERNAME=admin',
+        '-e', 'KC_BOOTSTRAP_ADMIN_PASSWORD=password',
+        '-e', `KC_HOSTNAME=http://localhost:${this.tidecloakPort}`,
+        '-e', `SYSTEM_HOME_ORK=${SYSTEM_HOME_ORK}`,
+        '-e', `USER_HOME_ORK=${USER_HOME_ORK}`,
+        '-e', `PAYER_PUBLIC=${PAYER_PUBLIC}`,
+    ];
+    if (THRESHOLD_T) envArgs.push('-e', `THRESHOLD_T=${THRESHOLD_T}`);
+    if (THRESHOLD_N) envArgs.push('-e', `THRESHOLD_N=${THRESHOLD_N}`);
+
     const runCmd = [
         dockerCmd, 'run',
         '--name', this.tidecloakName,
         '-d',
         '-p', `${this.tidecloakPort}:8080`,
-        '-e', 'KC_BOOTSTRAP_ADMIN_USERNAME=admin',
-        '-e', 'KC_BOOTSTRAP_ADMIN_PASSWORD=password',
-        '-e', `KC_HOSTNAME=http://localhost:${this.tidecloakPort}`,
-        '-e', 'SYSTEM_HOME_ORK=https://sork1.tideprotocol.com',
-        '-e', 'USER_HOME_ORK=https://sork1.tideprotocol.com',
-        '-e', 'THRESHOLD_T=3',
-        '-e', 'THRESHOLD_N=5',
-        '-e', 'PAYER_PUBLIC=20000011d6a0e8212d682657147d864b82d10e92776c15ead43dcfdc100ebf4dcfe6a8',
-        'tideorg/tidecloak-stg-dev:latest',
+        ...envArgs,
+        TIDECLOAK_IMAGE,
     ].join(' ');
 
     console.log(`Starting TideCloak container: ${runCmd}`);
@@ -81,20 +116,24 @@ Given('I have a running TideCloak server on port {int}', async function(port) {
     this.tidecloakName = `tidecloak_${crypto.randomBytes(4).toString('hex')}`;
     this.tidecloakPort = port;
 
+    const envArgs = [
+        '-e', 'KC_BOOTSTRAP_ADMIN_USERNAME=admin',
+        '-e', 'KC_BOOTSTRAP_ADMIN_PASSWORD=password',
+        '-e', `KC_HOSTNAME=http://localhost:${port}`,
+        '-e', `SYSTEM_HOME_ORK=${SYSTEM_HOME_ORK}`,
+        '-e', `USER_HOME_ORK=${USER_HOME_ORK}`,
+        '-e', `PAYER_PUBLIC=${PAYER_PUBLIC}`,
+    ];
+    if (THRESHOLD_T) envArgs.push('-e', `THRESHOLD_T=${THRESHOLD_T}`);
+    if (THRESHOLD_N) envArgs.push('-e', `THRESHOLD_N=${THRESHOLD_N}`);
+
     const runCmd = [
         dockerCmd, 'run',
         '--name', this.tidecloakName,
         '-d',
         '-p', `${port}:8080`,
-        '-e', 'KC_BOOTSTRAP_ADMIN_USERNAME=admin',
-        '-e', 'KC_BOOTSTRAP_ADMIN_PASSWORD=password',
-        '-e', `KC_HOSTNAME=http://localhost:${port}`,
-        '-e', 'SYSTEM_HOME_ORK=https://sork1.tideprotocol.com',
-        '-e', 'USER_HOME_ORK=https://sork1.tideprotocol.com',
-        '-e', 'THRESHOLD_T=3',
-        '-e', 'THRESHOLD_N=5',
-        '-e', 'PAYER_PUBLIC=20000011d6a0e8212d682657147d864b82d10e92776c15ead43dcfdc100ebf4dcfe6a8',
-        'tideorg/tidecloak-stg-dev:latest',
+        ...envArgs,
+        TIDECLOAK_IMAGE,
     ].join(' ');
 
     console.log(`Starting TideCloak container on port ${port}: ${runCmd}`);

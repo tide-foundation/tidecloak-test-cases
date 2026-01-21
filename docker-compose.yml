@@ -1,3 +1,4 @@
+# Default: Staging environment
 services:
   tidecloak:
     image: tideorg/tidecloak-stg-dev:latest
@@ -19,3 +20,16 @@ services:
     #  - ./kcdatabase:/opt/keycloak/data/h2
     #  - ./certs:/opt/keycloak/conf/certs	# SSL CERTS DIRECTORY
 
+# Production environment (uncomment below, comment staging above)
+#services:
+#  tidecloak:
+#    image: tideorg/tidecloak-dev:latest
+#    ports:
+#      - "8080:8080"
+#    environment:
+#      - KC_BOOTSTRAP_ADMIN_USERNAME=admin
+#      - KC_BOOTSTRAP_ADMIN_PASSWORD=password
+#      - KC_HOSTNAME=http://localhost:8080
+#      - SYSTEM_HOME_ORK=https://ork1.tideprotocol.com
+#      - USER_HOME_ORK=https://ork1.tideprotocol.com
+#      - PAYER_PUBLIC=200000b967a7799ffd4476e1074777ebc83bec23a3843cb2e5ca43c83561802c8e646b
