@@ -27,20 +27,10 @@ module.exports = defineConfig({
 
   projects: [
     {
-      name: 'firefox',
+      name: 'chromium',
       use: {
-        ...devices['Desktop Firefox'],
-        headless: false,
-        launchOptions: {
-          firefoxUserPrefs: {
-            'dom.serviceWorkers.testing.enabled': true,
-            'dom.serviceWorkers.enabled': true,
-            'dom.storage_access.enabled': true,
-            'network.cookie.cookieBehavior': 0,
-            'privacy.partition.serviceWorkers': false,
-            'privacy.firstparty.isolate': false,
-          },
-        },
+        ...devices['Desktop Chrome'],
+        headless: process.env.HEADLESS === 'true' || process.env.CI === 'true',
       },
     },
   ],
