@@ -65,6 +65,7 @@ jobs:
       CI: true
       HEADLESS: true
       TIDE_ENV: ${{ inputs.tide_env || 'staging' }}
+      PLAYWRIGHT_BROWSERS_PATH: 0
     steps:
       - name: Checkout test repo
         uses: actions/checkout@v4
@@ -108,7 +109,7 @@ jobs:
       - name: Install Playwright Browsers
         run: |
           cd tests
-          npx playwright install firefox chromium --with-deps
+          npx playwright install --with-deps
 
       - name: Install system dependencies
         run: |
@@ -137,6 +138,7 @@ jobs:
       CI: true
       HEADLESS: true
       TIDE_ENV: ${{ inputs.tide_env || 'staging' }}
+      PLAYWRIGHT_BROWSERS_PATH: 0
       # Email/SMTP configuration
       # For direct runs (push/workflow_dispatch): uses vars.* from this repo
       # For workflow_call: uses inputs.* passed from caller
@@ -192,7 +194,7 @@ jobs:
         run: npm install
 
       - name: Install Playwright Browsers
-        run: npx playwright install firefox chromium --with-deps
+        run: npx playwright install --with-deps
 
       - name: Run Cucumber E2E tests (create-nextjs)
         run: npm run test:cucumber:create-nextjs
