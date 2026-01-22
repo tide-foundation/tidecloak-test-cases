@@ -564,6 +564,11 @@ echo "================================================"
 
 cd "$ROOT_DIR"
 
+# Ensure the required Playwright browser is present for this repo's config (firefox-only).
+# Idempotent; avoids CI/local failures where browser downloads were skipped or cached elsewhere.
+log_info "Ensuring Playwright browsers are installed..."
+npx playwright install firefox
+
 # Run tests with optional pattern
 if [ -n "$TEST_PATTERN" ]; then
     log_info "Running tests matching pattern: $TEST_PATTERN"
