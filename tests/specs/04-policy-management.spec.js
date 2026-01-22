@@ -32,17 +32,61 @@ test.describe('F4: Policy Management', () => {
         await page.getByRole('button', { name: 'Login' }).click();
         if (takeScreenshot) await takeScreenshot('02_login_form');
 
-        await page.locator('#sign_in-input_name').nth(1).fill(adminCreds.username);
-        await page.locator('#sign_in-input_password').nth(1).fill(adminCreds.password);
+        // If we're already authenticated, the app may redirect immediately.
+        const alreadyOnAdmin = await page
+            .waitForURL(/\/admin(\?|$)/, { timeout: 5000, waitUntil: 'domcontentloaded' })
+            .then(() => true)
+            .catch(() => false);
+        if (alreadyOnAdmin) return;
+
+        // Wait for the Tide login form to appear (the DOM can vary slightly in CI).
+        let nameInput = page.locator('#sign_in-input_name').nth(1);
+        const nameVisible = await nameInput
+            .waitFor({ state: 'visible', timeout: 60000 })
+            .then(() => true)
+            .catch(() => false);
+        if (!nameVisible) {
+            nameInput = page.locator('#sign_in-input_name').first();
+            await nameInput.waitFor({ state: 'visible', timeout: 60000 });
+        }
+
+        let passInput = page.locator('#sign_in-input_password').nth(1);
+        const passVisible = await passInput
+            .waitFor({ state: 'visible', timeout: 10000 })
+            .then(() => true)
+            .catch(() => false);
+        if (!passVisible) {
+            passInput = page.locator('#sign_in-input_password').first();
+            await passInput.waitFor({ state: 'visible', timeout: 10000 });
+        }
+
+        await nameInput.fill(adminCreds.username);
+        await passInput.fill(adminCreds.password);
         if (takeScreenshot) await takeScreenshot('03_credentials_filled');
 
-        const signInButton = page.getByRole('button', { name: /sign in/i }).first();
-        await expect(signInButton).toBeVisible({ timeout: 15000 });
+        // Click Sign In (primary selector used across the suite).
+        // The "Sign InProcessing" text is a Tide login widget quirk; keep it as the first choice.
+        let signInBtn = page.getByText('Sign InProcessing');
+        const signInTextVisible = await signInBtn
+            .waitFor({ state: 'visible', timeout: 15000 })
+            .then(() => true)
+            .catch(() => false);
+        if (!signInTextVisible) {
+            signInBtn = page.getByRole('button', { name: /sign\s*in/i });
+            await signInBtn.waitFor({ state: 'visible', timeout: 15000 });
+        }
 
-        await Promise.all([
-            page.waitForURL('**/admin**', { timeout: 120000, waitUntil: 'domcontentloaded' }),
-            signInButton.click(),
-        ]);
+        await signInBtn.click();
+
+        // Successful login generally returns to "/" and then the app redirects to "/admin".
+        const onAdmin = page.waitForURL(/\/admin(\?|$)/, { timeout: 120000, waitUntil: 'domcontentloaded' });
+        const onHomeThenAdmin = page
+            .waitForURL((url) => url.pathname === '/' || url.pathname === '/home', {
+                timeout: 120000,
+                waitUntil: 'domcontentloaded',
+            })
+            .then(() => page.waitForURL(/\/admin(\?|$)/, { timeout: 120000, waitUntil: 'domcontentloaded' }));
+        await Promise.race([onAdmin, onHomeThenAdmin]);
 
         await expect(page.getByText('Admin Dashboard')).toBeVisible({ timeout: 120000 });
     };
