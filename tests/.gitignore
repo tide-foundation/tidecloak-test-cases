@@ -1,0 +1,129 @@
+# ===================================
+# Node.js
+# ===================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.yarn/
+.pnp.*
+
+# ===================================
+# Playwright
+# ===================================
+test-results/
+playwright-report/
+playwright/.cache/
+blob-report/
+.last-run.json
+
+# ===================================
+# Test Artifacts & Screenshots
+# ===================================
+debug_screenshots/
+screenshots/
+videos/
+traces/
+*.png
+*.webm
+*.zip
+
+# ===================================
+# Credentials & Secrets
+# ===================================
+tide-admin-creds.json
+tide-admin2-creds.json
+*-creds.json
+*.pem
+*.key
+*.cert
+.env.local
+.env.*.local
+.env.production
+.env.staging
+
+# ===================================
+# TideCloak Data
+# ===================================
+tidecloak_data/
+scripts/tidecloak_data/
+
+# ===================================
+# Build & Cache
+# ===================================
+dist/
+build/
+.cache/
+*.tsbuildinfo
+.turbo/
+
+# ===================================
+# IDE & Editors
+# ===================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# ===================================
+# OS Generated Files
+# ===================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ===================================
+# Logs
+# ===================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# ===================================
+# Runtime & Temporary Files
+# ===================================
+*.pid
+*.seed
+*.pid.lock
+tmp/
+temp/
+.temp/
+.tmp/
+
+# ===================================
+# Coverage & Testing
+# ===================================
+coverage/
+.nyc_output/
+*.lcov
+.coverage/
+
+# ===================================
+# Docker
+# ===================================
+docker-compose.override.yml
+.docker/
+
+# ===================================
+# Misc
+# ===================================
+*.bak
+*.backup
+*.orig
+.env.backup
