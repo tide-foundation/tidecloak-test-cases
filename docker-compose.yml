@@ -2,6 +2,7 @@
 services:
   tidecloak:
     image: tideorg/tidecloak-stg-dev:latest
+    user: root
     ports:
       - "8080:8080"
     environment:
