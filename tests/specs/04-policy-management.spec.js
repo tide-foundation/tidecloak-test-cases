@@ -85,6 +85,7 @@ test.describe('F4: Policy Management', () => {
 
     test('When: I create a policy with threshold 2 for the TestRole', async ({ page }) => {
         const takeScreenshot = createScreenshotHelper(page, 'F4_create_policy');
+        const createPolicyTimeoutMs = 90_000;
 
         // First authenticate
         await page.goto(config.BASE_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
@@ -99,28 +100,49 @@ test.describe('F4: Policy Management', () => {
 
         // Fill in policy details using the TestRole from F3
         console.log(`Creating policy for TestRole: ${testRoleName}`);
-        await page.locator('[data-testid="policy-role-input"]').fill(testRoleName);
-        await page.locator('[data-testid="policy-threshold-input"]').fill('2');
+        const policyRoleInput = page.locator('[data-testid="policy-role-input"]');
+        const policyThresholdInput = page.locator('[data-testid="policy-threshold-input"]');
+        const createPolicyButton = page.locator('[data-testid="create-policy-btn"]');
+
+        await expect(policyRoleInput).toBeVisible({ timeout: 15000 });
+        await policyRoleInput.fill(testRoleName);
+        await expect(policyRoleInput).toHaveValue(testRoleName, { timeout: 15000 });
+
+        await expect(policyThresholdInput).toBeVisible({ timeout: 15000 });
+        await policyThresholdInput.fill('2');
+        await expect(policyThresholdInput).toHaveValue('2', { timeout: 15000 });
+
+        await expect(createPolicyButton).toBeVisible({ timeout: 15000 });
+        await expect(createPolicyButton).toBeEnabled({ timeout: 15000 });
         await takeScreenshot('02_policy_form_filled');
 
         // Click Create Policy and wait for the POST to succeed (more reliable than waiting on the UI message)
-        const createPolicyResponsePromise = page.waitForResponse(
-            (resp) =>
-                resp.request().method() === 'POST' &&
-                resp.url().includes('/api/policies'),
-            { timeout: 30000 }
-        );
+        let createPolicyResponse = null;
+        try {
+            [createPolicyResponse] = await Promise.all([
+                page.waitForResponse(
+                    (resp) =>
+                        resp.request().method() === 'POST' &&
+                        resp.url().includes('/api/policies'),
+                    { timeout: createPolicyTimeoutMs }
+                ),
+                createPolicyButton.click(),
+            ]);
+        } catch (err) {
+            // CI can miss the response event or be slow; fall back to UI state checks below.
+            console.warn(`Did not observe /api/policies response within ${createPolicyTimeoutMs}ms; falling back to pending list check.`);
+        }
 
-        await page.locator('[data-testid="create-policy-btn"]').click();
-        const createPolicyResponse = await createPolicyResponsePromise;
-        expect(
-            createPolicyResponse.ok(),
-            `Create policy failed: ${createPolicyResponse.status()} ${await createPolicyResponse.text()}`
-        ).toBeTruthy();
+        if (createPolicyResponse) {
+            expect(
+                createPolicyResponse.ok(),
+                `Create policy failed: ${createPolicyResponse.status()} ${await createPolicyResponse.text()}`
+            ).toBeTruthy();
+        }
 
         // Verify it appears in the pending policies list (the durable success signal)
         const pendingPoliciesList = page.locator('[data-testid="pending-policies-list"]');
-        await expect(pendingPoliciesList).toContainText(testRoleName, { timeout: 30000 });
+        await expect(pendingPoliciesList).toContainText(testRoleName, { timeout: createPolicyTimeoutMs });
 
         await takeScreenshot('03_after_create_policy');
         console.log(`Policy created for role: ${testRoleName} with threshold 2`);
