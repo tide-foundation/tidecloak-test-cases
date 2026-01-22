@@ -4,7 +4,6 @@ services:
     image: tideorg/tidecloak-stg-dev:latest
     ports:
       - "8080:8080"
-    #  - "8443:8443" # SSL
     environment:
       - KC_BOOTSTRAP_ADMIN_USERNAME=admin
       - KC_BOOTSTRAP_ADMIN_PASSWORD=password
@@ -14,6 +13,8 @@ services:
       - THRESHOLD_T=3
       - THRESHOLD_N=5
       - PAYER_PUBLIC=20000011d6a0e8212d682657147d864b82d10e92776c15ead43dcfdc100ebf4dcfe6a8
+    tmpfs:
+      - /opt/keycloak/data/h2:uid=1000,gid=1000
     #  - KC_HTTPS_CERTIFICATE_FILE=/opt/keycloak/conf/certs/server.pem
     #  - KC_HTTPS_CERTIFICATE_KEY_FILE=/opt/keycloak/conf/certs/key.pem
     #volumes:
