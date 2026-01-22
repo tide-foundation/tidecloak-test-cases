@@ -27,22 +27,18 @@ module.exports = defineConfig({
 
   projects: [
     {
-      name: 'chromium',
+      name: 'firefox',
       use: {
-        ...devices['Desktop Chrome'],
+        ...devices['Desktop Firefox'],
         headless: process.env.HEADLESS === 'true' || process.env.CI === 'true',
         launchOptions: {
-          args: [
-            '--no-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-web-security',
-            '--disable-features=IsolateOrigins,site-per-process,BlockInsecurePrivateNetworkRequests',
-            '--allow-running-insecure-content',
-            '--disable-site-isolation-trials',
-          ],
-        },
-        contextOptions: {
-          permissions: ['clipboard-read', 'clipboard-write', 'storage-access'],
+          firefoxUserPrefs: {
+            'dom.storage_access.enabled': true,
+            'dom.storage_access.auto_grants': true,
+            'dom.storage_access.auto_grants.delayed': false,
+            'network.cookie.cookieBehavior': 0,
+            'privacy.trackingprotection.enabled': false,
+          },
         },
       },
     },
