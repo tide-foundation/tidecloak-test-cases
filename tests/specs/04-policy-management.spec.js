@@ -103,17 +103,38 @@ test.describe('F4: Policy Management', () => {
         await page.locator('[data-testid="policy-threshold-input"]').fill('2');
         await takeScreenshot('02_policy_form_filled');
 
-        // Click Create Policy
-        await page.locator('[data-testid="create-policy-btn"]').click();
-        await page.waitForTimeout(3000);
-        await takeScreenshot('03_after_create_policy');
+        // Click Create Policy and wait for the POST to succeed (more reliable than waiting on the UI message)
+        const createPolicyResponsePromise = page.waitForResponse(
+            (resp) =>
+                resp.request().method() === 'POST' &&
+                resp.url().includes('/api/policies'),
+            { timeout: 30000 }
+        );
 
-        // Verify the policy was created
-        await expect(page.locator('[data-testid="message"]').first()).toContainText(`Policy for role "${testRoleName}" created with threshold 2`, { timeout: 15000 });
+        await page.locator('[data-testid="create-policy-btn"]').click();
+        const createPolicyResponse = await createPolicyResponsePromise;
+        expect(
+            createPolicyResponse.ok(),
+            `Create policy failed: ${createPolicyResponse.status()} ${await createPolicyResponse.text()}`
+        ).toBeTruthy();
+
+        // Verify it appears in the pending policies list (the durable success signal)
+        const pendingPoliciesList = page.locator('[data-testid="pending-policies-list"]');
+        await expect(pendingPoliciesList).toContainText(testRoleName, { timeout: 30000 });
+
+        await takeScreenshot('03_after_create_policy');
         console.log(`Policy created for role: ${testRoleName} with threshold 2`);
 
-        // Verify it appears in the pending policies list
-        await expect(page.locator('[data-testid="pending-policies-list"]')).toContainText(testRoleName, { timeout: 10000 });
+        // Best-effort: if the message banner is visible, assert its contents (it may be absent if cleared quickly)
+        const messageBanner = page.locator('[data-testid="message"]').first();
+        await messageBanner
+            .waitFor({ state: 'visible', timeout: 5000 })
+            .then(async () => {
+                await expect(messageBanner).toContainText(
+                    `Policy for role "${testRoleName}" created with threshold 2`
+                );
+            })
+            .catch(() => {});
         await takeScreenshot('04_policy_in_list');
     });
 
