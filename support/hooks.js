@@ -49,9 +49,6 @@ const isProduction = TIDE_ENV === 'production' || TIDE_ENV === 'prod';
 const TIDECLOAK_IMAGE = process.env.TIDECLOAK_IMAGE || (isProduction
     ? 'tideorg/tidecloak-dev:latest'
     : 'tideorg/tidecloak-stg-dev:latest');
-const TARGET_ORK = process.env.SYSTEM_HOME_ORK || (isProduction
-    ? 'https://ork1.tideprotocol.com'
-    : 'https://sork1.tideprotocol.com');
 
 BeforeAll(async function() {
     if (PRESERVE_ENV) {
@@ -106,7 +103,8 @@ Before(async function(scenario) {
             '--disable-dev-shm-usage',
             '--disable-web-security',
             '--disable-features=IsolateOrigins,site-per-process,BlockInsecurePrivateNetworkRequests',
-            '--allow-running-insecure-content'
+            '--allow-running-insecure-content',
+            '--disable-site-isolation-trials',
         ]
     });
 
@@ -118,23 +116,12 @@ Before(async function(scenario) {
 
     this.context = await this.browser.newContext({
         ignoreHTTPSErrors: true,
-        permissions: ['clipboard-read', 'clipboard-write', 'storage-access'],
+        permissions: ['clipboard-read', 'clipboard-write'],
         recordVideo: {
             dir: videoDir,
             size: { width: 1280, height: 720 }
         }
     });
-
-    // Grant local network access permissions
-    await this.context.grantPermissions([
-        'local-network-access',
-        'storage-access'
-    ]).catch(() => {});
-
-    await this.context.grantPermissions([
-        'local-network-access',
-        'storage-access'
-    ], { origin: TARGET_ORK }).catch(() => {});
 
     this.page = await this.context.newPage();
 

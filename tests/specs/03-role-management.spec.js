@@ -143,6 +143,11 @@ test.describe('F3: Role Management', () => {
 
         await takeScreenshot('01_admin_page');
 
+        // Wait for the page to fully load and refresh to get latest change requests
+        await page.waitForTimeout(2000);
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await page.waitForTimeout(2000);
+
         // Check for user change requests - there should be at least 1 for the role assignment
         const userChangeSection = page.getByText(/User Change Requests \(\d+\)/);
         await expect(userChangeSection).toBeVisible({ timeout: 15000 });

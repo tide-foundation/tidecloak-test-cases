@@ -108,7 +108,7 @@ jobs:
       - name: Install Playwright Browsers
         run: |
           cd tests
-          npx playwright install chromium --with-deps
+          npx playwright install firefox chromium --with-deps
 
       - name: Install system dependencies
         run: |
@@ -192,7 +192,7 @@ jobs:
         run: npm install
 
       - name: Install Playwright Browsers
-        run: npx playwright install chromium --with-deps
+        run: npx playwright install firefox chromium --with-deps
 
       - name: Run Cucumber E2E tests (create-nextjs)
         run: npm run test:cucumber:create-nextjs
