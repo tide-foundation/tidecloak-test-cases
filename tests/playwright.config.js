@@ -21,29 +21,26 @@ module.exports = defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     ignoreHTTPSErrors: true,
-    permissions: ['clipboard-read', 'clipboard-write', 'storage-access'],
+    permissions: ['geolocation'],
     bypassCSP: true,
   },
 
   projects: [
     {
-      name: 'chromium',
+      name: 'firefox',
       use: {
-        ...devices['Desktop Chrome'],
+        ...devices['Desktop Firefox'],
         headless: false,
         launchOptions: {
-          slowMo: 100,
-          args: [
-            '--no-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-web-security',
-            '--disable-features=IsolateOrigins,site-per-process,ThirdPartyStoragePartitioning,PartitionedCookies,BlockThirdPartyCookies',
-            '--allow-running-insecure-content',
-            '--disable-site-isolation-trials',
-            '--enable-features=StorageAccessAPIAutoGrantInFPS,StorageAccessAPIAutoGrantInStorageAccessHeader',
-            '--test-third-party-cookie-phaseout=false'
-          ]
-        }
+          firefoxUserPrefs: {
+            'dom.serviceWorkers.testing.enabled': true,
+            'dom.serviceWorkers.enabled': true,
+            'dom.storage_access.enabled': true,
+            'network.cookie.cookieBehavior': 0,
+            'privacy.partition.serviceWorkers': false,
+            'privacy.firstparty.isolate': false,
+          },
+        },
       },
     },
   ],
