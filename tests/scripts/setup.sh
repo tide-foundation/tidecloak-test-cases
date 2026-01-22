@@ -377,18 +377,9 @@ else
     fi
 
     log_info "Starting Tidecloak Docker container on port $TIDECLOAK_PORT..."
-    # Create H2 data directory for persistence
-    TIDECLOAK_DATA_DIR="${SCRIPT_DIR}/tidecloak_data"
-    if [ -d "$TIDECLOAK_DATA_DIR" ]; then
-        log_warn "Removing old Tidecloak data directory to avoid permission issues..."
-        rm -rf "$TIDECLOAK_DATA_DIR"
-    fi
-    mkdir -p "$TIDECLOAK_DATA_DIR"
-    chown -R 1000:0 "$TIDECLOAK_DATA_DIR" 2>/dev/null || true
 
     docker run -d \
         --name tidecloak \
-        -v "$TIDECLOAK_DATA_DIR:/opt/keycloak/data/h2" \
         -p $TIDECLOAK_PORT:8080 \
         -e KC_BOOTSTRAP_ADMIN_USERNAME="admin" \
         -e KC_BOOTSTRAP_ADMIN_PASSWORD="password" \
