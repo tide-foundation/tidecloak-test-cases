@@ -110,9 +110,19 @@ Before(async function(scenario) {
         ]
     });
 
+    // Create video directory for recordings
+    const videoDir = path.join(process.cwd(), 'test-videos');
+    if (!fs.existsSync(videoDir)) {
+        fs.mkdirSync(videoDir, { recursive: true });
+    }
+
     this.context = await this.browser.newContext({
         ignoreHTTPSErrors: true,
-        permissions: ['clipboard-read', 'clipboard-write', 'storage-access']
+        permissions: ['clipboard-read', 'clipboard-write', 'storage-access'],
+        recordVideo: {
+            dir: videoDir,
+            size: { width: 1280, height: 720 }
+        }
     });
 
     // Grant local network access permissions
@@ -172,10 +182,52 @@ Before(async function(scenario) {
 
 // After - runs after each scenario
 After(async function(scenario) {
+    // Get video path before closing page
+    let videoPath = null;
+    if (this.page) {
+        try {
+            const video = this.page.video();
+            if (video) {
+                videoPath = await video.path();
+            }
+        } catch (e) {
+            // Video not available
+        }
+    }
+
     // Take screenshot on failure
     if (scenario.result?.status === 'FAILED' && this.page) {
         const safeName = scenario.pickle.name.replace(/[^a-z0-9_\-]+/gi, '_');
         await takeScreenshot(this.page, `FAILED_${safeName}`, true);
+
+        // Rename video to include scenario name on failure
+        if (videoPath && fs.existsSync(videoPath)) {
+            const videoDir = path.dirname(videoPath);
+            const newVideoPath = path.join(videoDir, `FAILED_${safeName}.webm`);
+            try {
+                // Close page first to finalize video
+                await this.page.close();
+                this.page = null;
+                // Wait a moment for video to finalize
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                fs.renameSync(videoPath, newVideoPath);
+                console.log(`Video saved: ${newVideoPath}`);
+            } catch (e) {
+                console.log(`Could not rename video: ${e.message}`);
+            }
+        }
+    } else if (videoPath && fs.existsSync(videoPath)) {
+        // Delete video on success (retain-on-failure behavior)
+        try {
+            if (this.page) {
+                await this.page.close();
+                this.page = null;
+            }
+            await new Promise(resolve => setTimeout(resolve, 500));
+            fs.unlinkSync(videoPath);
+        } catch (e) {
+            // Ignore deletion errors
+        }
     }
 
     // Save state for next scenario in the same feature

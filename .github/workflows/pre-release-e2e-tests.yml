@@ -218,4 +218,5 @@ jobs:
             ./reports
             ./failed_screenshots
             ./debug_screenshots
+            ./test-videos
           retention-days: 7

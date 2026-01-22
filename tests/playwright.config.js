@@ -31,6 +31,19 @@ module.exports = defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         headless: process.env.HEADLESS === 'true' || process.env.CI === 'true',
+        launchOptions: {
+          args: [
+            '--no-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-web-security',
+            '--disable-features=IsolateOrigins,site-per-process,BlockInsecurePrivateNetworkRequests',
+            '--allow-running-insecure-content',
+            '--disable-site-isolation-trials',
+          ],
+        },
+        contextOptions: {
+          permissions: ['clipboard-read', 'clipboard-write', 'storage-access'],
+        },
       },
     },
   ],
