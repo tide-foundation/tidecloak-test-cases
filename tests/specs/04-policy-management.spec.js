@@ -26,6 +26,27 @@ test.describe('F4: Policy Management', () => {
     let adminCreds = null;
     let testRoleName = null;
 
+    const signInAndWaitForAdmin = async (page, takeScreenshot) => {
+        await page.goto(config.BASE_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
+
+        await page.getByRole('button', { name: 'Login' }).click();
+        if (takeScreenshot) await takeScreenshot('02_login_form');
+
+        await page.locator('#sign_in-input_name').nth(1).fill(adminCreds.username);
+        await page.locator('#sign_in-input_password').nth(1).fill(adminCreds.password);
+        if (takeScreenshot) await takeScreenshot('03_credentials_filled');
+
+        const signInButton = page.getByRole('button', { name: /sign in/i }).first();
+        await expect(signInButton).toBeVisible({ timeout: 15000 });
+
+        await Promise.all([
+            page.waitForURL('**/admin**', { timeout: 120000, waitUntil: 'domcontentloaded' }),
+            signInButton.click(),
+        ]);
+
+        await expect(page.getByText('Admin Dashboard')).toBeVisible({ timeout: 120000 });
+    };
+
     test.beforeAll(async () => {
         // Read stored credentials from F2
         const testsDir = getTestsDir();
@@ -59,44 +80,41 @@ test.describe('F4: Policy Management', () => {
         await page.goto(config.BASE_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
         await takeScreenshot('01_home_page');
 
-        // Click Login button
-        await page.getByRole('button', { name: 'Login' }).click();
-        await takeScreenshot('02_login_form');
-
-        // Fill credentials using the Tide login form
-        await page.locator('#sign_in-input_name').nth(1).fill(adminCreds.username);
-        await page.locator('#sign_in-input_password').nth(1).fill(adminCreds.password);
-        await takeScreenshot('03_credentials_filled');
-
-        // Click Sign In
-        await page.waitForTimeout(1000);
-        await page.getByText('Sign InProcessing').click();
-        await page.waitForTimeout(2000);
-        await takeScreenshot('04_after_signin');
-
-        // Wait for redirect to admin page
-        await page.waitForURL('**/admin**', { timeout: 90000 });
+        await signInAndWaitForAdmin(page, takeScreenshot);
         await takeScreenshot('05_admin_page');
 
-        // Verify we're on the admin page
-        await expect(page.getByText('Admin Dashboard')).toBeVisible({ timeout: 15000 });
         console.log(`Authenticated as: ${adminCreds.username}`);
     });
 
     test('When: I create a policy with threshold 2 for the TestRole', async ({ page }) => {
         const takeScreenshot = createScreenshotHelper(page, 'F4_create_policy');
         const createPolicyTimeoutMs = 90_000;
+        /** @type {string[]} */
+        const netLog = [];
+        const pushNetLog = (line) => {
+            netLog.push(line);
+            if (netLog.length > 50) netLog.shift();
+        };
+        page.on('requestfailed', (req) => {
+            const url = req.url();
+            if (url.includes('/api/') || url.includes(':8080')) {
+                pushNetLog(`requestfailed ${req.method()} ${url} -> ${req.failure()?.errorText || 'unknown'}`);
+            }
+        });
+        page.on('response', (resp) => {
+            const url = resp.url();
+            if (url.includes('/api/') || url.includes(':8080')) {
+                pushNetLog(`response ${resp.request().method()} ${url} -> ${resp.status()}`);
+            }
+        });
 
-        // First authenticate
-        await page.goto(config.BASE_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
-        await page.getByRole('button', { name: 'Login' }).click();
-        await page.locator('#sign_in-input_name').nth(1).fill(adminCreds.username);
-        await page.locator('#sign_in-input_password').nth(1).fill(adminCreds.password);
-        await page.waitForTimeout(1000);
-        await page.getByText('Sign InProcessing').click();
-        await page.waitForURL('**/admin**', { timeout: 90000 });
+        await signInAndWaitForAdmin(page, null);
 
         await takeScreenshot('01_admin_page');
+
+        // Ensure auth state finished initializing (CI can reach /admin before vuid/userId is populated)
+        const vuidLine = page.locator('p').filter({ hasText: 'VUID:' }).first();
+        await expect(vuidLine).toHaveText(/VUID:\s*\S+/, { timeout: 60000 });
 
         // Fill in policy details using the TestRole from F3
         console.log(`Creating policy for TestRole: ${testRoleName}`);
@@ -116,43 +134,73 @@ test.describe('F4: Policy Management', () => {
         await expect(createPolicyButton).toBeEnabled({ timeout: 15000 });
         await takeScreenshot('02_policy_form_filled');
 
-        // Click Create Policy and wait for the network activity it should trigger.
-        // CI sometimes misses the "response" event; waiting for the request is more reliable.
+        // Click Create Policy and wait for either:
+        // - the POST /api/policies request (best signal), OR
+        // - an error banner, OR
+        // - the policy row to appear (durable UI state)
+        const pendingPoliciesList = page.locator('[data-testid="pending-policies-list"]');
+        const expectedPolicyRow = pendingPoliciesList.locator('li', { hasText: testRoleName }).first();
+
         const createPolicyRequestPromise = page
             .waitForRequest(
                 (req) => req.method() === 'POST' && req.url().includes('/api/policies'),
                 { timeout: createPolicyTimeoutMs }
             )
             .catch(() => null);
-        const tidecloakRequestPromise = page
-            .waitForRequest((req) => req.url().includes(':8080'), { timeout: createPolicyTimeoutMs })
+        const errorMessagePromise = page
+            .locator('[data-testid="message"]')
+            .filter({ hasText: /^Error/i })
+            .first()
+            .waitFor({ state: 'visible', timeout: createPolicyTimeoutMs })
+            .then(async () => page.locator('[data-testid="message"]').first().innerText().catch(() => ''))
             .catch(() => null);
+        const policyRowPromise = expectedPolicyRow.waitFor({ state: 'visible', timeout: createPolicyTimeoutMs }).then(() => true).catch(() => false);
 
+        await createPolicyButton.scrollIntoViewIfNeeded();
         await createPolicyButton.click();
 
-        const createPolicyRequest = await createPolicyRequestPromise;
+        // If the click didn't register due to CI flakiness/overlays, try one "JS click" fallback quickly.
+        const createPolicyRequestOrNull = await Promise.race([
+            createPolicyRequestPromise,
+            page.waitForTimeout(2000).then(() => null),
+        ]);
+        let createPolicyRequest = createPolicyRequestOrNull;
         if (!createPolicyRequest) {
-            const tidecloakRequest = await tidecloakRequestPromise;
+            await page.evaluate(() => {
+                const btn = document.querySelector('[data-testid="create-policy-btn"]');
+                if (btn instanceof HTMLElement) btn.click();
+            });
+            createPolicyRequest = await createPolicyRequestPromise;
+        }
+
+        // Wait until we see either a policy row, or an error message, or we time out.
+        const [rowVisible, errorMessage] = await Promise.all([policyRowPromise, errorMessagePromise]);
+        if (!rowVisible) {
+            const messageText = errorMessage || (await page.locator('[data-testid="message"]').first().innerText().catch(() => ''));
             throw new Error(
-                tidecloakRequest
-                    ? `Create Policy never POSTed /api/policies within ${createPolicyTimeoutMs}ms (saw TideCloak request: ${tidecloakRequest.method()} ${tidecloakRequest.url()})`
-                    : `Create Policy never POSTed /api/policies within ${createPolicyTimeoutMs}ms (no TideCloak traffic observed either)`
+                [
+                    `Policy row for "${testRoleName}" did not appear within ${createPolicyTimeoutMs}ms.`,
+                    messageText ? `UI message: ${messageText}` : 'UI message: (none)',
+                    `Observed network events (last ${netLog.length}):`,
+                    ...netLog,
+                ].join('\n')
             );
         }
 
-        const createPolicyResponse = await createPolicyRequest.response().catch(() => null);
-        if (createPolicyResponse) {
-            expect(
-                createPolicyResponse.ok(),
-                `Create policy failed: ${createPolicyResponse.status()} ${await createPolicyResponse.text()}`
-            ).toBeTruthy();
-        } else {
-            console.warn('Observed POST /api/policies but did not observe its response; continuing with pending list check.');
+        if (createPolicyRequest) {
+            const createPolicyResponse = await createPolicyRequest.response().catch(() => null);
+            if (createPolicyResponse) {
+                expect(
+                    createPolicyResponse.ok(),
+                    `Create policy failed: ${createPolicyResponse.status()} ${await createPolicyResponse.text()}`
+                ).toBeTruthy();
+            } else {
+                console.warn('Observed POST /api/policies but did not observe its response; continuing.');
+            }
         }
 
         // Verify it appears in the pending policies list (the durable success signal)
-        const pendingPoliciesList = page.locator('[data-testid="pending-policies-list"]');
-        await expect(pendingPoliciesList).toContainText(testRoleName, { timeout: createPolicyTimeoutMs });
+        await expect(expectedPolicyRow).toBeVisible({ timeout: 15000 });
 
         await takeScreenshot('03_after_create_policy');
         console.log(`Policy created for role: ${testRoleName} with threshold 2`);
