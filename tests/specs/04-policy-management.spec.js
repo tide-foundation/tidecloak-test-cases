@@ -116,28 +116,38 @@ test.describe('F4: Policy Management', () => {
         await expect(createPolicyButton).toBeEnabled({ timeout: 15000 });
         await takeScreenshot('02_policy_form_filled');
 
-        // Click Create Policy and wait for the POST to succeed (more reliable than waiting on the UI message)
-        let createPolicyResponse = null;
-        try {
-            [createPolicyResponse] = await Promise.all([
-                page.waitForResponse(
-                    (resp) =>
-                        resp.request().method() === 'POST' &&
-                        resp.url().includes('/api/policies'),
-                    { timeout: createPolicyTimeoutMs }
-                ),
-                createPolicyButton.click(),
-            ]);
-        } catch (err) {
-            // CI can miss the response event or be slow; fall back to UI state checks below.
-            console.warn(`Did not observe /api/policies response within ${createPolicyTimeoutMs}ms; falling back to pending list check.`);
+        // Click Create Policy and wait for the network activity it should trigger.
+        // CI sometimes misses the "response" event; waiting for the request is more reliable.
+        const createPolicyRequestPromise = page
+            .waitForRequest(
+                (req) => req.method() === 'POST' && req.url().includes('/api/policies'),
+                { timeout: createPolicyTimeoutMs }
+            )
+            .catch(() => null);
+        const tidecloakRequestPromise = page
+            .waitForRequest((req) => req.url().includes(':8080'), { timeout: createPolicyTimeoutMs })
+            .catch(() => null);
+
+        await createPolicyButton.click();
+
+        const createPolicyRequest = await createPolicyRequestPromise;
+        if (!createPolicyRequest) {
+            const tidecloakRequest = await tidecloakRequestPromise;
+            throw new Error(
+                tidecloakRequest
+                    ? `Create Policy never POSTed /api/policies within ${createPolicyTimeoutMs}ms (saw TideCloak request: ${tidecloakRequest.method()} ${tidecloakRequest.url()})`
+                    : `Create Policy never POSTed /api/policies within ${createPolicyTimeoutMs}ms (no TideCloak traffic observed either)`
+            );
         }
 
+        const createPolicyResponse = await createPolicyRequest.response().catch(() => null);
         if (createPolicyResponse) {
             expect(
                 createPolicyResponse.ok(),
                 `Create policy failed: ${createPolicyResponse.status()} ${await createPolicyResponse.text()}`
             ).toBeTruthy();
+        } else {
+            console.warn('Observed POST /api/policies but did not observe its response; continuing with pending list check.');
         }
 
         // Verify it appears in the pending policies list (the durable success signal)
