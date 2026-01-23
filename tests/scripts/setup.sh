@@ -564,6 +564,10 @@ echo "================================================"
 
 cd "$ROOT_DIR"
 
+# Install test dependencies
+log_info "Installing test dependencies..."
+npm install
+
 # Ensure the required Playwright browser is present for this repo's config (firefox-only).
 # Idempotent; avoids CI/local failures where browser downloads were skipped or cached elsewhere.
 log_info "Ensuring Playwright browsers are installed..."
