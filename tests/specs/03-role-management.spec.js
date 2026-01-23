@@ -56,9 +56,9 @@ test.describe('F3: Role Management', () => {
         await takeScreenshot('03_credentials_filled');
 
         // Click Sign In
-        await page.waitForTimeout(1000);
-        await page.getByText('Sign InProcessing').click();
-        await page.waitForTimeout(2000);
+        const signInButton = page.getByText('Sign InProcessing');
+        await signInButton.waitFor({ state: 'visible', timeout: 15000 });
+        await signInButton.click();
         await takeScreenshot('04_after_signin');
 
         // Wait for redirect to admin page
@@ -78,8 +78,9 @@ test.describe('F3: Role Management', () => {
         await page.getByRole('button', { name: 'Login' }).click();
         await page.locator('#sign_in-input_name').nth(1).fill(adminCreds.username);
         await page.locator('#sign_in-input_password').nth(1).fill(adminCreds.password);
-        await page.waitForTimeout(1000);
-        await page.getByText('Sign InProcessing').click();
+        const signInBtn = page.getByText('Sign InProcessing');
+        await signInBtn.waitFor({ state: 'visible', timeout: 15000 });
+        await signInBtn.click();
         await page.waitForURL('**/admin**', { timeout: 90000 });
 
         await takeScreenshot('01_admin_page');
@@ -95,21 +96,16 @@ test.describe('F3: Role Management', () => {
         await takeScreenshot('03_role_name_filled');
 
         await page.getByRole('button', { name: 'Add Role' }).click();
-        await page.waitForTimeout(2000);
         await takeScreenshot('04_after_add_role');
 
-        // Verify the role appears in the message
-        await expect(page.locator('[data-testid="message"]').first()).toContainText(`Role "${createdRoleName}" created`, { timeout: 15000 });
+        // Verify the role appears in the message (this waits for the operation to complete)
+        await expect(page.locator('[data-testid="message"]').first()).toContainText(`Role "${createdRoleName}" created`, { timeout: 30000 });
         console.log(`Role created: ${createdRoleName}`);
 
-        // Wait for the role to appear in the list
-        await page.waitForTimeout(1000);
-
-        // Assign the role to myself
-        const assignButton = page.getByRole('button', { name: `Assign to Me` }).first();
-        await expect(assignButton).toBeVisible({ timeout: 10000 });
-        await assignButton.click();
-        await page.waitForTimeout(2000);
+        // Assign the role to myself (scope the click to the specific role row to avoid clicking a Realm Role)
+        const createdRoleRow = page.locator('li', { hasText: createdRoleName }).first();
+        await expect(createdRoleRow, `Could not find role row for "${createdRoleName}"`).toBeVisible({ timeout: 30000 });
+        await createdRoleRow.getByRole('button', { name: 'Assign to Me' }).click();
         await takeScreenshot('05_after_assign');
 
         // Verify assignment message
@@ -137,20 +133,20 @@ test.describe('F3: Role Management', () => {
         await page.getByRole('button', { name: 'Login' }).click();
         await page.locator('#sign_in-input_name').nth(1).fill(adminCreds.username);
         await page.locator('#sign_in-input_password').nth(1).fill(adminCreds.password);
-        await page.waitForTimeout(1000);
-        await page.getByText('Sign InProcessing').click();
+        const signInBtn = page.getByText('Sign InProcessing');
+        await signInBtn.waitFor({ state: 'visible', timeout: 15000 });
+        await signInBtn.click();
         await page.waitForURL('**/admin**', { timeout: 90000 });
 
         await takeScreenshot('01_admin_page');
 
         // Wait for the page to fully load and refresh to get latest change requests
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
         await page.reload({ waitUntil: 'domcontentloaded' });
-        await page.waitForTimeout(2000);
 
         // Check for user change requests - there should be at least 1 for the role assignment
         const userChangeSection = page.getByText(/User Change Requests \(\d+\)/);
-        await expect(userChangeSection).toBeVisible({ timeout: 15000 });
+        await expect(userChangeSection).toBeVisible({ timeout: 30000 });
 
         const userChangeSectionText = await userChangeSection.textContent();
         const userChangeCount = parseInt(userChangeSectionText?.match(/\((\d+)\)/)?.[1] || '0');
@@ -178,11 +174,10 @@ test.describe('F3: Role Management', () => {
         await popup.close().catch(() => {});
         console.log('User change request approved via popup');
 
-        await page.waitForTimeout(3000);
         await takeScreenshot('05_after_approve');
 
-        // Verify the change was committed
-        await expect(page.locator('[data-testid="message"]').first()).toContainText(/committed/i, { timeout: 15000 });
+        // Verify the change was committed (this waits for the operation to complete)
+        await expect(page.locator('[data-testid="message"]').first()).toContainText(/committed/i, { timeout: 30000 });
         console.log('User change request committed');
 
         await takeScreenshot('06_after_commit');
@@ -201,8 +196,9 @@ test.describe('F3: Role Management', () => {
         await page.getByRole('button', { name: 'Login' }).click();
         await page.locator('#sign_in-input_name').nth(1).fill(adminCreds.username);
         await page.locator('#sign_in-input_password').nth(1).fill(adminCreds.password);
-        await page.waitForTimeout(1000);
-        await page.getByText('Sign InProcessing').click();
+        const signInBtn = page.getByText('Sign InProcessing');
+        await signInBtn.waitFor({ state: 'visible', timeout: 15000 });
+        await signInBtn.click();
         await page.waitForURL('**/admin**', { timeout: 90000 });
 
         await takeScreenshot('01_admin_page');
@@ -212,9 +208,12 @@ test.describe('F3: Role Management', () => {
         console.log(`Token roles before refresh: ${tokenRolesBefore}`);
         await takeScreenshot('02_token_before_refresh');
 
-        // Click Refresh Token button
+        // Click Refresh Token button and wait for the token to update
         await page.getByRole('button', { name: 'Refresh Token' }).click();
-        await page.waitForTimeout(2000);
+
+        // Wait for the token roles to include our new role (more robust than "text changed",
+        // since refresh may be a no-op if the token already contains the role, or the text formatting may not change).
+        await expect(page.locator('[data-testid="token-roles"]')).toContainText(createdRoleName, { timeout: 120000 });
         await takeScreenshot('03_after_token_refresh');
 
         // Check token roles after refresh - should now include our role

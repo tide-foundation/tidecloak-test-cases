@@ -270,18 +270,16 @@ test.describe('F4: Policy Management', () => {
         await page.getByRole('button', { name: 'Login' }).click();
         await page.locator('#sign_in-input_name').nth(1).fill(adminCreds.username);
         await page.locator('#sign_in-input_password').nth(1).fill(adminCreds.password);
-        await page.waitForTimeout(1000);
-        await page.getByText('Sign InProcessing').click();
+        const signInBtn = page.getByText('Sign InProcessing');
+        await signInBtn.waitFor({ state: 'visible', timeout: 15000 });
+        await signInBtn.click();
         await page.waitForURL('**/admin**', { timeout: 90000 });
 
         await takeScreenshot('01_admin_page');
 
-        // Wait for policies to load
-        await page.waitForTimeout(2000);
-
-        // Find the policy in the list and click Review
+        // Wait for policies to load (by waiting for the review button to appear)
         const reviewButton = page.locator('[data-testid="review-policy-btn"]').first();
-        await expect(reviewButton).toBeVisible({ timeout: 10000 });
+        await expect(reviewButton).toBeVisible({ timeout: 30000 });
         await takeScreenshot('02_before_review');
 
         // Click review - this will trigger the Tide popup
@@ -299,11 +297,10 @@ test.describe('F4: Policy Management', () => {
         await popup.close().catch(() => {});
         console.log('Policy review approved via popup');
 
-        await page.waitForTimeout(3000);
         await takeScreenshot('05_after_approve');
 
-        // Verify the approval was recorded
-        await expect(page.locator('[data-testid="message"]').first()).toContainText('approved', { timeout: 15000 });
+        // Verify the approval was recorded (this waits for the operation to complete)
+        await expect(page.locator('[data-testid="message"]').first()).toContainText('approved', { timeout: 30000 });
         console.log('Policy approval recorded');
 
         await takeScreenshot('06_approval_recorded');
@@ -330,30 +327,27 @@ test.describe('F4: Policy Management', () => {
         await page.getByRole('button', { name: 'Login' }).click();
         await page.locator('#sign_in-input_name').nth(1).fill(adminCreds.username);
         await page.locator('#sign_in-input_password').nth(1).fill(adminCreds.password);
-        await page.waitForTimeout(1000);
-        await page.getByText('Sign InProcessing').click();
+        const signInBtn = page.getByText('Sign InProcessing');
+        await signInBtn.waitFor({ state: 'visible', timeout: 15000 });
+        await signInBtn.click();
         await page.waitForURL('**/admin**', { timeout: 90000 });
 
         await takeScreenshot('01_admin_page');
 
-        // Wait for policies to load
-        await page.waitForTimeout(2000);
-        await takeScreenshot('02_policies_loaded');
-
-        // The commit button should be visible now
+        // Wait for policies to load (by waiting for the commit button to appear)
         const commitButton = page.locator('[data-testid="commit-policy-btn"]').first();
-        await expect(commitButton).toBeVisible({ timeout: 10000 });
+        await expect(commitButton).toBeVisible({ timeout: 30000 });
+        await takeScreenshot('02_policies_loaded');
         console.log('Commit button is visible');
 
         // Click commit - executeTideRequest runs directly without a popup
         await commitButton.click();
         console.log('Commit button clicked - executing policy signature');
 
-        await page.waitForTimeout(5000);
         await takeScreenshot('03_after_commit');
 
-        // Verify the commit was successful
-        await expect(page.locator('[data-testid="message"]').first()).toContainText('committed', { timeout: 15000 });
+        // Verify the commit was successful (this waits for the operation to complete)
+        await expect(page.locator('[data-testid="message"]').first()).toContainText('committed', { timeout: 30000 });
         console.log('Policy committed successfully!');
 
         // The policy should no longer be in the pending list

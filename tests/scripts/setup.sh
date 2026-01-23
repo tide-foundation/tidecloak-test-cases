@@ -410,36 +410,45 @@ else
 
     # Wait for Tidecloak HTTP endpoint to be ready
     log_info "Waiting for Tidecloak HTTP endpoint..."
-    for i in {1..60}; do
+    for i in {1..90}; do
         if curl -s -f --connect-timeout 5 "http://localhost:$TIDECLOAK_PORT" > /dev/null 2>&1; then
             log_info "✓ Tidecloak HTTP endpoint is responding"
             break
         fi
-        if [ $i -eq 60 ]; then
-            log_error "Tidecloak HTTP endpoint not responding after 120 seconds"
+        if [ $i -eq 90 ]; then
+            log_error "Tidecloak HTTP endpoint not responding after 180 seconds"
             docker logs tidecloak 2>/dev/null | tail -50
             exit 1
         fi
-        if [ $((i % 10)) -eq 0 ]; then
-            log_info "  Still waiting for Tidecloak (attempt $i/60)..."
+        if [ $((i % 15)) -eq 0 ]; then
+            log_info "  Still waiting for Tidecloak (attempt $i/90)..."
         fi
         sleep 2
     done
 
     # Wait for admin API to be ready (the real health check)
     log_info "Waiting for Tidecloak admin API to be ready..."
-    for i in {1..30}; do
+    for i in {1..45}; do
         if curl -s -f --connect-timeout 5 "http://localhost:$TIDECLOAK_PORT/realms/master" > /dev/null 2>&1; then
             log_info "✓ Tidecloak admin API is ready"
             break
         fi
-        if [ $i -eq 30 ]; then
-            log_error "Tidecloak admin API not ready after 60 seconds"
+        if [ $i -eq 45 ]; then
+            log_error "Tidecloak admin API not ready after 90 seconds"
             docker logs tidecloak 2>/dev/null | tail -50
             exit 1
         fi
+        if [ $((i % 10)) -eq 0 ]; then
+            log_info "  Still waiting for Tidecloak admin API (attempt $i/45)..."
+        fi
         sleep 2
     done
+
+    # Additional settling time for TideCloak in CI environments
+    if [ "${CI:-false}" = "true" ]; then
+        log_info "CI environment detected - allowing additional settling time..."
+        sleep 5
+    fi
 
     log_info "✓ Tidecloak is running on port $TIDECLOAK_PORT"
     docker ps | grep tidecloak
@@ -542,17 +551,30 @@ PORT=$PORT npm run start &
 TEST_APP_PID=$!
 
 log_info "Waiting for test-app to be ready..."
-for i in {1..30}; do
-    if curl -s -o /dev/null -w "" "http://localhost:$PORT" 2>/dev/null; then
-        log_info "✓ test-app is running on port $PORT"
-        break
+for i in {1..60}; do
+    if curl -s -f --connect-timeout 5 "http://localhost:$PORT" > /dev/null 2>&1; then
+        log_info "✓ test-app HTTP endpoint is responding"
+        # Verify the health endpoint as well
+        if curl -s -f --connect-timeout 5 "http://localhost:$PORT/api/health" > /dev/null 2>&1; then
+            log_info "✓ test-app health check passed"
+            break
+        fi
     fi
-    if [ $i -eq 30 ]; then
-        log_error "test-app failed to start on port $PORT after 30 seconds"
+    if [ $i -eq 60 ]; then
+        log_error "test-app failed to start on port $PORT after 60 seconds"
         exit 1
+    fi
+    if [ $((i % 10)) -eq 0 ]; then
+        log_info "  Still waiting for test-app (attempt $i/60)..."
     fi
     sleep 1
 done
+
+# Additional settling time for test-app in CI environments
+if [ "${CI:-false}" = "true" ]; then
+    log_info "CI environment detected - allowing test-app to fully initialize..."
+    sleep 3
+fi
 
 echo ""
 log_info "✓ Setup complete! test-app is running at http://localhost:$PORT"

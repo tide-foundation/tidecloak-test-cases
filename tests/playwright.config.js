@@ -11,6 +11,15 @@ module.exports = defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: 1,
   maxFailures: 1,
+  timeout: process.env.CI ? 180000 : 120000, // 3 minutes in CI, 2 minutes locally
+  expect: {
+    timeout: process.env.CI ? 30000 : 15000, // Longer expect timeouts in CI
+    toPass: {
+      // Auto-retry assertions that can be flaky
+      timeout: process.env.CI ? 60000 : 30000,
+      intervals: [1000, 2000, 5000], // Retry with exponential backoff
+    },
+  },
   reporter: [
     ['html', { outputFolder: 'reports' }],
     ['list']
@@ -23,6 +32,10 @@ module.exports = defineConfig({
     ignoreHTTPSErrors: true,
     permissions: ['geolocation'],
     bypassCSP: true,
+    actionTimeout: process.env.CI ? 30000 : 15000, // Longer action timeouts in CI
+    navigationTimeout: process.env.CI ? 90000 : 60000, // Longer navigation timeouts in CI
+    // Slow down actions in CI to reduce flakiness from race conditions
+    ...(process.env.CI && { slowMo: 100 }), // 100ms delay between actions in CI
   },
 
   projects: [

@@ -117,15 +117,17 @@ test.describe('F2: Admin Handover - Link Tide Account', () => {
 
         // Click Continue button
         console.log('Clicking Continue...');
-        await page.waitForTimeout(2000);
-        await page.locator('#sign_up-button').click();
+        const continueButton = page.locator('#sign_up-button');
+        await continueButton.waitFor({ state: 'visible', timeout: 15000 });
+        await continueButton.click();
         await takeScreenshot('05_after_continue');
 
         // Add email for new user
         console.log('Adding email...');
         await page.locator('#sign_up-email-input-1').nth(1).fill('admin@test.com');
-        await page.waitForTimeout(2000);
-        await page.locator('#sign_up_email-button').click();
+        const emailButton = page.locator('#sign_up_email-button');
+        await emailButton.waitFor({ state: 'visible', timeout: 15000 });
+        await emailButton.click();
         await takeScreenshot('06_after_email');
 
         // Wait for automatic redirect back to test-app UI
