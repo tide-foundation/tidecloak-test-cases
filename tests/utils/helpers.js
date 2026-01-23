@@ -98,6 +98,85 @@ function createScreenshotHelper(page, prefix) {
     };
 }
 
+/**
+ * Sign into the test-app and wait until the Admin Dashboard is ready.
+ * This is written to be resilient in slow CI environments.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {{
+ *   baseUrl: string,
+ *   username: string,
+ *   password: string,
+ *   takeScreenshot?: ((name: string) => Promise<void>) | null,
+ *   timeoutMs?: number,
+ * }} opts
+ */
+async function signInToAdmin(page, opts) {
+    const timeoutMs = opts.timeoutMs ?? 120000;
+
+    await page.goto(opts.baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+    await page.getByRole('button', { name: 'Login' }).click();
+    if (opts.takeScreenshot) await opts.takeScreenshot('02_login_form');
+
+    // If already authenticated, the app may redirect immediately.
+    const alreadyOnAdmin = await page
+        .waitForURL(/\/admin(\?|$)/, { timeout: 5000, waitUntil: 'domcontentloaded' })
+        .then(() => true)
+        .catch(() => false);
+    if (alreadyOnAdmin) return;
+
+    // Wait for the Tide login widget fields (DOM varies slightly between runs).
+    let nameInput = page.locator('#sign_in-input_name').nth(1);
+    const nameVisible = await nameInput
+        .waitFor({ state: 'visible', timeout: 60000 })
+        .then(() => true)
+        .catch(() => false);
+    if (!nameVisible) {
+        nameInput = page.locator('#sign_in-input_name').first();
+        await nameInput.waitFor({ state: 'visible', timeout: 60000 });
+    }
+
+    let passInput = page.locator('#sign_in-input_password').nth(1);
+    const passVisible = await passInput
+        .waitFor({ state: 'visible', timeout: 10000 })
+        .then(() => true)
+        .catch(() => false);
+    if (!passVisible) {
+        passInput = page.locator('#sign_in-input_password').first();
+        await passInput.waitFor({ state: 'visible', timeout: 10000 });
+    }
+
+    await nameInput.fill(opts.username);
+    await passInput.fill(opts.password);
+    if (opts.takeScreenshot) await opts.takeScreenshot('03_credentials_filled');
+
+    // Click Sign In (preferred selector used across the suite).
+    let signInBtn = page.getByText('Sign InProcessing');
+    const signInTextVisible = await signInBtn
+        .waitFor({ state: 'visible', timeout: 15000 })
+        .then(() => true)
+        .catch(() => false);
+    if (!signInTextVisible) {
+        signInBtn = page.getByRole('button', { name: /sign\s*in/i });
+        await signInBtn.waitFor({ state: 'visible', timeout: 15000 });
+    }
+
+    await signInBtn.click();
+    if (opts.takeScreenshot) await opts.takeScreenshot('04_after_signin');
+
+    // Successful login often returns to "/" and then the app redirects to "/admin".
+    const onAdmin = page.waitForURL(/\/admin(\?|$)/, { timeout: timeoutMs, waitUntil: 'domcontentloaded' });
+    const onHomeThenAdmin = page
+        .waitForURL((url) => url.pathname === '/' || url.pathname === '/home', {
+            timeout: timeoutMs,
+            waitUntil: 'domcontentloaded',
+        })
+        .then(() => page.waitForURL(/\/admin(\?|$)/, { timeout: timeoutMs, waitUntil: 'domcontentloaded' }));
+
+    await Promise.race([onAdmin, onHomeThenAdmin]);
+    await page.getByText('Admin Dashboard').waitFor({ state: 'visible', timeout: timeoutMs });
+}
+
 module.exports = {
     takeScreenshot,
     sleep,
@@ -107,4 +186,5 @@ module.exports = {
     tidecloakConfigExists,
     getTidecloakConfig,
     createScreenshotHelper,
+    signInToAdmin,
 };

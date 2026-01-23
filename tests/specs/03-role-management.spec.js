@@ -17,7 +17,7 @@ const { test, expect } = require('@playwright/test');
 const path = require('path');
 const fs = require('fs');
 const config = require('../utils/config');
-const { createScreenshotHelper, getTestsDir } = require('../utils/helpers');
+const { createScreenshotHelper, getTestsDir, signInToAdmin } = require('../utils/helpers');
 
 test.describe('F3: Role Management', () => {
     test.setTimeout(3 * 60 * 1000); // 3 minutes timeout
@@ -46,23 +46,13 @@ test.describe('F3: Role Management', () => {
         await page.goto(config.BASE_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
         await takeScreenshot('01_home_page');
 
-        // Click Login button
-        await page.getByRole('button', { name: 'Login' }).click();
-        await takeScreenshot('02_login_form');
-
-        // Fill credentials using the Tide login form
-        await page.locator('#sign_in-input_name').nth(1).fill(adminCreds.username);
-        await page.locator('#sign_in-input_password').nth(1).fill(adminCreds.password);
-        await takeScreenshot('03_credentials_filled');
-
-        // Click Sign In
-        const signInButton = page.getByText('Sign InProcessing');
-        await signInButton.waitFor({ state: 'visible', timeout: 15000 });
-        await signInButton.click();
-        await takeScreenshot('04_after_signin');
-
-        // Wait for redirect to admin page
-        await page.waitForURL('**/admin**', { timeout: 90000 });
+        await signInToAdmin(page, {
+            baseUrl: config.BASE_URL,
+            username: adminCreds.username,
+            password: adminCreds.password,
+            takeScreenshot,
+            timeoutMs: 120000,
+        });
         await takeScreenshot('05_admin_page');
 
         // Verify we're on the admin page
@@ -73,15 +63,12 @@ test.describe('F3: Role Management', () => {
     test('When: I create a new role and assign it to myself', async ({ page }) => {
         const takeScreenshot = createScreenshotHelper(page, 'F3_create_assign');
 
-        // First authenticate
-        await page.goto(config.BASE_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
-        await page.getByRole('button', { name: 'Login' }).click();
-        await page.locator('#sign_in-input_name').nth(1).fill(adminCreds.username);
-        await page.locator('#sign_in-input_password').nth(1).fill(adminCreds.password);
-        const signInBtn = page.getByText('Sign InProcessing');
-        await signInBtn.waitFor({ state: 'visible', timeout: 15000 });
-        await signInBtn.click();
-        await page.waitForURL('**/admin**', { timeout: 90000 });
+        await signInToAdmin(page, {
+            baseUrl: config.BASE_URL,
+            username: adminCreds.username,
+            password: adminCreds.password,
+            timeoutMs: 120000,
+        });
 
         await takeScreenshot('01_admin_page');
 
@@ -128,15 +115,12 @@ test.describe('F3: Role Management', () => {
         const roleData = JSON.parse(fs.readFileSync(path.join(testsDir, 'created-role.json'), 'utf-8'));
         createdRoleName = roleData.roleName;
 
-        // First authenticate
-        await page.goto(config.BASE_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
-        await page.getByRole('button', { name: 'Login' }).click();
-        await page.locator('#sign_in-input_name').nth(1).fill(adminCreds.username);
-        await page.locator('#sign_in-input_password').nth(1).fill(adminCreds.password);
-        const signInBtn = page.getByText('Sign InProcessing');
-        await signInBtn.waitFor({ state: 'visible', timeout: 15000 });
-        await signInBtn.click();
-        await page.waitForURL('**/admin**', { timeout: 90000 });
+        await signInToAdmin(page, {
+            baseUrl: config.BASE_URL,
+            username: adminCreds.username,
+            password: adminCreds.password,
+            timeoutMs: 120000,
+        });
 
         await takeScreenshot('01_admin_page');
 
@@ -191,15 +175,12 @@ test.describe('F3: Role Management', () => {
         const roleData = JSON.parse(fs.readFileSync(path.join(testsDir, 'created-role.json'), 'utf-8'));
         createdRoleName = roleData.roleName;
 
-        // First authenticate
-        await page.goto(config.BASE_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
-        await page.getByRole('button', { name: 'Login' }).click();
-        await page.locator('#sign_in-input_name').nth(1).fill(adminCreds.username);
-        await page.locator('#sign_in-input_password').nth(1).fill(adminCreds.password);
-        const signInBtn = page.getByText('Sign InProcessing');
-        await signInBtn.waitFor({ state: 'visible', timeout: 15000 });
-        await signInBtn.click();
-        await page.waitForURL('**/admin**', { timeout: 90000 });
+        await signInToAdmin(page, {
+            baseUrl: config.BASE_URL,
+            username: adminCreds.username,
+            password: adminCreds.password,
+            timeoutMs: 120000,
+        });
 
         await takeScreenshot('01_admin_page');
 
