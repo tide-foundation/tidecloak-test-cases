@@ -238,7 +238,15 @@ When('I click Log In and sign in', async function() {
     await loginBtn.waitFor({ state: 'visible', timeout: 30000 });
 
     // Wait for Next.js hydration to complete before clicking
+    // Also wait for network to be idle to ensure all JS is loaded
+    await this.page.waitForLoadState('networkidle').catch(() => {});
     await pause(2000);
+
+    // Capture console messages for debugging
+    const consoleMessages = [];
+    this.page.on('console', msg => consoleMessages.push(`${msg.type()}: ${msg.text()}`));
+    this.page.on('pageerror', err => consoleMessages.push(`PAGE ERROR: ${err.message}`));
+
     console.log('Log In button visible, clicking...');
 
     // Store app URL for later verification
@@ -246,7 +254,14 @@ When('I click Log In and sign in', async function() {
     console.log(`App base URL: ${appBaseUrl}`);
 
     // Click Log In and wait for redirect to auth page
-    await loginBtn.click();
+    // Use force click in case there's an overlay, and try JS click as fallback
+    try {
+        await loginBtn.click({ timeout: 5000 });
+    } catch (clickError) {
+        console.log('Standard click failed, trying JS click...');
+        await loginBtn.evaluate(el => el.click());
+    }
+    await pause(1000); // Brief pause to allow redirect to start
 
     // Wait for redirect to TideCloak/Tide auth (with longer timeout and better error handling)
     try {
@@ -255,6 +270,12 @@ When('I click Log In and sign in', async function() {
         // If redirect didn't happen, check if there's an error and log current URL
         console.log(`Redirect timeout. Current URL: ${this.page.url()}`);
 
+        // Log captured console messages
+        if (consoleMessages.length > 0) {
+            console.log('Browser console messages:');
+            consoleMessages.forEach(msg => console.log(`  ${msg}`));
+        }
+
         // Take screenshot for debugging
         const { takeScreenshot } = require('../../support/helpers');
         await takeScreenshot(this.page, 'login_redirect_failed', true).catch(() => {});
@@ -262,8 +283,19 @@ When('I click Log In and sign in', async function() {
         // Check if still on same page with error
         const pageContent = await this.page.content();
         if (pageContent.includes('error') || pageContent.includes('Error')) {
-            console.log('Page appears to have an error. Checking console logs...');
+            console.log('Page appears to have an error.');
         }
+
+        // Log the button's attributes for debugging
+        const btnInfo = await loginBtn.evaluate(el => ({
+            tagName: el.tagName,
+            type: el.type,
+            disabled: el.disabled,
+            onclick: el.onclick ? 'has handler' : 'no handler',
+            className: el.className
+        })).catch(() => 'Unable to get button info');
+        console.log('Log In button info:', JSON.stringify(btnInfo));
+
         throw new Error(`Login redirect failed. Expected URL matching /realms/ or tideprotocol.com, got: ${this.page.url()}`);
     }
     await pause(2000);
@@ -317,7 +349,7 @@ When('I click Log In and sign in', async function() {
     const signInBtn = this.page.getByText('Sign InProcessing');
     await signInBtn.waitFor({ state: 'visible', timeout: 30000 });
     console.log('Clicking Sign In button...');
-    await page.waitForTimeout(1000);
+    await this.page.waitForTimeout(1000);
     await signInBtn.click();
 
     // Wait for the full OAuth redirect chain to complete
@@ -704,7 +736,7 @@ When('I sign up or sign in with Tide', async function() {
         const signInBtn = this.page.getByText('Sign InProcessing');
         await signInBtn.waitFor({ state: 'visible', timeout: 30000 });
         console.log('Clicking Sign In...');
-        await page.waitForTimeout(1000);
+        await this.page.waitForTimeout(1000);
         await signInBtn.click();
         await pause(5000); // Wait longer for error message or redirect
 

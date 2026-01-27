@@ -88,6 +88,20 @@ When('I fetch adapter config via admin UI', async function() {
         await this.page.getByLabel('Realm name *').fill('myrealm');
         await this.page.getByRole('button', { name: 'Create' }).click();
         await pause(3000);
+
+        // Dismiss any modal that may have appeared after realm creation
+        const modalBackdrop = this.page.locator('.pf-v5-c-backdrop, .pf-c-backdrop');
+        if (await modalBackdrop.isVisible({ timeout: 2000 }).catch(() => false)) {
+            console.log('Modal detected after realm creation, dismissing...');
+            // Try clicking close button or pressing Escape
+            const closeBtn = this.page.locator('[aria-label="Close"], .pf-v5-c-modal-box__close button, .pf-c-modal-box__close button').first();
+            if (await closeBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+                await closeBtn.click();
+            } else {
+                await this.page.keyboard.press('Escape');
+            }
+            await pause(1000);
+        }
     } else {
         // Click on myrealm in dropdown
         await myrealmText.click();
