@@ -75,7 +75,7 @@ test.describe('F4: Policy Management', () => {
             signInBtn = page.getByRole('button', { name: /sign\s*in/i });
             await signInBtn.waitFor({ state: 'visible', timeout: 15000 });
         }
-
+        await page.waitForTimeout(1000);
         await signInBtn.click();
 
         // Successful login generally returns to "/" and then the app redirects to "/admin".
@@ -262,6 +262,7 @@ test.describe('F4: Policy Management', () => {
         await page.locator('#sign_in-input_password').nth(1).fill(adminCreds.password);
         const signInBtn = page.getByText('Sign InProcessing');
         await signInBtn.waitFor({ state: 'visible', timeout: 15000 });
+        await page.waitForTimeout(1000);
         await signInBtn.click();
         await page.waitForURL('**/admin**', { timeout: 90000 });
 
@@ -319,6 +320,7 @@ test.describe('F4: Policy Management', () => {
         await page.locator('#sign_in-input_password').nth(1).fill(adminCreds.password);
         const signInBtn = page.getByText('Sign InProcessing');
         await signInBtn.waitFor({ state: 'visible', timeout: 15000 });
+        await page.waitForTimeout(1000);
         await signInBtn.click();
         await page.waitForURL('**/admin**', { timeout: 90000 });
 
