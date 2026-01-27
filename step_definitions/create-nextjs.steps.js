@@ -246,6 +246,16 @@ Given('the scaffolded app is running', async function() {
     }
     console.log(`tidecloak.json found at ${configPath}`);
 
+    // Copy tidecloak.json to public folder so the browser can fetch it
+    // The SDK loads config via HTTP fetch from /tidecloak.json
+    const publicDir = path.join(this.projectDir, 'public');
+    if (!fs.existsSync(publicDir)) {
+        fs.mkdirSync(publicDir, { recursive: true });
+    }
+    const publicConfigPath = path.join(publicDir, 'tidecloak.json');
+    fs.copyFileSync(configPath, publicConfigPath);
+    console.log(`Copied tidecloak.json to ${publicConfigPath}`);
+
     // Check if dev server is already running by trying to connect
     const isRunning = await waitForHttp(this.appUrl, 3000).then(() => true).catch(() => false);
 
