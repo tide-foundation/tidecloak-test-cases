@@ -160,7 +160,7 @@ async function signInToAdmin(page, opts) {
         signInBtn = page.getByRole('button', { name: /sign\s*in/i });
         await signInBtn.waitFor({ state: 'visible', timeout: 15000 });
     }
-
+    await page.waitForTimeout(1000);
     await signInBtn.click();
     if (opts.takeScreenshot) await opts.takeScreenshot('04_after_signin');
 
