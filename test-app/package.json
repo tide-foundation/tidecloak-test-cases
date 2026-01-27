@@ -11,7 +11,7 @@
     "@tidecloak/js": "^0.13.9",
     "asgard-tide": "0.12.47",
     "better-sqlite3": "^11.8.1",
-    "heimdall-tide": "^0.13.9",
+    "heimdall-tide": "0.12.47",
     "jose": "^6.1.3",
     "next": "16.1.4",
     "react": "19.2.3",

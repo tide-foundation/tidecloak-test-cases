@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const initializeTideRequest = async (request: BaseTideRequest): Promise<BaseTideRequest> => {
-        return BaseTideRequest.decode(await IAMService._tc?.createTideRequest(request.encode()));
+        return BaseTideRequest.decode(await IAMService._tc?.createTideRequest(request.encode()) as any);
     };
 
     const approveTideRequests = async (requests: { id: string, request: Uint8Array }[]): Promise<{
@@ -123,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         denied?: boolean;
         pending?: boolean;
     }[]> => {
-        const response = await IAMService._tc?.requestTideOperatorApproval(requests);
+        const response = await IAMService._tc?.requestTideOperatorApproval(requests) as any;
         return response.map((res: any) => {
             if (res.status === Status.approved) {
                 return { id: res.id, approved: { request: res.request } };
@@ -136,11 +136,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const executeTideRequest = async (request: Uint8Array): Promise<Uint8Array[]> => {
-        return await IAMService._tc?.executeSignRequest(request);
+        return await IAMService._tc?.executeSignRequest(request) as any;
     };
 
     const doEncrypt = async (payloads: EncryptPayload[]): Promise<string[]> => {
-        return await IAMService.doEncrypt(payloads);
+        return await IAMService.doEncrypt(payloads) as any;
     };
 
     const doDecrypt = async (payloads: DecryptPayload[]): Promise<(string | Uint8Array)[]> => {
