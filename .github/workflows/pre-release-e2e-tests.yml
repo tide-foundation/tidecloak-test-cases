@@ -197,6 +197,13 @@ jobs:
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
 
+      - name: Clean test-app database
+        run: |
+          if [ -d "test-app/db" ]; then
+            rm -rf test-app/db
+            echo "Database cleaned"
+          fi
+
       - name: Run Cucumber E2E tests (create-nextjs)
         run: npm run test:cucumber:create-nextjs
 
