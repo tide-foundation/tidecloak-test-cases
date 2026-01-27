@@ -8,17 +8,12 @@ module.exports = defineConfig({
   testDir: './specs',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  retries: 0, // No retries - fail immediately
   workers: 1,
-  maxFailures: 1,
-  timeout: process.env.CI ? 180000 : 120000, // 3 minutes in CI, 2 minutes locally
+  maxFailures: 1, // Stop on first failure
+  timeout: 60000, // 1 minute max per test
   expect: {
-    timeout: process.env.CI ? 30000 : 15000, // Longer expect timeouts in CI
-    toPass: {
-      // Auto-retry assertions that can be flaky
-      timeout: process.env.CI ? 60000 : 30000,
-      intervals: [1000, 2000, 5000], // Retry with exponential backoff
-    },
+    timeout: 15000, // 15 seconds for expect assertions
   },
   reporter: [
     ['html', { outputFolder: 'reports' }],
@@ -26,16 +21,14 @@ module.exports = defineConfig({
   ],
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:3000',
-    trace: 'on-first-retry',
+    trace: 'off',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     ignoreHTTPSErrors: true,
     permissions: ['geolocation'],
     bypassCSP: true,
-    actionTimeout: process.env.CI ? 30000 : 15000, // Longer action timeouts in CI
-    navigationTimeout: process.env.CI ? 90000 : 60000, // Longer navigation timeouts in CI
-    // Slow down actions in CI to reduce flakiness from race conditions
-    ...(process.env.CI && { slowMo: 100 }), // 100ms delay between actions in CI
+    actionTimeout: 15000, // 15 seconds for actions
+    navigationTimeout: 30000, // 30 seconds for navigation
   },
 
   projects: [
