@@ -236,6 +236,9 @@ When('I click Log In and sign in', async function() {
 
     const loginBtn = this.page.getByRole('button', { name: 'Log In' });
     await loginBtn.waitFor({ state: 'visible', timeout: 30000 });
+
+    // Wait for Next.js hydration to complete before clicking
+    await pause(2000);
     console.log('Log In button visible, clicking...');
 
     // Store app URL for later verification
@@ -682,12 +685,13 @@ When('I sign up or sign in with Tide', async function() {
             }
         }
 
-        const nameInput = this.page.locator('#sign_in-input_name').first();
+        // Note: These are custom-input web components, so we need to target the inner input element
+        const nameInput = this.page.locator('#sign_in-input_name input, #sign_in-input_name >> input').first();
         await nameInput.waitFor({ state: 'visible', timeout: 30000 });
         await nameInput.fill(creds.username);
         await nameInput.press('Tab');
 
-        const passInput = this.page.locator('#sign_in-input_password').first();
+        const passInput = this.page.locator('#sign_in-input_password input, #sign_in-input_password >> input').first();
         await passInput.fill(creds.password);
 
         // Enable Remember me if visible
