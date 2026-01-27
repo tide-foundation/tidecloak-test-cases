@@ -314,6 +314,7 @@ When('I click Log In and sign in', async function() {
     const signInBtn = this.page.getByText('Sign InProcessing');
     await signInBtn.waitFor({ state: 'visible', timeout: 30000 });
     console.log('Clicking Sign In button...');
+    await page.waitForTimeout(1000);
     await signInBtn.click();
 
     // Wait for the full OAuth redirect chain to complete
@@ -699,6 +700,7 @@ When('I sign up or sign in with Tide', async function() {
         const signInBtn = this.page.getByText('Sign InProcessing');
         await signInBtn.waitFor({ state: 'visible', timeout: 30000 });
         console.log('Clicking Sign In...');
+        await page.waitForTimeout(1000);
         await signInBtn.click();
         await pause(5000); // Wait longer for error message or redirect
 
