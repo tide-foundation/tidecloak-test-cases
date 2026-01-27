@@ -234,80 +234,72 @@ When('I click Log In and sign in', async function() {
         await pause(500);
     }
 
-    const loginBtn = this.page.getByRole('button', { name: 'Log In' });
-    await loginBtn.waitFor({ state: 'visible', timeout: 30000 });
-
-    // Wait for Next.js hydration to complete before clicking
-    // Also wait for network to be idle to ensure all JS is loaded
-    await this.page.waitForLoadState('networkidle').catch(() => {});
-    await pause(2000);
-
-    // Wait for TideCloak client to be initialized (workaround for race condition in scaffolded apps)
-    const maxInitWait = 10000;
-    const initStart = Date.now();
-    let isInitialized = false;
-    while (Date.now() - initStart < maxInitWait && !isInitialized) {
-        isInitialized = await this.page.evaluate(() => {
-            // Check various indicators that the TideCloak client might be ready
-            // The SDK sets window.__TIDECLOAK_READY__ or has tidecloak object with authenticated property
-            if (window.__TIDECLOAK_READY__ === true) return true;
-            if (window.__TIDECLOAK_INITIALIZED__ === true) return true;
-            if (window.tidecloak && typeof window.tidecloak.authenticated !== 'undefined') return true;
-            // Check if IAMService has initialized
-            if (window.__IAM_INITIALIZED__ === true) return true;
-            return false;
-        }).catch(() => false);
-        if (!isInitialized) {
-            await pause(500);
-        }
-    }
-    console.log(`TideCloak initialization wait: ${isInitialized ? 'ready' : 'timeout after ' + maxInitWait + 'ms'}`);
+    // Store app URL for later verification
+    const appBaseUrl = this.appUrl || this.page.url().split('/').slice(0, 3).join('/');
+    console.log(`App base URL: ${appBaseUrl}`);
 
     // Capture console messages for debugging
     const consoleMessages = [];
     this.page.on('console', msg => consoleMessages.push(`${msg.type()}: ${msg.text()}`));
     this.page.on('pageerror', err => consoleMessages.push(`PAGE ERROR: ${err.message}`));
 
-    console.log('Log In button visible, clicking...');
+    // Retry login click with page reload if TideCloak client isn't initialized
+    // The scaffolded app has a race condition where initIAM() may not complete before button is clicked
+    const maxRetries = 3;
+    let redirectSuccess = false;
 
-    // Store app URL for later verification
-    const appBaseUrl = this.appUrl || this.page.url().split('/').slice(0, 3).join('/');
-    console.log(`App base URL: ${appBaseUrl}`);
+    for (let attempt = 1; attempt <= maxRetries && !redirectSuccess; attempt++) {
+        console.log(`Login attempt ${attempt}/${maxRetries}`);
 
-    // Click Log In and wait for redirect to auth page
-    // Use force click in case there's an overlay, and try JS click as fallback
-    try {
-        await loginBtn.click({ timeout: 5000 });
-    } catch (clickError) {
-        console.log('Standard click failed, trying JS click...');
-        await loginBtn.evaluate(el => el.click());
+        const loginBtn = this.page.getByRole('button', { name: 'Log In' });
+        await loginBtn.waitFor({ state: 'visible', timeout: 30000 });
+
+        // Wait for Next.js hydration and network to settle
+        await this.page.waitForLoadState('networkidle').catch(() => {});
+        await pause(3000); // Give more time for TideCloak SDK to initialize
+
+        console.log('Log In button visible, clicking...');
+
+        // Click Log In
+        try {
+            await loginBtn.click({ timeout: 5000 });
+        } catch (clickError) {
+            console.log('Standard click failed, trying JS click...');
+            await loginBtn.evaluate(el => el.click());
+        }
+
+        // Wait for redirect with shorter timeout for retries
+        try {
+            await this.page.waitForURL(/\/realms\/|tideprotocol\.com|\/auth\//i, { timeout: 10000 });
+            redirectSuccess = true;
+            console.log('Login redirect successful');
+        } catch (e) {
+            console.log(`Attempt ${attempt}: Redirect did not happen. Current URL: ${this.page.url()}`);
+
+            // Check if there was an initialization error
+            const hasInitError = consoleMessages.some(msg => msg.includes('not initialized'));
+            if (hasInitError && attempt < maxRetries) {
+                console.log('TideCloak not initialized error detected, reloading page and retrying...');
+                consoleMessages.length = 0; // Clear messages for next attempt
+                await this.page.reload({ waitUntil: 'networkidle' });
+                await pause(2000);
+            }
+        }
     }
-    await pause(1000); // Brief pause to allow redirect to start
 
-    // Wait for redirect to TideCloak/Tide auth (with longer timeout and better error handling)
-    try {
-        await this.page.waitForURL(/\/realms\/|tideprotocol\.com|\/auth\//i, { timeout: 30000 });
-    } catch (e) {
-        // If redirect didn't happen, check if there's an error and log current URL
-        console.log(`Redirect timeout. Current URL: ${this.page.url()}`);
+    if (!redirectSuccess) {
+        // Final failure - log all debug info
+        console.log(`All ${maxRetries} login attempts failed. Current URL: ${this.page.url()}`);
 
-        // Log captured console messages
         if (consoleMessages.length > 0) {
             console.log('Browser console messages:');
             consoleMessages.forEach(msg => console.log(`  ${msg}`));
         }
 
-        // Take screenshot for debugging
         const { takeScreenshot } = require('../../support/helpers');
         await takeScreenshot(this.page, 'login_redirect_failed', true).catch(() => {});
 
-        // Check if still on same page with error
-        const pageContent = await this.page.content();
-        if (pageContent.includes('error') || pageContent.includes('Error')) {
-            console.log('Page appears to have an error.');
-        }
-
-        // Log the button's attributes for debugging
+        const loginBtn = this.page.getByRole('button', { name: 'Log In' });
         const btnInfo = await loginBtn.evaluate(el => ({
             tagName: el.tagName,
             type: el.type,
@@ -317,7 +309,7 @@ When('I click Log In and sign in', async function() {
         })).catch(() => 'Unable to get button info');
         console.log('Log In button info:', JSON.stringify(btnInfo));
 
-        throw new Error(`Login redirect failed. Expected URL matching /realms/ or tideprotocol.com, got: ${this.page.url()}`);
+        throw new Error(`Login redirect failed after ${maxRetries} attempts. Expected URL matching /realms/ or tideprotocol.com, got: ${this.page.url()}`);
     }
     await pause(2000);
 
