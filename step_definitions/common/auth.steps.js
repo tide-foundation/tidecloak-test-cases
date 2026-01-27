@@ -243,9 +243,21 @@ When('I click Log In and sign in', async function() {
     this.page.on('console', msg => consoleMessages.push(`${msg.type()}: ${msg.text()}`));
     this.page.on('pageerror', err => consoleMessages.push(`PAGE ERROR: ${err.message}`));
 
+    // Debug: Check if tidecloak.json is accessible via HTTP
+    const configResponse = await this.page.evaluate(async () => {
+        try {
+            const res = await fetch('/tidecloak.json');
+            const text = await res.text();
+            return { status: res.status, length: text.length, preview: text.substring(0, 200) };
+        } catch (e) {
+            return { error: e.message };
+        }
+    });
+    console.log('Config fetch result:', JSON.stringify(configResponse));
+
     // Retry login click with page reload if TideCloak client isn't initialized
     // The scaffolded app has a race condition where initIAM() may not complete before button is clicked
-    const maxRetries = 3;
+    const maxRetries = 5;
     let redirectSuccess = false;
 
     for (let attempt = 1; attempt <= maxRetries && !redirectSuccess; attempt++) {
@@ -256,7 +268,11 @@ When('I click Log In and sign in', async function() {
 
         // Wait for Next.js hydration and network to settle
         await this.page.waitForLoadState('networkidle').catch(() => {});
-        await pause(3000); // Give more time for TideCloak SDK to initialize
+
+        // Increase wait time on later attempts
+        const waitTime = 3000 + (attempt * 2000);
+        console.log(`Waiting ${waitTime}ms for SDK to initialize...`);
+        await pause(waitTime);
 
         console.log('Log In button visible, clicking...');
 
@@ -270,19 +286,19 @@ When('I click Log In and sign in', async function() {
 
         // Wait for redirect with shorter timeout for retries
         try {
-            await this.page.waitForURL(/\/realms\/|tideprotocol\.com|\/auth\//i, { timeout: 10000 });
+            await this.page.waitForURL(/\/realms\/|tideprotocol\.com|\/auth\//i, { timeout: 15000 });
             redirectSuccess = true;
             console.log('Login redirect successful');
         } catch (e) {
             console.log(`Attempt ${attempt}: Redirect did not happen. Current URL: ${this.page.url()}`);
 
-            // Check if there was an initialization error
-            const hasInitError = consoleMessages.some(msg => msg.includes('not initialized'));
+            // Check if there was an initialization or config error
+            const hasInitError = consoleMessages.some(msg => msg.includes('not initialized') || msg.includes('empty config'));
             if (hasInitError && attempt < maxRetries) {
-                console.log('TideCloak not initialized error detected, reloading page and retrying...');
+                console.log('TideCloak init/config error detected, reloading page and retrying...');
                 consoleMessages.length = 0; // Clear messages for next attempt
                 await this.page.reload({ waitUntil: 'networkidle' });
-                await pause(2000);
+                await pause(3000);
             }
         }
     }

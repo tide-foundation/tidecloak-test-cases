@@ -196,6 +196,39 @@ When('I run npm install in the project directory', function() {
 });
 
 When('I start the scaffolded Next.js dev server', async function() {
+    // Wait for CLI to finish creating tidecloak.json
+    // The CLI runs in background and creates config AFTER invite link is used
+    const configPath = path.join(this.projectDir, 'tidecloak.json');
+    const maxWaitTime = 60000; // 60 seconds - CLI can take a while
+    const startTime = Date.now();
+    let configValid = false;
+
+    console.log('Waiting for CLI to create valid tidecloak.json...');
+    while (Date.now() - startTime < maxWaitTime && !configValid) {
+        if (fs.existsSync(configPath)) {
+            try {
+                const content = fs.readFileSync(configPath, 'utf8');
+                if (content.length > 10) {
+                    const parsed = JSON.parse(content);
+                    if (parsed.realm && parsed['auth-server-url']) {
+                        configValid = true;
+                        console.log(`tidecloak.json is ready (${content.length} bytes)`);
+                    }
+                }
+            } catch (e) {
+                // File might be incomplete
+            }
+        }
+        if (!configValid) {
+            await pause(2000);
+        }
+    }
+
+    if (!configValid) {
+        const content = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : 'FILE NOT FOUND';
+        throw new Error(`tidecloak.json not valid after ${maxWaitTime/1000}s. Content: ${content.substring(0, 200)}`);
+    }
+
     // Kill any process using the port before starting
     try {
         execSync(`fuser -k ${this.appPort}/tcp 2>/dev/null || true`, { stdio: 'pipe' });
@@ -239,22 +272,51 @@ Given('the scaffolded app is running', async function() {
     assert(this.appUrl, 'App URL not set');
     assert(this.projectDir, 'Project directory not set');
 
-    // Verify tidecloak.json exists before starting
+    // Verify tidecloak.json exists and has valid content before starting
+    // On CI, there can be a race condition where the file exists but is empty or incomplete
     const configPath = path.join(this.projectDir, 'tidecloak.json');
-    if (!fs.existsSync(configPath)) {
-        throw new Error(`tidecloak.json not found at ${configPath}. CLI initialization may not be complete.`);
-    }
-    console.log(`tidecloak.json found at ${configPath}`);
+    const maxWaitTime = 30000; // 30 seconds max wait
+    const startTime = Date.now();
+    let configContent = '';
+    let configValid = false;
 
-    // Copy tidecloak.json to public folder so the browser can fetch it
-    // The SDK loads config via HTTP fetch from /tidecloak.json
-    const publicDir = path.join(this.projectDir, 'public');
-    if (!fs.existsSync(publicDir)) {
-        fs.mkdirSync(publicDir, { recursive: true });
+    while (Date.now() - startTime < maxWaitTime && !configValid) {
+        if (fs.existsSync(configPath)) {
+            try {
+                configContent = fs.readFileSync(configPath, 'utf8');
+                if (configContent.length > 10) {
+                    // Try to parse as JSON to verify it's complete
+                    const parsed = JSON.parse(configContent);
+                    if (parsed.realm && parsed['auth-server-url']) {
+                        configValid = true;
+                        console.log(`tidecloak.json is valid (${configContent.length} bytes)`);
+                    }
+                }
+            } catch (e) {
+                // JSON parse failed or file read failed - file might be incomplete
+            }
+        }
+        if (!configValid) {
+            console.log(`Waiting for valid tidecloak.json... (${Math.round((Date.now() - startTime) / 1000)}s)`);
+            await pause(1000);
+        }
     }
-    const publicConfigPath = path.join(publicDir, 'tidecloak.json');
-    fs.copyFileSync(configPath, publicConfigPath);
-    console.log(`Copied tidecloak.json to ${publicConfigPath}`);
+
+    if (!configValid) {
+        throw new Error(`tidecloak.json not found or invalid at ${configPath} after ${maxWaitTime/1000}s. Content: ${configContent.substring(0, 200)}`);
+    }
+    console.log(`tidecloak.json contents: ${configContent.substring(0, 300)}...`);
+
+    // List files in project root for debugging
+    const files = fs.readdirSync(this.projectDir);
+    console.log(`Files in project root: ${files.join(', ')}`)
+
+    // Force clear any Next.js cache that might have stale imports
+    const nextCacheDir = path.join(this.projectDir, '.next');
+    if (fs.existsSync(nextCacheDir)) {
+        console.log('Clearing .next cache to ensure fresh compilation...');
+        fs.rmSync(nextCacheDir, { recursive: true, force: true });
+    }
 
     // Check if dev server is already running by trying to connect
     const isRunning = await waitForHttp(this.appUrl, 3000).then(() => true).catch(() => false);
