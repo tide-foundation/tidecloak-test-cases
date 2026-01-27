@@ -203,19 +203,9 @@ test.describe('F4: Policy Management', () => {
         await createPolicyButton.scrollIntoViewIfNeeded();
         await createPolicyButton.click();
 
-        // If the click didn't register due to CI flakiness/overlays, try one "JS click" fallback quickly.
-        const createPolicyRequestOrNull = await Promise.race([
-            createPolicyRequestPromise,
-            page.waitForTimeout(2000).then(() => null),
-        ]);
-        let createPolicyRequest = createPolicyRequestOrNull;
-        if (!createPolicyRequest) {
-            await page.evaluate(() => {
-                const btn = document.querySelector('[data-testid="create-policy-btn"]');
-                if (btn instanceof HTMLElement) btn.click();
-            });
-            createPolicyRequest = await createPolicyRequestPromise;
-        }
+        // Wait for the request - don't use a fallback click as it can cause duplicate policy creation
+        // which results in UNIQUE constraint errors on slower CI machines
+        const createPolicyRequest = await createPolicyRequestPromise;
 
         // Wait until we see either a policy row, or an error message, or we time out.
         const [rowVisible, errorMessage] = await Promise.all([policyRowPromise, errorMessagePromise]);
