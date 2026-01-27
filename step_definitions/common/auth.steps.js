@@ -242,6 +242,27 @@ When('I click Log In and sign in', async function() {
     await this.page.waitForLoadState('networkidle').catch(() => {});
     await pause(2000);
 
+    // Wait for TideCloak client to be initialized (workaround for race condition in scaffolded apps)
+    const maxInitWait = 10000;
+    const initStart = Date.now();
+    let isInitialized = false;
+    while (Date.now() - initStart < maxInitWait && !isInitialized) {
+        isInitialized = await this.page.evaluate(() => {
+            // Check various indicators that the TideCloak client might be ready
+            // The SDK sets window.__TIDECLOAK_READY__ or has tidecloak object with authenticated property
+            if (window.__TIDECLOAK_READY__ === true) return true;
+            if (window.__TIDECLOAK_INITIALIZED__ === true) return true;
+            if (window.tidecloak && typeof window.tidecloak.authenticated !== 'undefined') return true;
+            // Check if IAMService has initialized
+            if (window.__IAM_INITIALIZED__ === true) return true;
+            return false;
+        }).catch(() => false);
+        if (!isInitialized) {
+            await pause(500);
+        }
+    }
+    console.log(`TideCloak initialization wait: ${isInitialized ? 'ready' : 'timeout after ' + maxInitWait + 'ms'}`);
+
     // Capture console messages for debugging
     const consoleMessages = [];
     this.page.on('console', msg => consoleMessages.push(`${msg.type()}: ${msg.text()}`));
