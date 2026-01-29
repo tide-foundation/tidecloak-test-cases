@@ -83,6 +83,15 @@ jobs:
           path: tidecloak-js
           token: ${{ secrets.CHECKOUT_TOKEN || secrets.GH_TOKEN || github.token }}
 
+      # Clone heimdall for staging tests (dependency of tidecloak-js)
+      - name: Checkout heimdall
+        if: env.TIDE_ENV == 'staging'
+        uses: actions/checkout@v4
+        with:
+          repository: tide-foundation/heimdall
+          path: heimdall
+          token: ${{ secrets.CHECKOUT_TOKEN || secrets.GH_TOKEN || github.token }}
+
       - name: Verify Docker is available
         run: |
           docker --version
@@ -105,16 +114,32 @@ jobs:
         with:
           node-version: 22
 
+      # Build heimdall-tide for staging
+      - name: Build heimdall-tide
+        if: env.TIDE_ENV == 'staging'
+        run: |
+          echo "Building heimdall-tide..."
+          cd heimdall && npm ci && npm run build
+          echo "heimdall-tide built successfully"
+
       # Build tidecloak-js packages for staging
       - name: Build TideCloak packages
         if: env.TIDE_ENV == 'staging'
         run: |
           echo "Building tidecloak-js packages for staging tests..."
-          cd tidecloak-js/packages/tidecloak-verify && npm ci && npm run build
+
+          # Symlink heimdall-tide into tidecloak-js
+          cd tidecloak-js/packages/tidecloak-js
+          npm ci
+          rm -rf node_modules/heimdall-tide
+          ln -s ${{ github.workspace }}/heimdall node_modules/heimdall-tide
+          npm run build
+
+          # Build other packages
+          cd ../tidecloak-verify && npm ci && npm run build
           cd ../tidecloak-react && npm ci && npm run build
           cd ../tidecloak-nextjs && npm ci && npm run build
           cd ../tidecloak-create-nextjs && npm ci && npm run build
-          cd ../tidecloak-js && npm ci && npm run build
           echo "All packages built successfully"
 
       # Set package paths for staging
@@ -126,6 +151,7 @@ jobs:
           echo "TIDECLOAK_VERIFY_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-verify" >> $GITHUB_ENV
           echo "TIDECLOAK_CREATE_NEXTJS_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-create-nextjs" >> $GITHUB_ENV
           echo "TIDECLOAK_JS_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-js" >> $GITHUB_ENV
+          echo "HEIMDALL_PATH=${{ github.workspace }}/heimdall" >> $GITHUB_ENV
 
       - name: Install test-app dependencies
         run: |
@@ -202,6 +228,15 @@ jobs:
           path: tidecloak-js
           token: ${{ secrets.CHECKOUT_TOKEN || secrets.GH_TOKEN || github.token }}
 
+      # Clone heimdall for staging tests (dependency of tidecloak-js)
+      - name: Checkout heimdall
+        if: env.TIDE_ENV == 'staging'
+        uses: actions/checkout@v4
+        with:
+          repository: tide-foundation/heimdall
+          path: heimdall
+          token: ${{ secrets.CHECKOUT_TOKEN || secrets.GH_TOKEN || github.token }}
+
       - name: Debug environment
         run: |
           echo "TIDE_ENV: $TIDE_ENV"
@@ -231,16 +266,32 @@ jobs:
         with:
           node-version: 22
 
+      # Build heimdall-tide for staging
+      - name: Build heimdall-tide
+        if: env.TIDE_ENV == 'staging'
+        run: |
+          echo "Building heimdall-tide..."
+          cd heimdall && npm ci && npm run build
+          echo "heimdall-tide built successfully"
+
       # Build tidecloak-js packages for staging
       - name: Build TideCloak packages
         if: env.TIDE_ENV == 'staging'
         run: |
           echo "Building tidecloak-js packages for staging tests..."
-          cd tidecloak-js/packages/tidecloak-verify && npm ci && npm run build
+
+          # Symlink heimdall-tide into tidecloak-js
+          cd tidecloak-js/packages/tidecloak-js
+          npm ci
+          rm -rf node_modules/heimdall-tide
+          ln -s ${{ github.workspace }}/heimdall node_modules/heimdall-tide
+          npm run build
+
+          # Build other packages
+          cd ../tidecloak-verify && npm ci && npm run build
           cd ../tidecloak-react && npm ci && npm run build
           cd ../tidecloak-nextjs && npm ci && npm run build
           cd ../tidecloak-create-nextjs && npm ci && npm run build
-          cd ../tidecloak-js && npm ci && npm run build
           echo "All packages built successfully"
 
       # Set package paths for staging
@@ -252,6 +303,7 @@ jobs:
           echo "TIDECLOAK_VERIFY_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-verify" >> $GITHUB_ENV
           echo "TIDECLOAK_CREATE_NEXTJS_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-create-nextjs" >> $GITHUB_ENV
           echo "TIDECLOAK_JS_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-js" >> $GITHUB_ENV
+          echo "HEIMDALL_PATH=${{ github.workspace }}/heimdall" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: npm install
