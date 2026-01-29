@@ -83,6 +83,15 @@ jobs:
           path: tidecloak-js
           token: ${{ secrets.CHECKOUT_TOKEN || secrets.GH_TOKEN || github.token }}
 
+      # Clone asgard for staging tests (dependency of heimdall)
+      - name: Checkout asgard
+        if: env.TIDE_ENV == 'staging'
+        uses: actions/checkout@v4
+        with:
+          repository: tide-foundation/asgard
+          path: asgard
+          token: ${{ secrets.CHECKOUT_TOKEN || secrets.GH_TOKEN || github.token }}
+
       # Clone heimdall for staging tests (dependency of tidecloak-js)
       - name: Checkout heimdall
         if: env.TIDE_ENV == 'staging'
@@ -114,12 +123,24 @@ jobs:
         with:
           node-version: 22
 
+      # Build asgard-tide for staging (dependency of heimdall)
+      - name: Build asgard-tide
+        if: env.TIDE_ENV == 'staging'
+        run: |
+          echo "Building asgard-tide..."
+          cd asgard && npm install && npm run build
+          echo "asgard-tide built successfully"
+
       # Build heimdall-tide for staging
       - name: Build heimdall-tide
         if: env.TIDE_ENV == 'staging'
         run: |
           echo "Building heimdall-tide..."
-          cd heimdall && npm install && npm run build
+          cd heimdall
+          npm install
+          rm -rf node_modules/asgard-tide
+          ln -s ${{ github.workspace }}/asgard node_modules/asgard-tide
+          npm run build
           echo "heimdall-tide built successfully"
 
       # Build tidecloak-js packages for staging
@@ -152,6 +173,7 @@ jobs:
           echo "TIDECLOAK_CREATE_NEXTJS_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-create-nextjs" >> $GITHUB_ENV
           echo "TIDECLOAK_JS_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-js" >> $GITHUB_ENV
           echo "HEIMDALL_PATH=${{ github.workspace }}/heimdall" >> $GITHUB_ENV
+          echo "ASGARD_PATH=${{ github.workspace }}/asgard" >> $GITHUB_ENV
 
       - name: Install test-app dependencies
         run: |
@@ -228,6 +250,15 @@ jobs:
           path: tidecloak-js
           token: ${{ secrets.CHECKOUT_TOKEN || secrets.GH_TOKEN || github.token }}
 
+      # Clone asgard for staging tests (dependency of heimdall)
+      - name: Checkout asgard
+        if: env.TIDE_ENV == 'staging'
+        uses: actions/checkout@v4
+        with:
+          repository: tide-foundation/asgard
+          path: asgard
+          token: ${{ secrets.CHECKOUT_TOKEN || secrets.GH_TOKEN || github.token }}
+
       # Clone heimdall for staging tests (dependency of tidecloak-js)
       - name: Checkout heimdall
         if: env.TIDE_ENV == 'staging'
@@ -266,12 +297,24 @@ jobs:
         with:
           node-version: 22
 
+      # Build asgard-tide for staging (dependency of heimdall)
+      - name: Build asgard-tide
+        if: env.TIDE_ENV == 'staging'
+        run: |
+          echo "Building asgard-tide..."
+          cd asgard && npm install && npm run build
+          echo "asgard-tide built successfully"
+
       # Build heimdall-tide for staging
       - name: Build heimdall-tide
         if: env.TIDE_ENV == 'staging'
         run: |
           echo "Building heimdall-tide..."
-          cd heimdall && npm install && npm run build
+          cd heimdall
+          npm install
+          rm -rf node_modules/asgard-tide
+          ln -s ${{ github.workspace }}/asgard node_modules/asgard-tide
+          npm run build
           echo "heimdall-tide built successfully"
 
       # Build tidecloak-js packages for staging
@@ -304,6 +347,7 @@ jobs:
           echo "TIDECLOAK_CREATE_NEXTJS_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-create-nextjs" >> $GITHUB_ENV
           echo "TIDECLOAK_JS_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-js" >> $GITHUB_ENV
           echo "HEIMDALL_PATH=${{ github.workspace }}/heimdall" >> $GITHUB_ENV
+          echo "ASGARD_PATH=${{ github.workspace }}/asgard" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: npm install
