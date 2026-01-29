@@ -37,10 +37,19 @@ When('I run the create-nextjs CLI with project name {string}', async function(pr
     this.projectDir = path.join(this.projectRoot, projectName);
     this.projectName = projectName;
 
-    const args = ['-y', '@tidecloak/create-nextjs', projectName];
-    const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+    const localPath = process.env.TIDECLOAK_CREATE_NEXTJS_PATH;
+    let cmd, args;
 
-    this.cliProc = spawn(npxCmd, args, {
+    if (localPath) {
+        console.log(`Using local create-nextjs from: ${localPath}`);
+        cmd = 'node';
+        args = [path.join(localPath, 'dist/cjs/create.cjs'), projectName];
+    } else {
+        cmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+        args = ['-y', '@tidecloak/create-nextjs', projectName];
+    }
+
+    this.cliProc = spawn(cmd, args, {
         cwd: this.projectRoot,
         env: {
             ...process.env,

@@ -41,11 +41,32 @@ When('I run create-next-app with App Router', function() {
 });
 
 When('I install @tidecloak\\/nextjs', function() {
-    execSync('npm install @tidecloak/nextjs', {
-        cwd: this.projectDir,
-        stdio: 'inherit',
-        env: process.env,
-    });
+    const localPath = process.env.TIDECLOAK_NEXTJS_PATH;
+    if (localPath) {
+        console.log(`Installing @tidecloak/nextjs from local path: ${localPath}`);
+        // When using local path, also install sibling packages that use file: references
+        const packagesDir = path.dirname(localPath);
+        const reactPath = path.join(packagesDir, 'tidecloak-react');
+        const verifyPath = path.join(packagesDir, 'tidecloak-verify');
+
+        // Install all packages together to resolve file: dependencies
+        const packages = [localPath];
+        if (fs.existsSync(reactPath)) packages.push(reactPath);
+        if (fs.existsSync(verifyPath)) packages.push(verifyPath);
+
+        console.log(`Installing packages: ${packages.join(', ')}`);
+        execSync(`npm install ${packages.join(' ')}`, {
+            cwd: this.projectDir,
+            stdio: 'inherit',
+            env: process.env,
+        });
+    } else {
+        execSync('npm install @tidecloak/nextjs', {
+            cwd: this.projectDir,
+            stdio: 'inherit',
+            env: process.env,
+        });
+    }
     console.log('Installed @tidecloak/nextjs');
 });
 
@@ -427,9 +448,9 @@ export default function Dashboard() {
 When('I create middleware with route protection', function() {
     const middlewareTs = `import { NextResponse } from 'next/server';
 import tidecloakConfig from './tidecloakAdapter.json';
-import { createTideCloakMiddleware } from '@tidecloak/nextjs/server';
+import { createTideCloakProxy } from '@tidecloak/nextjs/server';
 
-export default createTideCloakMiddleware({
+export const proxy = createTideCloakProxy({
   config: tidecloakConfig,
   protectedRoutes: {
     '/admin/*': ['admin'],
@@ -444,10 +465,9 @@ export const config = {
     '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico)).*)',
     '/api/(.*)',
   ],
-  runtime: 'edge',
 };`;
-    fs.writeFileSync(path.join(this.projectDir, 'middleware.ts'), middlewareTs);
-    console.log('Created middleware');
+    fs.writeFileSync(path.join(this.projectDir, 'proxy.ts'), middlewareTs);
+    console.log('Created proxy');
 });
 
 Then('the App Router structure is complete', function() {
@@ -457,7 +477,7 @@ Then('the App Router structure is complete', function() {
         'app/Header.tsx',
         'app/auth/redirect/page.tsx',
         'app/dashboard/page.tsx',
-        'middleware.ts'
+        'proxy.ts'
     ];
 
     for (const file of files) {
@@ -475,7 +495,8 @@ Given('the App Router is configured', function() {
 
 When('I start the Next.js dev server', async function() {
     const devCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-    const devArgs = ['run', 'dev', '--', '--port', String(this.appPort)];
+    // Use --webpack flag for Next.js 16+ (Turbopack has issues with symlinked packages)
+    const devArgs = ['run', 'dev', '--', '--webpack', '--port', String(this.appPort)];
 
     console.log(`Starting Next.js dev server at ${this.appUrl}`);
 
@@ -485,7 +506,6 @@ When('I start the Next.js dev server', async function() {
         env: {
             ...process.env,
             PORT: String(this.appPort),
-            NEXT_FORCE_WEBPACK: '1',
             NEXT_TELEMETRY_DISABLED: '1',
         },
     });
