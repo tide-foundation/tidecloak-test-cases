@@ -41,33 +41,8 @@ When('I run create-next-app with App Router', function() {
 });
 
 When('I install @tidecloak\\/nextjs', function() {
-    const localPath = process.env.TIDECLOAK_NEXTJS_PATH;
-    if (localPath) {
-        console.log(`Installing @tidecloak/nextjs from local path: ${localPath}`);
-        // When using local path, also install sibling packages that use file: references
-        const packagesDir = path.dirname(localPath);
-        const reactPath = path.join(packagesDir, 'tidecloak-react');
-        const verifyPath = path.join(packagesDir, 'tidecloak-verify');
-
-        // Install all packages together to resolve file: dependencies
-        const packages = [localPath];
-        if (fs.existsSync(reactPath)) packages.push(reactPath);
-        if (fs.existsSync(verifyPath)) packages.push(verifyPath);
-
-        console.log(`Installing packages: ${packages.join(', ')}`);
-        execSync(`npm install ${packages.join(' ')}`, {
-            cwd: this.projectDir,
-            stdio: 'inherit',
-            env: process.env,
-        });
-    } else {
-        execSync('npm install @tidecloak/nextjs', {
-            cwd: this.projectDir,
-            stdio: 'inherit',
-            env: process.env,
-        });
-    }
-    console.log('Installed @tidecloak/nextjs');
+    const { installTideCloakPackages } = require('../support/helpers');
+    installTideCloakPackages(this.projectDir, ['@tidecloak/nextjs']);
 });
 
 Then('the project is created', function() {

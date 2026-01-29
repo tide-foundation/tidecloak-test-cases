@@ -352,22 +352,8 @@ When('I create a Vite vanilla app', function() {
 });
 
 When('I install @tidecloak\\/js', function() {
-    const localPath = process.env.TIDECLOAK_JS_PATH;
-    if (localPath) {
-        console.log(`Installing @tidecloak/js from local path: ${localPath}`);
-        execSync(`npm install ${localPath}`, {
-            cwd: this.projectDir,
-            stdio: 'inherit',
-            env: process.env,
-        });
-    } else {
-        execSync('npm install @tidecloak/js', {
-            cwd: this.projectDir,
-            stdio: 'inherit',
-            env: process.env,
-        });
-    }
-    console.log('Installed @tidecloak/js');
+    const { installTideCloakPackages } = require('../support/helpers');
+    installTideCloakPackages(this.projectDir, ['@tidecloak/js']);
 });
 
 When('I write the app files with IAMService', function() {

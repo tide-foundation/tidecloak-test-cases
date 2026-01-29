@@ -702,16 +702,25 @@ When('I sign up or sign in with Tide', async function() {
         }
 
         // Fill sign up form
-        // Note: These are custom-input web components, so we need to target the inner input element
-        const usernameInput = this.page.locator('#sign_up-input_username input, #sign_up-input_username >> input').first();
-        await usernameInput.waitFor({ state: 'visible', timeout: 30000 });
-        await usernameInput.fill(creds.username);
+        // Note: These are custom-input web components, use click + pressSequentially for reliability
+        const usernameContainer = this.page.locator('#sign_up-input_username').first();
+        await usernameContainer.waitFor({ state: 'visible', timeout: 30000 });
+        let usernameInput = usernameContainer.locator('input').first();
+        if (!(await usernameInput.count())) usernameInput = usernameContainer;
+        await usernameInput.click();
+        await usernameInput.pressSequentially(creds.username, { delay: 50 });
 
-        const passwordInput = this.page.locator('#sign_up-input_password input, #sign_up-input_password >> input').first();
-        await passwordInput.fill(creds.password);
+        const passwordContainer = this.page.locator('#sign_up-input_password').first();
+        let passwordInput = passwordContainer.locator('input').first();
+        if (!(await passwordInput.count())) passwordInput = passwordContainer;
+        await passwordInput.click();
+        await passwordInput.pressSequentially(creds.password, { delay: 50 });
 
-        const repeatPasswordInput = this.page.locator('#sign_up-input_repeat_password input, #sign_up-input_repeat_password >> input').first();
-        await repeatPasswordInput.fill(creds.password);
+        const repeatContainer = this.page.locator('#sign_up-input_repeat_password').first();
+        let repeatPasswordInput = repeatContainer.locator('input').first();
+        if (!(await repeatPasswordInput.count())) repeatPasswordInput = repeatContainer;
+        await repeatPasswordInput.click();
+        await repeatPasswordInput.pressSequentially(creds.password, { delay: 50 });
 
         // Click Continue
         const continueBtn = this.page.locator('#sign_up-button');
@@ -722,8 +731,10 @@ When('I sign up or sign in with Tide', async function() {
         // Note: This may also be a custom-input web component
         const emailContainer = this.page.locator('#sign_up-email-input-1').first();
         if (await emailContainer.isVisible({ timeout: 5000 }).catch(() => false)) {
-            const emailInput = this.page.locator('#sign_up-email-input-1 input, #sign_up-email-input-1 >> input').first();
-            await emailInput.fill(creds.email);
+            let emailInput = emailContainer.locator('input').first();
+            if (!(await emailInput.count())) emailInput = emailContainer;
+            await emailInput.click();
+            await emailInput.pressSequentially(creds.email, { delay: 50 });
             await this.page.locator('#sign_up_email-button').click();
             await pause(2000);
         }
@@ -746,14 +757,25 @@ When('I sign up or sign in with Tide', async function() {
             }
         }
 
-        // Note: These are custom-input web components, so we need to target the inner input element
-        const nameInput = this.page.locator('#sign_in-input_name input, #sign_in-input_name >> input').first();
-        await nameInput.waitFor({ state: 'visible', timeout: 30000 });
-        await nameInput.fill(creds.username);
-        await nameInput.press('Tab');
+        // TideCloak uses <custom-input> web components - find the actual input inside
+        const nameContainer = this.page.locator('#sign_in-input_name').first();
+        await nameContainer.waitFor({ state: 'visible', timeout: 30000 });
+        // Try to find input inside, fall back to typing on the container
+        let nameInput = nameContainer.locator('input').first();
+        if (!(await nameInput.count())) {
+            nameInput = nameContainer;
+        }
+        await nameInput.click();
+        await nameInput.pressSequentially(creds.username, { delay: 50 });
+        await this.page.keyboard.press('Tab');
 
-        const passInput = this.page.locator('#sign_in-input_password input, #sign_in-input_password >> input').first();
-        await passInput.fill(creds.password);
+        const passContainer = this.page.locator('#sign_in-input_password').first();
+        let passInput = passContainer.locator('input').first();
+        if (!(await passInput.count())) {
+            passInput = passContainer;
+        }
+        await passInput.click();
+        await passInput.pressSequentially(creds.password, { delay: 50 });
 
         // Enable Remember me if visible
         const rememberMe = this.page.getByRole('paragraph').filter({ hasText: 'Remember me' });
@@ -799,16 +821,25 @@ When('I sign up or sign in with Tide', async function() {
             console.log(`Creating new user: ${newCreds.username}`);
 
             // Fill sign up form
-            // Note: These are custom-input web components, so we need to target the inner input element
-            const usernameInput = this.page.locator('#sign_up-input_username input, #sign_up-input_username >> input').first();
-            await usernameInput.waitFor({ state: 'visible', timeout: 30000 });
-            await usernameInput.fill(newCreds.username);
+            // Note: These are custom-input web components, use click + pressSequentially for reliability
+            const usernameContainer = this.page.locator('#sign_up-input_username').first();
+            await usernameContainer.waitFor({ state: 'visible', timeout: 30000 });
+            let usernameInput = usernameContainer.locator('input').first();
+            if (!(await usernameInput.count())) usernameInput = usernameContainer;
+            await usernameInput.click();
+            await usernameInput.pressSequentially(newCreds.username, { delay: 50 });
 
-            const passwordInput = this.page.locator('#sign_up-input_password input, #sign_up-input_password >> input').first();
-            await passwordInput.fill(newCreds.password);
+            const passwordContainer = this.page.locator('#sign_up-input_password').first();
+            let passwordInput = passwordContainer.locator('input').first();
+            if (!(await passwordInput.count())) passwordInput = passwordContainer;
+            await passwordInput.click();
+            await passwordInput.pressSequentially(newCreds.password, { delay: 50 });
 
-            const repeatPasswordInput = this.page.locator('#sign_up-input_repeat_password input, #sign_up-input_repeat_password >> input').first();
-            await repeatPasswordInput.fill(newCreds.password);
+            const repeatContainer = this.page.locator('#sign_up-input_repeat_password').first();
+            let repeatPasswordInput = repeatContainer.locator('input').first();
+            if (!(await repeatPasswordInput.count())) repeatPasswordInput = repeatContainer;
+            await repeatPasswordInput.click();
+            await repeatPasswordInput.pressSequentially(newCreds.password, { delay: 50 });
 
             // Click Continue
             const continueBtn = this.page.locator('#sign_up-button');
@@ -819,8 +850,10 @@ When('I sign up or sign in with Tide', async function() {
             // Note: This may also be a custom-input web component
             const emailContainer = this.page.locator('#sign_up-email-input-1').first();
             if (await emailContainer.isVisible({ timeout: 5000 }).catch(() => false)) {
-                const emailInput = this.page.locator('#sign_up-email-input-1 input, #sign_up-email-input-1 >> input').first();
-                await emailInput.fill(newCreds.email);
+                let emailInput = emailContainer.locator('input').first();
+                if (!(await emailInput.count())) emailInput = emailContainer;
+                await emailInput.click();
+                await emailInput.pressSequentially(newCreds.email, { delay: 50 });
                 await this.page.locator('#sign_up_email-button').click();
                 await pause(2000);
             }

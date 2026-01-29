@@ -33,17 +33,19 @@ const promptOrder = [
 ];
 
 When('I run the create-nextjs CLI with project name {string}', async function(projectName) {
+    const { getTideCloakPackageSource } = require('../support/helpers');
+
     this.projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tide-nextjs-'));
     this.projectDir = path.join(this.projectRoot, projectName);
     this.projectName = projectName;
 
-    const localPath = process.env.TIDECLOAK_CREATE_NEXTJS_PATH;
+    const source = getTideCloakPackageSource('@tidecloak/create-nextjs');
     let cmd, args;
 
-    if (localPath) {
-        console.log(`Using local create-nextjs from: ${localPath}`);
+    if (source.type === 'local') {
+        console.log(`Using local create-nextjs from: ${source.path}`);
         cmd = 'node';
-        args = [path.join(localPath, 'dist/cjs/create.cjs'), projectName];
+        args = [path.join(source.path, 'dist/cjs/create.cjs'), projectName];
     } else {
         cmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
         args = ['-y', '@tidecloak/create-nextjs', projectName];

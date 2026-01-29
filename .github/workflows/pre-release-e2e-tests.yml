@@ -74,6 +74,15 @@ jobs:
           ref: main
           token: ${{ secrets.CHECKOUT_TOKEN || secrets.GH_TOKEN || github.token }}
 
+      # Clone tidecloak-js for staging tests (local packages)
+      - name: Checkout tidecloak-js packages
+        if: env.TIDE_ENV == 'staging'
+        uses: actions/checkout@v4
+        with:
+          repository: tide-foundation/tidecloak-js
+          path: tidecloak-js
+          token: ${{ secrets.CHECKOUT_TOKEN || secrets.GH_TOKEN || github.token }}
+
       - name: Verify Docker is available
         run: |
           docker --version
@@ -94,7 +103,29 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+
+      # Build tidecloak-js packages for staging
+      - name: Build TideCloak packages
+        if: env.TIDE_ENV == 'staging'
+        run: |
+          echo "Building tidecloak-js packages for staging tests..."
+          cd tidecloak-js/packages/tidecloak-verify && npm ci && npm run build
+          cd ../tidecloak-react && npm ci && npm run build
+          cd ../tidecloak-nextjs && npm ci && npm run build
+          cd ../tidecloak-create-nextjs && npm ci && npm run build
+          cd ../tidecloak-js && npm ci && npm run build
+          echo "All packages built successfully"
+
+      # Set package paths for staging
+      - name: Set staging package paths
+        if: env.TIDE_ENV == 'staging'
+        run: |
+          echo "TIDECLOAK_NEXTJS_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-nextjs" >> $GITHUB_ENV
+          echo "TIDECLOAK_REACT_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-react" >> $GITHUB_ENV
+          echo "TIDECLOAK_VERIFY_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-verify" >> $GITHUB_ENV
+          echo "TIDECLOAK_CREATE_NEXTJS_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-create-nextjs" >> $GITHUB_ENV
+          echo "TIDECLOAK_JS_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-js" >> $GITHUB_ENV
 
       - name: Install test-app dependencies
         run: |
@@ -109,7 +140,7 @@ jobs:
       - name: Install Playwright Browsers
         run: |
           cd tests
-          npx playwright install --with-deps
+          npx playwright install firefox --with-deps
 
       - name: Install system dependencies
         run: |
@@ -162,6 +193,15 @@ jobs:
           ref: main
           token: ${{ secrets.CHECKOUT_TOKEN || secrets.GH_TOKEN || github.token }}
 
+      # Clone tidecloak-js for staging tests (local packages)
+      - name: Checkout tidecloak-js packages
+        if: env.TIDE_ENV == 'staging'
+        uses: actions/checkout@v4
+        with:
+          repository: tide-foundation/tidecloak-js
+          path: tidecloak-js
+          token: ${{ secrets.CHECKOUT_TOKEN || secrets.GH_TOKEN || github.token }}
+
       - name: Debug environment
         run: |
           echo "TIDE_ENV: $TIDE_ENV"
@@ -189,20 +229,35 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+
+      # Build tidecloak-js packages for staging
+      - name: Build TideCloak packages
+        if: env.TIDE_ENV == 'staging'
+        run: |
+          echo "Building tidecloak-js packages for staging tests..."
+          cd tidecloak-js/packages/tidecloak-verify && npm ci && npm run build
+          cd ../tidecloak-react && npm ci && npm run build
+          cd ../tidecloak-nextjs && npm ci && npm run build
+          cd ../tidecloak-create-nextjs && npm ci && npm run build
+          cd ../tidecloak-js && npm ci && npm run build
+          echo "All packages built successfully"
+
+      # Set package paths for staging
+      - name: Set staging package paths
+        if: env.TIDE_ENV == 'staging'
+        run: |
+          echo "TIDECLOAK_NEXTJS_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-nextjs" >> $GITHUB_ENV
+          echo "TIDECLOAK_REACT_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-react" >> $GITHUB_ENV
+          echo "TIDECLOAK_VERIFY_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-verify" >> $GITHUB_ENV
+          echo "TIDECLOAK_CREATE_NEXTJS_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-create-nextjs" >> $GITHUB_ENV
+          echo "TIDECLOAK_JS_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-js" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: npm install
 
       - name: Install Playwright Browsers
-        run: npx playwright install --with-deps
-
-      - name: Clean test-app database
-        run: |
-          if [ -d "test-app/db" ]; then
-            rm -rf test-app/db
-            echo "Database cleaned"
-          fi
+        run: npx playwright install chromium --with-deps
 
       - name: Run Cucumber E2E tests (create-nextjs)
         run: npm run test:cucumber:create-nextjs

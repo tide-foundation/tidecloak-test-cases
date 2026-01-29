@@ -665,6 +665,94 @@ async function ensureLoggedIn(page, appUrl) {
     return true;
 }
 
+/**
+ * TideCloak package management for staging vs production
+ * In staging, uses local symlinked packages for development
+ * In production, uses published npm packages
+ */
+const TIDE_ENV = process.env.TIDE_ENV || 'staging';
+
+/**
+ * Get the install source for a TideCloak package
+ * Returns local path for staging, package name for production
+ */
+function getTideCloakPackageSource(packageName) {
+    const isStaging = TIDE_ENV === 'staging' || TIDE_ENV === 'stg';
+
+    const envVarMap = {
+        '@tidecloak/nextjs': 'TIDECLOAK_NEXTJS_PATH',
+        '@tidecloak/react': 'TIDECLOAK_REACT_PATH',
+        '@tidecloak/verify': 'TIDECLOAK_VERIFY_PATH',
+        '@tidecloak/create-nextjs': 'TIDECLOAK_CREATE_NEXTJS_PATH',
+        '@tidecloak/js': 'TIDECLOAK_JS_PATH',
+    };
+
+    const envVar = envVarMap[packageName];
+    const localPath = envVar ? process.env[envVar] : null;
+
+    if (isStaging && localPath && fs.existsSync(localPath)) {
+        return { type: 'local', path: localPath };
+    }
+
+    return { type: 'npm', name: packageName };
+}
+
+/**
+ * Install TideCloak packages with automatic staging/prod handling
+ * @param {string} projectDir - Directory to install packages in
+ * @param {string[]} packages - Array of package names (e.g., ['@tidecloak/nextjs'])
+ */
+function installTideCloakPackages(projectDir, packages) {
+    const toInstall = [];
+
+    console.log(`Installing TideCloak packages (${TIDE_ENV} mode)...`);
+
+    for (const pkg of packages) {
+        const source = getTideCloakPackageSource(pkg);
+
+        if (source.type === 'local') {
+            console.log(`  ${pkg}: local path (${source.path})`);
+            toInstall.push(source.path);
+
+            // For local installs, also add sibling dependencies
+            if (pkg === '@tidecloak/nextjs') {
+                const packagesDir = path.dirname(source.path);
+                const reactPath = path.join(packagesDir, 'tidecloak-react');
+                const verifyPath = path.join(packagesDir, 'tidecloak-verify');
+
+                if (fs.existsSync(reactPath) && !toInstall.includes(reactPath)) {
+                    console.log(`  @tidecloak/react: local path (${reactPath})`);
+                    toInstall.push(reactPath);
+                }
+                if (fs.existsSync(verifyPath) && !toInstall.includes(verifyPath)) {
+                    console.log(`  @tidecloak/verify: local path (${verifyPath})`);
+                    toInstall.push(verifyPath);
+                }
+            }
+        } else {
+            console.log(`  ${pkg}: npm registry`);
+            toInstall.push(source.name);
+        }
+    }
+
+    if (toInstall.length > 0) {
+        execSync(`npm install ${toInstall.join(' ')}`, {
+            cwd: projectDir,
+            stdio: 'inherit',
+            env: process.env,
+        });
+    }
+
+    console.log('TideCloak packages installed.');
+}
+
+/**
+ * Check if running in staging mode (uses local packages)
+ */
+function isStaging() {
+    return TIDE_ENV === 'staging' || TIDE_ENV === 'stg';
+}
+
 module.exports = {
     dockerCmd,
     getFreePort,
@@ -691,5 +779,9 @@ module.exports = {
     generateCredentials,
     saveCredentials,
     loadCredentials,
-    getOrCreateCredentials
+    getOrCreateCredentials,
+    // TideCloak package management
+    getTideCloakPackageSource,
+    installTideCloakPackages,
+    isStaging,
 };
