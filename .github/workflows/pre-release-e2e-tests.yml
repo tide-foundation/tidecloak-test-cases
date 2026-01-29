@@ -152,18 +152,19 @@ jobs:
 
           # 1. Build tidecloak-verify (no local deps)
           cd $PACKAGES_DIR/tidecloak-verify
-          npm install && npm run build
+          npm install --ignore-scripts
+          npm run build
 
           # 2. Build tidecloak-js (depends on heimdall-tide)
           cd $PACKAGES_DIR/tidecloak-js
-          npm install
+          npm install --ignore-scripts
           rm -rf node_modules/heimdall-tide
           ln -s ${{ github.workspace }}/heimdall node_modules/heimdall-tide
           npm run build
 
           # 3. Build tidecloak-react (depends on tidecloak-verify locally)
           cd $PACKAGES_DIR/tidecloak-react
-          npm install
+          npm install --ignore-scripts
           rm -rf node_modules/@tidecloak/verify
           mkdir -p node_modules/@tidecloak
           ln -s $PACKAGES_DIR/tidecloak-verify node_modules/@tidecloak/verify
@@ -171,7 +172,7 @@ jobs:
 
           # 4. Build tidecloak-nextjs (depends on tidecloak-react and tidecloak-verify locally)
           cd $PACKAGES_DIR/tidecloak-nextjs
-          npm install
+          npm install --ignore-scripts
           rm -rf node_modules/@tidecloak/react node_modules/@tidecloak/verify
           mkdir -p node_modules/@tidecloak
           ln -s $PACKAGES_DIR/tidecloak-react node_modules/@tidecloak/react
@@ -180,7 +181,8 @@ jobs:
 
           # 5. Build tidecloak-create-nextjs (no local deps)
           cd $PACKAGES_DIR/tidecloak-create-nextjs
-          npm install && npm run build
+          npm install --ignore-scripts
+          npm run build
 
           echo "All packages built successfully"
 
@@ -347,18 +349,19 @@ jobs:
 
           # 1. Build tidecloak-verify (no local deps)
           cd $PACKAGES_DIR/tidecloak-verify
-          npm install && npm run build
+          npm install --ignore-scripts
+          npm run build
 
           # 2. Build tidecloak-js (depends on heimdall-tide)
           cd $PACKAGES_DIR/tidecloak-js
-          npm install
+          npm install --ignore-scripts
           rm -rf node_modules/heimdall-tide
           ln -s ${{ github.workspace }}/heimdall node_modules/heimdall-tide
           npm run build
 
           # 3. Build tidecloak-react (depends on tidecloak-verify locally)
           cd $PACKAGES_DIR/tidecloak-react
-          npm install
+          npm install --ignore-scripts
           rm -rf node_modules/@tidecloak/verify
           mkdir -p node_modules/@tidecloak
           ln -s $PACKAGES_DIR/tidecloak-verify node_modules/@tidecloak/verify
@@ -366,7 +369,7 @@ jobs:
 
           # 4. Build tidecloak-nextjs (depends on tidecloak-react and tidecloak-verify locally)
           cd $PACKAGES_DIR/tidecloak-nextjs
-          npm install
+          npm install --ignore-scripts
           rm -rf node_modules/@tidecloak/react node_modules/@tidecloak/verify
           mkdir -p node_modules/@tidecloak
           ln -s $PACKAGES_DIR/tidecloak-react node_modules/@tidecloak/react
@@ -375,7 +378,8 @@ jobs:
 
           # 5. Build tidecloak-create-nextjs (no local deps)
           cd $PACKAGES_DIR/tidecloak-create-nextjs
-          npm install && npm run build
+          npm install --ignore-scripts
+          npm run build
 
           echo "All packages built successfully"
 
