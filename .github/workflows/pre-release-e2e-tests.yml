@@ -119,7 +119,7 @@ jobs:
         if: env.TIDE_ENV == 'staging'
         run: |
           echo "Building heimdall-tide..."
-          cd heimdall && npm ci && npm run build
+          cd heimdall && npm install && npm run build
           echo "heimdall-tide built successfully"
 
       # Build tidecloak-js packages for staging
@@ -130,16 +130,16 @@ jobs:
 
           # Symlink heimdall-tide into tidecloak-js
           cd tidecloak-js/packages/tidecloak-js
-          npm ci
+          npm install
           rm -rf node_modules/heimdall-tide
           ln -s ${{ github.workspace }}/heimdall node_modules/heimdall-tide
           npm run build
 
           # Build other packages
-          cd ../tidecloak-verify && npm ci && npm run build
-          cd ../tidecloak-react && npm ci && npm run build
-          cd ../tidecloak-nextjs && npm ci && npm run build
-          cd ../tidecloak-create-nextjs && npm ci && npm run build
+          cd ../tidecloak-verify && npm install && npm run build
+          cd ../tidecloak-react && npm install && npm run build
+          cd ../tidecloak-nextjs && npm install && npm run build
+          cd ../tidecloak-create-nextjs && npm install && npm run build
           echo "All packages built successfully"
 
       # Set package paths for staging
@@ -271,7 +271,7 @@ jobs:
         if: env.TIDE_ENV == 'staging'
         run: |
           echo "Building heimdall-tide..."
-          cd heimdall && npm ci && npm run build
+          cd heimdall && npm install && npm run build
           echo "heimdall-tide built successfully"
 
       # Build tidecloak-js packages for staging
@@ -282,16 +282,16 @@ jobs:
 
           # Symlink heimdall-tide into tidecloak-js
           cd tidecloak-js/packages/tidecloak-js
-          npm ci
+          npm install
           rm -rf node_modules/heimdall-tide
           ln -s ${{ github.workspace }}/heimdall node_modules/heimdall-tide
           npm run build
 
           # Build other packages
-          cd ../tidecloak-verify && npm ci && npm run build
-          cd ../tidecloak-react && npm ci && npm run build
-          cd ../tidecloak-nextjs && npm ci && npm run build
-          cd ../tidecloak-create-nextjs && npm ci && npm run build
+          cd ../tidecloak-verify && npm install && npm run build
+          cd ../tidecloak-react && npm install && npm run build
+          cd ../tidecloak-nextjs && npm install && npm run build
+          cd ../tidecloak-create-nextjs && npm install && npm run build
           echo "All packages built successfully"
 
       # Set package paths for staging
