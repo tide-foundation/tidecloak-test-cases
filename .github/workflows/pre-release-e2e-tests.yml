@@ -148,19 +148,40 @@ jobs:
         if: env.TIDE_ENV == 'staging'
         run: |
           echo "Building tidecloak-js packages for staging tests..."
+          PACKAGES_DIR=${{ github.workspace }}/tidecloak-js/packages
 
-          # Symlink heimdall-tide into tidecloak-js
-          cd tidecloak-js/packages/tidecloak-js
+          # 1. Build tidecloak-verify (no local deps)
+          cd $PACKAGES_DIR/tidecloak-verify
+          npm install && npm run build
+
+          # 2. Build tidecloak-js (depends on heimdall-tide)
+          cd $PACKAGES_DIR/tidecloak-js
           npm install
           rm -rf node_modules/heimdall-tide
           ln -s ${{ github.workspace }}/heimdall node_modules/heimdall-tide
           npm run build
 
-          # Build other packages
-          cd ../tidecloak-verify && npm install && npm run build
-          cd ../tidecloak-react && npm install && npm run build
-          cd ../tidecloak-nextjs && npm install && npm run build
-          cd ../tidecloak-create-nextjs && npm install && npm run build
+          # 3. Build tidecloak-react (depends on tidecloak-verify locally)
+          cd $PACKAGES_DIR/tidecloak-react
+          npm install
+          rm -rf node_modules/@tidecloak/verify
+          mkdir -p node_modules/@tidecloak
+          ln -s $PACKAGES_DIR/tidecloak-verify node_modules/@tidecloak/verify
+          npm run build
+
+          # 4. Build tidecloak-nextjs (depends on tidecloak-react and tidecloak-verify locally)
+          cd $PACKAGES_DIR/tidecloak-nextjs
+          npm install
+          rm -rf node_modules/@tidecloak/react node_modules/@tidecloak/verify
+          mkdir -p node_modules/@tidecloak
+          ln -s $PACKAGES_DIR/tidecloak-react node_modules/@tidecloak/react
+          ln -s $PACKAGES_DIR/tidecloak-verify node_modules/@tidecloak/verify
+          npm run build
+
+          # 5. Build tidecloak-create-nextjs (no local deps)
+          cd $PACKAGES_DIR/tidecloak-create-nextjs
+          npm install && npm run build
+
           echo "All packages built successfully"
 
       # Set package paths for staging
@@ -322,19 +343,40 @@ jobs:
         if: env.TIDE_ENV == 'staging'
         run: |
           echo "Building tidecloak-js packages for staging tests..."
+          PACKAGES_DIR=${{ github.workspace }}/tidecloak-js/packages
 
-          # Symlink heimdall-tide into tidecloak-js
-          cd tidecloak-js/packages/tidecloak-js
+          # 1. Build tidecloak-verify (no local deps)
+          cd $PACKAGES_DIR/tidecloak-verify
+          npm install && npm run build
+
+          # 2. Build tidecloak-js (depends on heimdall-tide)
+          cd $PACKAGES_DIR/tidecloak-js
           npm install
           rm -rf node_modules/heimdall-tide
           ln -s ${{ github.workspace }}/heimdall node_modules/heimdall-tide
           npm run build
 
-          # Build other packages
-          cd ../tidecloak-verify && npm install && npm run build
-          cd ../tidecloak-react && npm install && npm run build
-          cd ../tidecloak-nextjs && npm install && npm run build
-          cd ../tidecloak-create-nextjs && npm install && npm run build
+          # 3. Build tidecloak-react (depends on tidecloak-verify locally)
+          cd $PACKAGES_DIR/tidecloak-react
+          npm install
+          rm -rf node_modules/@tidecloak/verify
+          mkdir -p node_modules/@tidecloak
+          ln -s $PACKAGES_DIR/tidecloak-verify node_modules/@tidecloak/verify
+          npm run build
+
+          # 4. Build tidecloak-nextjs (depends on tidecloak-react and tidecloak-verify locally)
+          cd $PACKAGES_DIR/tidecloak-nextjs
+          npm install
+          rm -rf node_modules/@tidecloak/react node_modules/@tidecloak/verify
+          mkdir -p node_modules/@tidecloak
+          ln -s $PACKAGES_DIR/tidecloak-react node_modules/@tidecloak/react
+          ln -s $PACKAGES_DIR/tidecloak-verify node_modules/@tidecloak/verify
+          npm run build
+
+          # 5. Build tidecloak-create-nextjs (no local deps)
+          cd $PACKAGES_DIR/tidecloak-create-nextjs
+          npm install && npm run build
+
           echo "All packages built successfully"
 
       # Set package paths for staging
