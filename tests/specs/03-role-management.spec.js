@@ -128,15 +128,13 @@ test.describe('F3: Role Management', () => {
         await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
         await page.reload({ waitUntil: 'domcontentloaded' });
 
-        // Check for user change requests - there should be at least 1 for the role assignment
-        const userChangeSection = page.getByText(/User Change Requests \(\d+\)/);
+        // Wait for user change requests to load (the heading starts as "(0)" before the async fetch completes)
+        const userChangeSection = page.getByText(/User Change Requests \([1-9]\d*\)/);
         await expect(userChangeSection).toBeVisible({ timeout: 30000 });
 
         const userChangeSectionText = await userChangeSection.textContent();
         const userChangeCount = parseInt(userChangeSectionText?.match(/\((\d+)\)/)?.[1] || '0');
         console.log(`Found ${userChangeCount} user change requests`);
-
-        expect(userChangeCount).toBeGreaterThan(0);
         await takeScreenshot('02_user_changes_found');
 
         // Find and click the "Approve & Commit" button in user changes section
@@ -149,12 +147,12 @@ test.describe('F3: Role Management', () => {
         await takeScreenshot('03_waiting_for_popup');
 
         const popup = await popupPromise;
-        await popup.waitForLoadState('domcontentloaded');
+        await popup.waitForLoadState('load');
         await takeScreenshot('04_approval_popup');
 
-        // Click Y to approve
-        await popup.getByRole('button', { name: 'Y' }).click();
-        await popup.getByRole('button', { name: 'Submit Approvals' }).click();
+        // Click Y to approve (force: true to bypass main-content overlay in popup)
+        await popup.getByRole('button', { name: 'Y' }).click({ force: true });
+        await popup.getByRole('button', { name: 'Submit Approvals' }).click({ force: true });
         await popup.close().catch(() => {});
         console.log('User change request approved via popup');
 

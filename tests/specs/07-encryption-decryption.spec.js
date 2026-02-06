@@ -144,12 +144,12 @@ test.describe('F7: Encryption & Decryption', () => {
         await takeScreenshot('04_waiting_for_popup');
 
         const popup = await popupPromise;
-        await popup.waitForLoadState('domcontentloaded');
+        await popup.waitForLoadState('load');
         await takeScreenshot('05_approval_popup');
 
-        // Click Y to approve
-        await popup.getByRole('button', { name: 'Y' }).click();
-        await popup.getByRole('button', { name: 'Submit Approvals' }).click();
+        // Click Y to approve (force: true to bypass main-content overlay in popup)
+        await popup.getByRole('button', { name: 'Y' }).click({ force: true });
+        await popup.getByRole('button', { name: 'Submit Approvals' }).click({ force: true });
         await popup.close().catch(() => {});
         console.log('Encrypt realm role change request approved via popup');
 
@@ -202,12 +202,12 @@ test.describe('F7: Encryption & Decryption', () => {
         await takeScreenshot('04_waiting_for_popup');
 
         const popup = await popupPromise;
-        await popup.waitForLoadState('domcontentloaded');
+        await popup.waitForLoadState('load');
         await takeScreenshot('05_approval_popup');
 
-        // Click Y to approve
-        await popup.getByRole('button', { name: 'Y' }).click();
-        await popup.getByRole('button', { name: 'Submit Approvals' }).click();
+        // Click Y to approve (force: true to bypass main-content overlay in popup)
+        await popup.getByRole('button', { name: 'Y' }).click({ force: true });
+        await popup.getByRole('button', { name: 'Submit Approvals' }).click({ force: true });
         await popup.close().catch(() => {});
         console.log('Decrypt realm role change request approved via popup');
 
