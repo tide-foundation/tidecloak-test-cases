@@ -36,8 +36,8 @@ interface AuthContextType {
         pending?: boolean;
     }[]>;
     executeTideRequest: (request: Uint8Array) => Promise<Uint8Array[]>;
-    doEncrypt: (payloads: EncryptPayload[]) => Promise<string[]>;
-    doDecrypt: (payloads: DecryptPayload[]) => Promise<(string | Uint8Array)[]>;
+    doEncrypt: (payloads: EncryptPayload[], decryptionPolicy?: Uint8Array | null) => Promise<string[]>;
+    doDecrypt: (payloads: DecryptPayload[], decryptionPolicy?: Uint8Array | null) => Promise<(string | Uint8Array)[]>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -139,12 +139,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return await IAMService._tc?.executeSignRequest(request) as any;
     };
 
-    const doEncrypt = async (payloads: EncryptPayload[]): Promise<string[]> => {
-        return await IAMService.doEncrypt(payloads) as any;
+    const doEncrypt = async (payloads: EncryptPayload[], decryptionPolicy?: Uint8Array | null): Promise<string[]> => {
+        return await (IAMService as any).doEncrypt(payloads, decryptionPolicy);
     };
 
-    const doDecrypt = async (payloads: DecryptPayload[]): Promise<(string | Uint8Array)[]> => {
-        return await IAMService.doDecrypt(payloads);
+    const doDecrypt = async (payloads: DecryptPayload[], decryptionPolicy?: Uint8Array | null): Promise<(string | Uint8Array)[]> => {
+        return await (IAMService as any).doDecrypt(payloads, decryptionPolicy);
     };
 
     return (

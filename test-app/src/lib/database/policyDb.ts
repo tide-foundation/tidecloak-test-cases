@@ -69,7 +69,8 @@ export async function CreatePolicyRequest(request: string, requestedBy: string) 
     db.prepare('INSERT INTO pending_policy_requests (id, requestedBy, data) VALUES (?, ?, ?)')
         .run(id, requestedBy, request);
 
-    await AddPolicyChangeLog("created", id, requestedBy, request_deserialized.getRequestedPolicy().params.entries.get("role"));
+    const policy = request_deserialized.getRequestedPolicy();
+    await AddPolicyChangeLog("created", id, requestedBy, policy.params.entries.get("role") || policy.modelId);
 }
 
 export async function AddPolicyRequestDecision(request: string, uservuid: string, userEmail: string, denied: boolean): Promise<boolean> {
@@ -82,16 +83,19 @@ export async function AddPolicyRequestDecision(request: string, uservuid: string
         db.prepare('INSERT INTO policy_request_decisions (policy_request_id, user_vuid, decision) VALUES (?, ?, ?)')
             .run(id, uservuid, denied ? 0 : 1);
 
+        const policy = request_deserialized.getRequestedPolicy();
+        const roleOrModel = policy.params.entries.get("role") || policy.modelId;
+
         if (!denied) {
             // Then update the request data in the actual policy entity with the newly approved request
             const updatedRequestData = bytesToBase64(request_deserialized.encode());
             db.prepare('UPDATE pending_policy_requests SET data = ? WHERE id = ?')
                 .run(updatedRequestData, id);
 
-            await AddPolicyChangeLog("approved", id, userEmail, request_deserialized.getRequestedPolicy().params.entries.get("role"));
+            await AddPolicyChangeLog("approved", id, userEmail, roleOrModel);
         }
         else {
-            await AddPolicyChangeLog("denied", id, userEmail, request_deserialized.getRequestedPolicy().params.entries.get("role"));
+            await AddPolicyChangeLog("denied", id, userEmail, roleOrModel);
         }
 
         return true;
@@ -116,8 +120,8 @@ export async function DeletePolicyRequest(id: string, userEmail: string): Promis
         const result = db.prepare('DELETE FROM pending_policy_requests WHERE id = ?')
             .run(id);
 
-        const role = PolicySignRequest.decode(base64ToBytes(row.data))
-            .getRequestedPolicy().params.entries.get("role");
+        const policy = PolicySignRequest.decode(base64ToBytes(row.data)).getRequestedPolicy();
+        const role = policy.params.entries.get("role") || policy.modelId;
 
         await AddPolicyChangeLog("deleted", id, userEmail, role);
         return result.changes > 0;
@@ -139,7 +143,8 @@ export async function CommitPolicyRequest(id: string, policySignature: Uint8Arra
         const request = PolicySignRequest.decode(base64ToBytes(row.data));
         const policy = request.getRequestedPolicy();
         policy.signature = policySignature;
-        const role = policy.params.entries.get("role");
+        // For policies without a role param (e.g. encryption policies), use modelId as the key
+        const role = policy.params.entries.get("role") || policy.modelId;
         const serializedPolicy = bytesToBase64(policy.toBytes());
 
         // Store the committed policy with data = serializedPolicy, roleId, and policy request id

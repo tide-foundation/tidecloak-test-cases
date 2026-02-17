@@ -39,6 +39,8 @@ interface PendingPolicy {
     deniedBy: string[];
     role?: string;
     threshold?: number;
+    modelId?: string;
+    contractId?: string;
 }
 
 export default function AdminPage() {
@@ -103,7 +105,9 @@ export default function AdminPage() {
                         return {
                             ...p,
                             role: policy.params.entries.get("role"),
-                            threshold: policy.params.entries.get("threshold")
+                            threshold: policy.params.entries.get("threshold"),
+                            modelId: policy.modelId,
+                            contractId: policy.contractId
                         };
                     } catch {
                         return p;
@@ -202,6 +206,46 @@ export default function AdminPage() {
             await fetchPendingPolicies();
         } catch (error: any) {
             setMessage(`Error creating policy: ${error.message}`);
+        }
+    };
+
+    const handleCreateEncryptionPolicy = async () => {
+        try {
+            const vendorId = getVendorIdForPolicy();
+
+            const newPolicyRequest = PolicySignRequest.New(new Policy({
+                version: "2",
+                modelId: "PolicyEnabledEncryption:1",
+                contractId: "SimpleTagBasedDecryption:1",
+                keyId: vendorId,
+                executionType: ExecutionType.PRIVATE,
+                approvalType: ApprovalType.IMPLICIT,
+                params: new Map()
+            }));
+            newPolicyRequest.setCustomExpiry(604800); // 1 week
+
+            // Initialize the request via Tide enclave
+            const initializedRequest = await initializeTideRequest(newPolicyRequest);
+
+            // Store in pending policies database
+            const response = await fetch("/api/policies", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    policyRequest: bytesToBase64(initializedRequest.encode()),
+                    requestedBy: vuid
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || "Failed to create encryption policy");
+            }
+
+            setMessage("Encryption policy (SimpleTagBasedDecryption:1) created. Review and commit it below.");
+            await fetchPendingPolicies();
+        } catch (error: any) {
+            setMessage(`Error creating encryption policy: ${error.message}`);
         }
     };
 
@@ -432,12 +476,19 @@ export default function AdminPage() {
                 <button onClick={handleCreatePolicy} data-testid="create-policy-btn">Create Policy</button>
             </div>
 
+            <h3>Encryption Policy</h3>
+            <p>Create a PolicyEnabledEncryption:1 policy using SimpleTagBasedDecryption:1 contract.</p>
+            <button onClick={handleCreateEncryptionPolicy} data-testid="create-encryption-policy-btn">Create Encryption Policy</button>
+
             <h3>Pending Policy Requests ({pendingPolicies.length})</h3>
             <ul data-testid="pending-policies-list">
                 {pendingPolicies.map((policy) => (
                     <li key={policy.id} data-testid={`policy-${policy.id.substring(0, 8)}`}>
-                        <strong>Role:</strong> {policy.role || "Unknown"} |
-                        <strong> Threshold:</strong> {policy.threshold || "?"} |
+                        {policy.role ? (
+                            <><strong>Role:</strong> {policy.role} | <strong>Threshold:</strong> {policy.threshold || "?"} | </>
+                        ) : (
+                            <><strong>Model:</strong> {policy.modelId || "Unknown"} | <strong>Contract:</strong> {policy.contractId || "Unknown"} | </>
+                        )}
                         <strong> Approvals:</strong> {policy.approvedBy?.length || 0} |
                         <strong> Ready:</strong> {policy.commitReady ? "Yes" : "No"}
                         {!policy.approvedBy?.includes(vuid) && (
