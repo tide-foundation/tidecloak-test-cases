@@ -1,6 +1,9 @@
 import { db } from './connection';
 import { base64ToBytes, bytesToBase64 } from '../tideSerialization';
-import { GenericResourceAccessThresholdRoleContract, Policy } from 'asgard-tide';
+import { Models, Contracts } from "tide-js";
+const Policy = Models.Policy;
+type Policy = InstanceType<typeof Policy>;
+const GenericResourceAccessThresholdRoleContract = Contracts.GenericResourceAccessThresholdRoleContract;
 import { PolicySignRequest } from 'heimdall-tide';
 import { AddPolicyChangeLog } from './logDb';
 import { getAdminPolicy } from '../tidecloakApi';
@@ -70,7 +73,7 @@ export async function CreatePolicyRequest(request: string, requestedBy: string) 
         .run(id, requestedBy, request);
 
     const policy = request_deserialized.getRequestedPolicy();
-    await AddPolicyChangeLog("created", id, requestedBy, policy.params.entries.get("role") || policy.modelId);
+    await AddPolicyChangeLog("created", id, requestedBy, policy.params.entries.get("role") || policy.modelIds[0]);
 }
 
 export async function AddPolicyRequestDecision(request: string, uservuid: string, userEmail: string, denied: boolean): Promise<boolean> {
@@ -84,7 +87,7 @@ export async function AddPolicyRequestDecision(request: string, uservuid: string
             .run(id, uservuid, denied ? 0 : 1);
 
         const policy = request_deserialized.getRequestedPolicy();
-        const roleOrModel = policy.params.entries.get("role") || policy.modelId;
+        const roleOrModel = policy.params.entries.get("role") || policy.modelIds[0];
 
         if (!denied) {
             // Then update the request data in the actual policy entity with the newly approved request
@@ -121,7 +124,7 @@ export async function DeletePolicyRequest(id: string, userEmail: string): Promis
             .run(id);
 
         const policy = PolicySignRequest.decode(base64ToBytes(row.data)).getRequestedPolicy();
-        const role = policy.params.entries.get("role") || policy.modelId;
+        const role = policy.params.entries.get("role") || policy.modelIds[0];
 
         await AddPolicyChangeLog("deleted", id, userEmail, role);
         return result.changes > 0;
@@ -144,7 +147,7 @@ export async function CommitPolicyRequest(id: string, policySignature: Uint8Arra
         const policy = request.getRequestedPolicy();
         policy.signature = policySignature;
         // For policies without a role param (e.g. encryption policies), use modelId as the key
-        const role = policy.params.entries.get("role") || policy.modelId;
+        const role = policy.params.entries.get("role") || policy.modelIds[0];
         const serializedPolicy = bytesToBase64(policy.toBytes());
 
         // Store the committed policy with data = serializedPolicy, roleId, and policy request id

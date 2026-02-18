@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { IAMService } from "@tidecloak/js";
-import { Policy } from "asgard-tide";
+import { Models } from "tide-js";
+const Policy = Models.Policy;
 import { useAuth } from "@/hooks/useAuth";
 import { base64ToBytes } from "@/lib/tideSerialization";
 
@@ -49,7 +50,7 @@ export default function CryptoPage() {
                 // Find the PolicyEnabledEncryption:1 policy
                 for (const p of policies) {
                     const policy = Policy.from(base64ToBytes(p.data));
-                    if (policy.modelId === "PolicyEnabledEncryption:1") {
+                    if (policy.modelIds[0] === "PolicyEnabledEncryption:1") {
                         setEncryptionPolicy(policy.toBytes());
                         setPolicyLoaded(true);
                         return;

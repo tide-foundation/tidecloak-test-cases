@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { IAMService } from "@tidecloak/js";
-import { Policy, ApprovalType, ExecutionType } from "asgard-tide";
+import { Cryptide, Models, Clients } from "tide-js";
+const Policy = Models.Policy;
+const ExecutionType = Models.ExecutionType;
+const ApprovalType = Models.ApprovalType;
+
 import { PolicySignRequest } from "heimdall-tide";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -106,7 +110,7 @@ export default function AdminPage() {
                             ...p,
                             role: policy.params.entries.get("role"),
                             threshold: policy.params.entries.get("threshold"),
-                            modelId: policy.modelId,
+                            modelId: policy.modelIds[0],
                             contractId: policy.contractId
                         };
                     } catch {
@@ -172,7 +176,7 @@ export default function AdminPage() {
 
             // Create the policy using GenericResourceAccessThresholdRoleContract
             const newPolicyRequest = PolicySignRequest.New(new Policy({
-                version: "2",
+                version: "3",
                 modelId: "TestInit:1",
                 contractId: "GenericResourceAccessThresholdRole:1",
                 keyId: vendorId,
@@ -214,8 +218,8 @@ export default function AdminPage() {
             const vendorId = getVendorIdForPolicy();
 
             const newPolicyRequest = PolicySignRequest.New(new Policy({
-                version: "2",
-                modelId: "PolicyEnabledEncryption:1",
+                version: "3",
+                modelId: ["PolicyEnabledEncryption:1", "PolicyEnabledDecryption:1"],
                 contractId: "SimpleTagBasedDecryption:1",
                 keyId: vendorId,
                 executionType: ExecutionType.PRIVATE,

@@ -1,7 +1,9 @@
 "use client";
 
 import { createContext, useEffect, useState, ReactNode } from "react";
-import { IAMService, BaseTideRequest } from "@tidecloak/js";
+import { IAMService } from "@tidecloak/js";
+import { Cryptide, Models, Clients, Tools, Contracts } from "tide-js";
+const BaseTideRequest = Models.BaseTideRequest;
 import { initTcData } from "@/lib/tidecloakConfig";
 
 export enum Status {
@@ -28,7 +30,7 @@ interface AuthContextType {
     tokenRoles: string[];
     getToken: () => Promise<string>;
     refreshToken: () => Promise<void>;
-    initializeTideRequest: (request: BaseTideRequest) => Promise<BaseTideRequest>;
+    initializeTideRequest: (request: Models.BaseTideRequest) => Promise<Models.BaseTideRequest>;
     approveTideRequests: (requests: { id: string, request: Uint8Array }[]) => Promise<{
         id: string;
         approved?: { request: Uint8Array };
@@ -113,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         updateTokenRoles();
     };
 
-    const initializeTideRequest = async (request: BaseTideRequest): Promise<BaseTideRequest> => {
+    const initializeTideRequest = async (request: Models.BaseTideRequest): Promise<Models.BaseTideRequest> => {
         return BaseTideRequest.decode(await IAMService._tc?.createTideRequest(request.encode()) as any);
     };
 

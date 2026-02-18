@@ -107,7 +107,7 @@ test.describe('F6: Policy-Protected Signing', () => {
         await expect(createButton).toBeVisible({ timeout: 10000 });
 
         // Wait for potential popup during initialization
-        const popupPromise = page.waitForEvent('popup', { timeout: 60000 }).catch(() => null);
+        const popupPromise = page.waitForEvent('popup', { timeout: 10000 }).catch(() => null);
         await createButton.click();
         await takeScreenshot('03_creating_request');
 

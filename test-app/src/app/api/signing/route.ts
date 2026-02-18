@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/database/connection";
 import { base64ToBytes, bytesToBase64 } from "@/lib/tideSerialization";
-import { BaseTideRequest, Policy, GenericResourceAccessThresholdRoleContract } from "asgard-tide";
+import { Models, Contracts } from "tide-js";
+const BaseTideRequest = Models.BaseTideRequest;
+const Policy = Models.Policy;
+type Policy = InstanceType<typeof Policy>;
+const GenericResourceAccessThresholdRoleContract = Contracts.GenericResourceAccessThresholdRoleContract;
 
 // Initialize signing requests table
 db.exec(`
