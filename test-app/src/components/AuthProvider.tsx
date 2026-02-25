@@ -17,8 +17,18 @@ interface EncryptPayload {
     tags: string[];
 }
 
+interface DraftEncryptPayload {
+    data: Uint8Array;
+    tags: string[];
+}
+
 interface DecryptPayload {
     encrypted: string;
+    tags: string[];
+}
+
+interface DraftDecryptPayload {
+    encrypted: Uint8Array;
     tags: string[];
 }
 
@@ -40,6 +50,10 @@ interface AuthContextType {
     executeTideRequest: (request: Uint8Array) => Promise<Uint8Array[]>;
     doEncrypt: (payloads: EncryptPayload[], decryptionPolicy?: Uint8Array | null) => Promise<string[]>;
     doDecrypt: (payloads: DecryptPayload[], decryptionPolicy?: Uint8Array | null) => Promise<(string | Uint8Array)[]>;
+    doDraftEncryption: (payloads: DraftEncryptPayload[]) => Promise<Uint8Array>;
+    doCommitEncryption: (request: Uint8Array, policy: Uint8Array) => Promise<Uint8Array[]>;
+    doDraftDecryption: (data: DraftDecryptPayload[]) => Promise<Uint8Array>;
+    doCommitDecryption: (request: Uint8Array, policy: Uint8Array) => Promise<Uint8Array[]>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -149,8 +163,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return await (IAMService as any).doDecrypt(payloads, decryptionPolicy);
     };
 
+    const doDraftEncryption = async (payloads: DraftEncryptPayload[]): Promise<Uint8Array> => {
+        return await (IAMService as any).doDraftEncryption(payloads);
+    };
+
+    const doCommitEncryption = async (request: Uint8Array, policy: Uint8Array): Promise<Uint8Array[]> => {
+        return await (IAMService as any).doCommitEncryption(request, policy);
+    };
+
+    const doDraftDecryption = async (data: DraftDecryptPayload[]): Promise<Uint8Array> => {
+        return await (IAMService as any).doDraftDecryption(data);
+    };
+
+    const doCommitDecryption = async (request: Uint8Array, policy: Uint8Array): Promise<Uint8Array[]> => {
+        return await (IAMService as any).doCommitDecryption(request, policy);
+    };
+
     return (
-        <AuthContext.Provider value={{ isAuthenticated, isLoading, vuid, userId, tokenRoles, getToken, refreshToken, initializeTideRequest, approveTideRequests, executeTideRequest, doEncrypt, doDecrypt }}>
+        <AuthContext.Provider value={{ isAuthenticated, isLoading, vuid, userId, tokenRoles, getToken, refreshToken, initializeTideRequest, approveTideRequests, executeTideRequest, doEncrypt, doDecrypt, doDraftEncryption, doCommitEncryption, doDraftDecryption, doCommitDecryption }}>
             {children}
         </AuthContext.Provider>
     );
