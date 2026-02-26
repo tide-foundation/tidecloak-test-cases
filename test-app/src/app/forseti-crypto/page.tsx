@@ -32,6 +32,7 @@ export default function ForsetiCryptoPage() {
     const [policyLoaded, setPolicyLoaded] = useState(false);
     const [pendingRequests, setPendingRequests] = useState<ForsetiRequest[]>([]);
     const [tag, setTag] = useState("ingredients");
+    const [encryptThreshold, setEncryptThreshold] = useState("3");
     const [plaintext, setPlaintext] = useState("");
     const [encryptedResult, setEncryptedResult] = useState("");
     const [message, setMessage] = useState("");
@@ -40,6 +41,7 @@ export default function ForsetiCryptoPage() {
     const [pendingDecryptRequests, setPendingDecryptRequests] = useState<ForsetiRequest[]>([]);
     const [encryptedInput, setEncryptedInput] = useState("");
     const [decryptTag, setDecryptTag] = useState("ingredients");
+    const [decryptThreshold, setDecryptThreshold] = useState("1");
     const [decryptedResult, setDecryptedResult] = useState("");
     const [decryptOriginalPlaintext, setDecryptOriginalPlaintext] = useState("");
 
@@ -128,7 +130,7 @@ export default function ForsetiCryptoPage() {
                     signingRequest: bytesToBase64(draftBytes),
                     requestedBy: vuid,
                     requestType: "forseti-encryption",
-                    approvalThreshold: 3,
+                    approvalThreshold: parseInt(encryptThreshold) || 3,
                     requestId
                 })
             });
@@ -240,6 +242,7 @@ export default function ForsetiCryptoPage() {
                 { encrypted: encryptedBytes, tags: [decryptTag] }
             ]);
 
+            const threshold = parseInt(decryptThreshold) || 1;
             const requestId = crypto.randomUUID();
             const response = await fetch("/api/signing", {
                 method: "POST",
@@ -248,7 +251,7 @@ export default function ForsetiCryptoPage() {
                     signingRequest: bytesToBase64(draftBytes),
                     requestedBy: vuid,
                     requestType: "forseti-decryption",
-                    approvalThreshold: 1,
+                    approvalThreshold: threshold,
                     requestId
                 })
             });
@@ -258,7 +261,7 @@ export default function ForsetiCryptoPage() {
                 throw new Error(err.error || "Failed to store draft decryption request");
             }
 
-            setMessage("Draft decryption request created. Awaiting 1 executive approval.");
+            setMessage(`Draft decryption request created. Awaiting ${threshold} approval(s).`);
             await fetchPendingDecryptRequests();
         } catch (error: any) {
             console.error(error);
@@ -383,6 +386,15 @@ export default function ForsetiCryptoPage() {
                     data-testid="forseti-tag-input"
                     style={{ width: "200px" }}
                 />
+                <label style={{ marginLeft: "15px" }}>Approvals needed: </label>
+                <input
+                    type="number"
+                    value={encryptThreshold}
+                    onChange={(e) => setEncryptThreshold(e.target.value)}
+                    min="1"
+                    style={{ width: "60px" }}
+                    data-testid="forseti-encrypt-threshold-input"
+                />
             </div>
             <div style={{ marginBottom: "10px" }}>
                 <label>Plaintext: </label>
@@ -462,7 +474,7 @@ export default function ForsetiCryptoPage() {
 
             <h2>Draft Decryption Request</h2>
             <p>
-                Decrypt data encrypted with the Forseti policy. Executive path requires 1 executive approval.
+                Decrypt data encrypted with the Forseti policy. Executive: 1 approval. Procurement/Factory: 2 approvals.
             </p>
             <div style={{ marginBottom: "10px" }}>
                 <label>Tag: </label>
@@ -473,6 +485,15 @@ export default function ForsetiCryptoPage() {
                     placeholder="e.g. ingredients"
                     data-testid="forseti-decrypt-tag-input"
                     style={{ width: "200px" }}
+                />
+                <label style={{ marginLeft: "15px" }}>Approvals needed: </label>
+                <input
+                    type="number"
+                    value={decryptThreshold}
+                    onChange={(e) => setDecryptThreshold(e.target.value)}
+                    min="1"
+                    style={{ width: "60px" }}
+                    data-testid="forseti-decrypt-threshold-input"
                 />
             </div>
             <div style={{ marginBottom: "10px" }}>

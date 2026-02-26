@@ -781,6 +781,486 @@ test.describe('F10: Forseti Policy-Based Encryption', () => {
                 completedAt: new Date().toISOString()
             })
         );
-        console.log('SUCCESS: Forseti policy-based decryption completed!');
+        console.log('SUCCESS: Forseti policy-based decryption (executive path) completed!');
+    });
+
+    // ─── Procurement Officer Decryption Flow ─────────────────────────────────
+    // Requires 2 procurement-only users (no executive role) to properly test
+    // the procurement path in the Forseti contract.
+
+    let user4Creds = null;
+    let user5Creds = null;
+
+    test('When: Admin creates procurementofficer realm role', async ({ page }) => {
+        const takeScreenshot = createScreenshotHelper(page, 'F10_create_procurement_role');
+
+        await signInToAdmin(page, {
+            baseUrl: config.BASE_URL,
+            username: adminCreds.username,
+            password: adminCreds.password,
+            takeScreenshot,
+        });
+
+        await page.locator('[data-testid="realm-role-name-input"]').fill('procurementofficer');
+        await page.locator('[data-testid="add-realm-role-btn"]').click();
+        await page.waitForTimeout(2000);
+
+        await expect(page.locator('[data-testid="message"]').first()).toContainText(
+            'Realm role "procurementofficer" created',
+            { timeout: 15000 }
+        );
+        console.log('procurementofficer realm role created');
+        await takeScreenshot('01_role_created');
+    });
+
+    test('When: I create user4 via CLI and link their Tide account', async ({ page }) => {
+        const takeScreenshot = createScreenshotHelper(page, 'F10_create_user4');
+        const testsDir = getTestsDir();
+        const scriptPath = path.join(testsDir, 'scripts', 'handover-admin.sh');
+
+        const timestamp = Date.now();
+        const user4Username = `user4_${timestamp}`;
+        const user4Email = `${user4Username}@test.com`;
+
+        const createResult = execSync(`${scriptPath} -u ${user4Username} ${user4Email}`, {
+            encoding: 'utf-8',
+            env: { ...process.env, REALM_NAME: realmName, TIDECLOAK_LOCAL_URL: config.TIDECLOAK_LOCAL_URL }
+        }).trim();
+        console.log(`Create user4 result: ${createResult}`);
+
+        const approveResult = execSync(`${scriptPath} -a users`, {
+            encoding: 'utf-8',
+            env: { ...process.env, REALM_NAME: realmName, TIDECLOAK_LOCAL_URL: config.TIDECLOAK_LOCAL_URL }
+        }).trim();
+        console.log(`Approve user4 result: ${approveResult}`);
+
+        const inviteLink = execSync(`${scriptPath} -i ${user4Username}`, {
+            encoding: 'utf-8',
+            env: { ...process.env, REALM_NAME: realmName, TIDECLOAK_LOCAL_URL: config.TIDECLOAK_LOCAL_URL }
+        }).trim();
+        expect(inviteLink.includes('http'), `Expected a URL but got: ${inviteLink}`).toBeTruthy();
+        console.log(`User4 invite link: ${inviteLink}`);
+
+        const user4Password = `Pass4_${timestamp}`;
+        await page.goto(inviteLink, { waitUntil: 'domcontentloaded', timeout: 90000 });
+        await takeScreenshot('01_invite_page');
+
+        await page.getByRole('link', { name: 'Link Account' }).click();
+        await takeScreenshot('02_link_account');
+
+        await page.locator('#sign-up-nav').click();
+        await takeScreenshot('03_signup_form');
+
+        await page.locator('#sign_up-input_username').nth(1).fill(user4Username);
+        await page.locator('#sign_up-input_password').nth(1).fill(user4Password);
+        await page.locator('#sign_up-input_repeat_password').nth(1).fill(user4Password);
+        await page.waitForTimeout(2000);
+        await page.locator('#sign_up-button').click();
+        await takeScreenshot('04_after_continue');
+
+        await page.locator('#sign_up-email-input-1').nth(1).fill(user4Email);
+        await page.waitForTimeout(2000);
+        await page.locator('#sign_up_email-button').click();
+        await takeScreenshot('05_after_email');
+
+        await page.waitForURL('**/localhost:3000/**', { timeout: 90000 });
+        await takeScreenshot('06_after_redirect');
+
+        const confirmResult = execSync(`${scriptPath} -c ${user4Username}`, {
+            encoding: 'utf-8',
+            env: { ...process.env, REALM_NAME: realmName, TIDECLOAK_LOCAL_URL: config.TIDECLOAK_LOCAL_URL }
+        }).trim();
+        console.log(`Confirm user4: ${confirmResult}`);
+        expect(confirmResult.includes('is linked'), `Expected user4 to be linked but got: ${confirmResult}`).toBeTruthy();
+
+        user4Creds = { username: user4Username, password: user4Password, email: user4Email };
+        fs.writeFileSync(
+            path.join(testsDir, 'forseti-user4-info.json'),
+            JSON.stringify({ ...user4Creds, createdAt: new Date().toISOString() }, null, 2)
+        );
+        console.log(`User4 created and Tide account linked: ${user4Username}`);
+    });
+
+    test('When: I create user5 via CLI and link their Tide account', async ({ page }) => {
+        const takeScreenshot = createScreenshotHelper(page, 'F10_create_user5');
+        const testsDir = getTestsDir();
+        const scriptPath = path.join(testsDir, 'scripts', 'handover-admin.sh');
+
+        const timestamp = Date.now();
+        const user5Username = `user5_${timestamp}`;
+        const user5Email = `${user5Username}@test.com`;
+
+        const createResult = execSync(`${scriptPath} -u ${user5Username} ${user5Email}`, {
+            encoding: 'utf-8',
+            env: { ...process.env, REALM_NAME: realmName, TIDECLOAK_LOCAL_URL: config.TIDECLOAK_LOCAL_URL }
+        }).trim();
+        console.log(`Create user5 result: ${createResult}`);
+
+        const approveResult = execSync(`${scriptPath} -a users`, {
+            encoding: 'utf-8',
+            env: { ...process.env, REALM_NAME: realmName, TIDECLOAK_LOCAL_URL: config.TIDECLOAK_LOCAL_URL }
+        }).trim();
+        console.log(`Approve user5 result: ${approveResult}`);
+
+        const inviteLink = execSync(`${scriptPath} -i ${user5Username}`, {
+            encoding: 'utf-8',
+            env: { ...process.env, REALM_NAME: realmName, TIDECLOAK_LOCAL_URL: config.TIDECLOAK_LOCAL_URL }
+        }).trim();
+        expect(inviteLink.includes('http'), `Expected a URL but got: ${inviteLink}`).toBeTruthy();
+        console.log(`User5 invite link: ${inviteLink}`);
+
+        const user5Password = `Pass5_${timestamp}`;
+        await page.goto(inviteLink, { waitUntil: 'domcontentloaded', timeout: 90000 });
+        await takeScreenshot('01_invite_page');
+
+        await page.getByRole('link', { name: 'Link Account' }).click();
+        await takeScreenshot('02_link_account');
+
+        await page.locator('#sign-up-nav').click();
+        await takeScreenshot('03_signup_form');
+
+        await page.locator('#sign_up-input_username').nth(1).fill(user5Username);
+        await page.locator('#sign_up-input_password').nth(1).fill(user5Password);
+        await page.locator('#sign_up-input_repeat_password').nth(1).fill(user5Password);
+        await page.waitForTimeout(2000);
+        await page.locator('#sign_up-button').click();
+        await takeScreenshot('04_after_continue');
+
+        await page.locator('#sign_up-email-input-1').nth(1).fill(user5Email);
+        await page.waitForTimeout(2000);
+        await page.locator('#sign_up_email-button').click();
+        await takeScreenshot('05_after_email');
+
+        await page.waitForURL('**/localhost:3000/**', { timeout: 90000 });
+        await takeScreenshot('06_after_redirect');
+
+        const confirmResult = execSync(`${scriptPath} -c ${user5Username}`, {
+            encoding: 'utf-8',
+            env: { ...process.env, REALM_NAME: realmName, TIDECLOAK_LOCAL_URL: config.TIDECLOAK_LOCAL_URL }
+        }).trim();
+        console.log(`Confirm user5: ${confirmResult}`);
+        expect(confirmResult.includes('is linked'), `Expected user5 to be linked but got: ${confirmResult}`).toBeTruthy();
+
+        user5Creds = { username: user5Username, password: user5Password, email: user5Email };
+        fs.writeFileSync(
+            path.join(testsDir, 'forseti-user5-info.json'),
+            JSON.stringify({ ...user5Creds, createdAt: new Date().toISOString() }, null, 2)
+        );
+        console.log(`User5 created and Tide account linked: ${user5Username}`);
+    });
+
+    test('When: Admin assigns procurementofficer role to self and approves', async ({ page }) => {
+        const takeScreenshot = createScreenshotHelper(page, 'F10_admin_procurement');
+
+        await signInToAdmin(page, {
+            baseUrl: config.BASE_URL,
+            username: adminCreds.username,
+            password: adminCreds.password,
+            takeScreenshot,
+        });
+
+        const roleItem = page.locator('[data-testid="realm-roles-list"]').locator('li:has-text("procurementofficer")');
+        await expect(roleItem).toBeVisible({ timeout: 10000 });
+        await roleItem.getByRole('button', { name: 'Assign to Me' }).click();
+        await page.waitForTimeout(2000);
+
+        await expect(page.locator('[data-testid="message"]').first()).toContainText(
+            'Realm role "procurementofficer" assigned',
+            { timeout: 15000 }
+        );
+        console.log('procurementofficer assigned to admin, approving...');
+
+        const approveButton = page.locator('h2:has-text("User Change Requests")').locator('..').getByRole('button', { name: 'Approve & Commit' }).first();
+        await expect(approveButton).toBeVisible({ timeout: 10000 });
+
+        const popupPromise = page.waitForEvent('popup', { timeout: 60000 });
+        await approveButton.click();
+
+        const popup = await popupPromise;
+        await popup.waitForLoadState('load');
+        await popup.getByRole('button', { name: 'Y' }).click({ force: true });
+        await popup.getByRole('button', { name: 'Submit Approvals' }).click({ force: true });
+        await popup.close().catch(() => {});
+
+        await page.waitForTimeout(3000);
+        await expect(page.locator('[data-testid="message"]').first()).toContainText(/committed/i, { timeout: 15000 });
+        console.log('Admin procurementofficer role committed');
+        await takeScreenshot('01_admin_procurement_committed');
+    });
+
+    test('When: Admin grants procurementofficer role to user4 and approves', async ({ page }) => {
+        const takeScreenshot = createScreenshotHelper(page, 'F10_user4_procurement');
+        const testsDir = getTestsDir();
+
+        if (!user4Creds) {
+            const infoPath = path.join(testsDir, 'forseti-user4-info.json');
+            expect(fs.existsSync(infoPath), 'user4 info not found').toBeTruthy();
+            user4Creds = JSON.parse(fs.readFileSync(infoPath, 'utf-8'));
+        }
+
+        await signInToAdmin(page, {
+            baseUrl: config.BASE_URL,
+            username: adminCreds.username,
+            password: adminCreds.password,
+            takeScreenshot,
+        });
+
+        const grantBtn = page.locator(`[data-testid="grant-realm-role-procurementofficer-${user4Creds.username}"]`);
+        await expect(grantBtn).toBeVisible({ timeout: 15000 });
+        await grantBtn.click();
+        await page.waitForTimeout(2000);
+
+        await expect(page.locator('[data-testid="message"]').first()).toContainText(
+            'Realm role "procurementofficer" granted',
+            { timeout: 15000 }
+        );
+        console.log('procurementofficer granted to user4, approving...');
+
+        const approveButton = page.locator('h2:has-text("User Change Requests")').locator('..').getByRole('button', { name: 'Approve & Commit' }).first();
+        await expect(approveButton).toBeVisible({ timeout: 10000 });
+
+        const popupPromise = page.waitForEvent('popup', { timeout: 60000 });
+        await approveButton.click();
+
+        const popup = await popupPromise;
+        await popup.waitForLoadState('load');
+        await popup.getByRole('button', { name: 'Y' }).click({ force: true });
+        await popup.getByRole('button', { name: 'Submit Approvals' }).click({ force: true });
+        await popup.close().catch(() => {});
+
+        await page.waitForTimeout(3000);
+        await expect(page.locator('[data-testid="message"]').first()).toContainText(/committed/i, { timeout: 15000 });
+        console.log('User4 procurementofficer role committed');
+        await takeScreenshot('01_user4_procurement_committed');
+    });
+
+    test('When: Admin grants procurementofficer role to user5 and approves', async ({ page }) => {
+        const takeScreenshot = createScreenshotHelper(page, 'F10_user5_procurement');
+        const testsDir = getTestsDir();
+
+        if (!user5Creds) {
+            const infoPath = path.join(testsDir, 'forseti-user5-info.json');
+            expect(fs.existsSync(infoPath), 'user5 info not found').toBeTruthy();
+            user5Creds = JSON.parse(fs.readFileSync(infoPath, 'utf-8'));
+        }
+
+        await signInToAdmin(page, {
+            baseUrl: config.BASE_URL,
+            username: adminCreds.username,
+            password: adminCreds.password,
+            takeScreenshot,
+        });
+
+        const grantBtn = page.locator(`[data-testid="grant-realm-role-procurementofficer-${user5Creds.username}"]`);
+        await expect(grantBtn).toBeVisible({ timeout: 15000 });
+        await grantBtn.click();
+        await page.waitForTimeout(2000);
+
+        await expect(page.locator('[data-testid="message"]').first()).toContainText(
+            'Realm role "procurementofficer" granted',
+            { timeout: 15000 }
+        );
+        console.log('procurementofficer granted to user5, approving...');
+
+        const approveButton = page.locator('h2:has-text("User Change Requests")').locator('..').getByRole('button', { name: 'Approve & Commit' }).first();
+        await expect(approveButton).toBeVisible({ timeout: 10000 });
+
+        const popupPromise = page.waitForEvent('popup', { timeout: 60000 });
+        await approveButton.click();
+
+        const popup = await popupPromise;
+        await popup.waitForLoadState('load');
+        await popup.getByRole('button', { name: 'Y' }).click({ force: true });
+        await popup.getByRole('button', { name: 'Submit Approvals' }).click({ force: true });
+        await popup.close().catch(() => {});
+
+        await page.waitForTimeout(3000);
+        await expect(page.locator('[data-testid="message"]').first()).toContainText(/committed/i, { timeout: 15000 });
+        console.log('User5 procurementofficer role committed');
+        await takeScreenshot('01_user5_procurement_committed');
+    });
+
+    test('Then: Admin drafts a procurement decryption request (threshold=2)', async ({ page }) => {
+        const takeScreenshot = createScreenshotHelper(page, 'F10_procurement_draft_decrypt');
+        const testsDir = getTestsDir();
+
+        const encryptedDataPath = path.join(testsDir, 'forseti-encrypted-data.json');
+        expect(fs.existsSync(encryptedDataPath), 'forseti-encrypted-data.json not found').toBeTruthy();
+        const encryptedData = JSON.parse(fs.readFileSync(encryptedDataPath, 'utf-8'));
+
+        await signInToAdmin(page, {
+            baseUrl: config.BASE_URL,
+            username: adminCreds.username,
+            password: adminCreds.password,
+            takeScreenshot,
+        });
+
+        await page.getByRole('button', { name: 'Refresh Token' }).click();
+        await page.waitForTimeout(2000);
+
+        await page.goto(`${config.BASE_URL}/forseti-crypto`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+        await expect(page.getByText('Forseti Policy-Based Encryption')).toBeVisible({ timeout: 15000 });
+        await takeScreenshot('01_forseti_page');
+
+        await expect(page.locator('[data-testid="forseti-policy-status"]')).toContainText('Loaded', { timeout: 15000 });
+
+        // Set threshold to 2 for procurement path
+        await page.locator('[data-testid="forseti-decrypt-threshold-input"]').fill('2');
+        await page.locator('[data-testid="forseti-decrypt-tag-input"]').fill(encryptedData.tag);
+        await page.locator('[data-testid="forseti-decrypt-original-input"]').fill(encryptedData.plaintext);
+        await page.locator('[data-testid="forseti-decrypt-input"]').fill(encryptedData.encrypted);
+        await takeScreenshot('02_decrypt_filled');
+
+        await page.locator('[data-testid="forseti-draft-decrypt-btn"]').click();
+        console.log('Procurement draft decrypt clicked (threshold=2)');
+
+        await expect(page.locator('[data-testid="forseti-message"]').first()).toContainText(
+            'Draft decryption request created',
+            { timeout: 30000 }
+        );
+        console.log('Procurement draft decryption request created');
+
+        const pendingList = page.locator('[data-testid="forseti-pending-decrypt-list"]');
+        await expect(pendingList).toContainText('0/2', { timeout: 10000 });
+        await takeScreenshot('03_request_in_list');
+    });
+
+    test('Then: User4 approves procurement decryption (1/2)', async ({ page }) => {
+        const takeScreenshot = createScreenshotHelper(page, 'F10_procurement_approve1');
+        const testsDir = getTestsDir();
+
+        if (!user4Creds) {
+            const infoPath = path.join(testsDir, 'forseti-user4-info.json');
+            expect(fs.existsSync(infoPath), 'user4 info not found').toBeTruthy();
+            user4Creds = JSON.parse(fs.readFileSync(infoPath, 'utf-8'));
+        }
+
+        await signInToAdmin(page, {
+            baseUrl: config.BASE_URL,
+            username: user4Creds.username,
+            password: user4Creds.password,
+            takeScreenshot,
+        });
+
+        await page.getByRole('button', { name: 'Refresh Token' }).click();
+        await page.waitForTimeout(2000);
+
+        await page.goto(`${config.BASE_URL}/forseti-crypto`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+        await expect(page.getByText('Forseti Policy-Based Encryption')).toBeVisible({ timeout: 15000 });
+
+        const approveBtn = page.locator('[data-testid="forseti-approve-decrypt-btn"]').first();
+        await expect(approveBtn).toBeVisible({ timeout: 15000 });
+
+        const popupPromise = page.waitForEvent('popup', { timeout: 60000 });
+        await approveBtn.click();
+
+        const popup = await popupPromise;
+        await popup.waitForLoadState('domcontentloaded');
+
+        await popup.getByRole('button', { name: 'Y' }).click({ force: true });
+        await popup.getByRole('button', { name: 'Submit Approvals' }).click({ force: true });
+        await popup.close().catch(() => {});
+        console.log('User4 approved procurement decryption (1/2)');
+
+        await page.waitForTimeout(3000);
+        await expect(page.locator('[data-testid="forseti-message"]').first()).toContainText('approved', { timeout: 15000 });
+        await takeScreenshot('01_one_approval');
+    });
+
+    test('Then: User5 approves procurement decryption (2/2, commitReady)', async ({ page }) => {
+        const takeScreenshot = createScreenshotHelper(page, 'F10_procurement_approve2');
+        const testsDir = getTestsDir();
+
+        if (!user5Creds) {
+            const infoPath = path.join(testsDir, 'forseti-user5-info.json');
+            expect(fs.existsSync(infoPath), 'user5 info not found').toBeTruthy();
+            user5Creds = JSON.parse(fs.readFileSync(infoPath, 'utf-8'));
+        }
+
+        await signInToAdmin(page, {
+            baseUrl: config.BASE_URL,
+            username: user5Creds.username,
+            password: user5Creds.password,
+            takeScreenshot,
+        });
+
+        await page.getByRole('button', { name: 'Refresh Token' }).click();
+        await page.waitForTimeout(2000);
+
+        await page.goto(`${config.BASE_URL}/forseti-crypto`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+        await expect(page.getByText('Forseti Policy-Based Encryption')).toBeVisible({ timeout: 15000 });
+
+        const approveBtn = page.locator('[data-testid="forseti-approve-decrypt-btn"]').first();
+        await expect(approveBtn).toBeVisible({ timeout: 15000 });
+
+        const popupPromise = page.waitForEvent('popup', { timeout: 60000 });
+        await approveBtn.click();
+
+        const popup = await popupPromise;
+        await popup.waitForLoadState('domcontentloaded');
+
+        await popup.getByRole('button', { name: 'Y' }).click({ force: true });
+        await popup.getByRole('button', { name: 'Submit Approvals' }).click({ force: true });
+        await popup.close().catch(() => {});
+        console.log('User5 approved procurement decryption (2/2)');
+
+        await page.waitForTimeout(3000);
+        await expect(page.locator('[data-testid="forseti-message"]').first()).toContainText('approved', { timeout: 15000 });
+
+        const pendingList = page.locator('[data-testid="forseti-pending-decrypt-list"]');
+        await expect(pendingList).toContainText('Ready: Yes', { timeout: 10000 });
+        console.log('2/2 procurement approvals - decryption commitReady!');
+        await takeScreenshot('01_ready_to_commit');
+    });
+
+    test('Then: Admin commits procurement decryption and verifies plaintext matches', async ({ page }) => {
+        const takeScreenshot = createScreenshotHelper(page, 'F10_procurement_commit_decrypt');
+        const testsDir = getTestsDir();
+
+        const encryptedDataPath = path.join(testsDir, 'forseti-encrypted-data.json');
+        const encryptedData = JSON.parse(fs.readFileSync(encryptedDataPath, 'utf-8'));
+
+        await signInToAdmin(page, {
+            baseUrl: config.BASE_URL,
+            username: adminCreds.username,
+            password: adminCreds.password,
+            takeScreenshot,
+        });
+
+        await page.getByRole('button', { name: 'Refresh Token' }).click();
+        await page.waitForTimeout(2000);
+
+        await page.goto(`${config.BASE_URL}/forseti-crypto`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+        await expect(page.getByText('Forseti Policy-Based Encryption')).toBeVisible({ timeout: 15000 });
+
+        // Fill original plaintext for match verification
+        await page.locator('[data-testid="forseti-decrypt-original-input"]').fill(encryptedData.plaintext);
+
+        const commitBtn = page.locator('[data-testid="forseti-commit-decrypt-btn"]').first();
+        await expect(commitBtn).toBeVisible({ timeout: 15000 });
+        await takeScreenshot('01_commit_visible');
+
+        await commitBtn.click();
+        console.log('Commit procurement decrypt clicked');
+
+        await page.waitForTimeout(5000);
+        await takeScreenshot('02_after_commit');
+
+        await expect(page.locator('[data-testid="forseti-message"]').first()).toContainText(
+            'Forseti decryption committed successfully',
+            { timeout: 30000 }
+        );
+
+        const decryptedOutput = await page.locator('[data-testid="forseti-decrypted-output"]').inputValue();
+        expect(decryptedOutput.length).toBeGreaterThan(0);
+        console.log(`Procurement decrypted output: ${decryptedOutput}`);
+
+        expect(decryptedOutput).toBe(encryptedData.plaintext);
+        console.log('Procurement decrypted text matches original plaintext!');
+
+        await expect(page.locator('[data-testid="forseti-decrypt-match"]')).toContainText('matches original', { timeout: 10000 });
+        await takeScreenshot('03_decrypted_match');
+
+        console.log('SUCCESS: Forseti procurement officer decryption completed!');
     });
 });
