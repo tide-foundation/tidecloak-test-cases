@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { IAMService } from "@tidecloak/js";
-import { Policy, ApprovalType, ExecutionType } from "asgard-tide";
+import { Cryptide, Models, Clients } from "tide-js";
+const Policy = Models.Policy;
+const ExecutionType = Models.ExecutionType;
+const ApprovalType = Models.ApprovalType;
+
 import { PolicySignRequest } from "heimdall-tide";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -24,6 +28,7 @@ import {
     RoleRepresentation,
 } from "@/lib/tidecloakApi";
 import { bytesToBase64, base64ToBytes } from "@/lib/tideSerialization";
+import { contract as forsetiContract, contractid as forsetiContractId } from "@/lib/forsetiDecryptionContract";
 
 interface ChangeRequest {
     data: any;
@@ -39,6 +44,8 @@ interface PendingPolicy {
     deniedBy: string[];
     role?: string;
     threshold?: number;
+    modelId?: string;
+    contractId?: string;
 }
 
 export default function AdminPage() {
@@ -103,7 +110,9 @@ export default function AdminPage() {
                         return {
                             ...p,
                             role: policy.params.entries.get("role"),
-                            threshold: policy.params.entries.get("threshold")
+                            threshold: policy.params.entries.get("threshold"),
+                            modelId: policy.modelIds[0],
+                            contractId: policy.contractId
                         };
                     } catch {
                         return p;
@@ -168,7 +177,7 @@ export default function AdminPage() {
 
             // Create the policy using GenericResourceAccessThresholdRoleContract
             const newPolicyRequest = PolicySignRequest.New(new Policy({
-                version: "2",
+                version: "3",
                 modelId: "TestInit:1",
                 contractId: "GenericResourceAccessThresholdRole:1",
                 keyId: vendorId,
@@ -202,6 +211,87 @@ export default function AdminPage() {
             await fetchPendingPolicies();
         } catch (error: any) {
             setMessage(`Error creating policy: ${error.message}`);
+        }
+    };
+
+    const handleCreateForsetiEncryptionPolicy = async () => {
+        try {
+            const vendorId = getVendorIdForPolicy();
+
+            const newPolicyRequest = PolicySignRequest.New(new Policy({
+                version: "3",
+                modelId: ["PolicyEnabledEncryption:1", "PolicyEnabledDecryption:1"],
+                contractId: forsetiContractId,
+                keyId: vendorId,
+                executionType: ExecutionType.PRIVATE,
+                approvalType: ApprovalType.EXPLICIT,
+                params: new Map()
+            }));
+            newPolicyRequest.setCustomExpiry(604800); // 1 week
+            newPolicyRequest.addForsetiContractToUpload(forsetiContract);
+
+            // Initialize the request via Tide enclave
+            const initializedRequest = await initializeTideRequest(newPolicyRequest);
+
+            // Store in pending policies database
+            const response = await fetch("/api/policies", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    policyRequest: bytesToBase64(initializedRequest.encode()),
+                    requestedBy: vuid
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || "Failed to create Forseti encryption policy");
+            }
+
+            setMessage("Forseti encryption policy (custom contract) created. Review and commit it below.");
+            await fetchPendingPolicies();
+        } catch (error: any) {
+            setMessage(`Error creating Forseti encryption policy: ${error.message}`);
+        }
+    };
+
+    const handleCreateEncryptionPolicy = async () => {
+        try {
+            const vendorId = getVendorIdForPolicy();
+
+            const newPolicyRequest = PolicySignRequest.New(new Policy({
+                version: "3",
+                modelId: ["PolicyEnabledEncryption:1", "PolicyEnabledDecryption:1"],
+                contractId: "SimpleTagBasedDecryption:1",
+                keyId: vendorId,
+                executionType: ExecutionType.PRIVATE,
+                approvalType: ApprovalType.IMPLICIT,
+                params: new Map()
+            }));
+            newPolicyRequest.setCustomExpiry(604800); // 1 week
+
+            // Initialize the request via Tide enclave
+            const initializedRequest = await initializeTideRequest(newPolicyRequest);
+
+            // Store in pending policies database
+            const response = await fetch("/api/policies", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    policyRequest: bytesToBase64(initializedRequest.encode()),
+                    requestedBy: vuid
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || "Failed to create encryption policy");
+            }
+
+            setMessage("Encryption policy (SimpleTagBasedDecryption:1) created. Review and commit it below.");
+            await fetchPendingPolicies();
+        } catch (error: any) {
+            setMessage(`Error creating encryption policy: ${error.message}`);
         }
     };
 
@@ -330,6 +420,17 @@ export default function AdminPage() {
         }
     };
 
+    const handleGrantRealmRole = async (targetUserId: string, roleName: string) => {
+        try {
+            const token = await getToken();
+            await grantUserRealmRole(targetUserId, roleName, token);
+            setMessage(`Realm role "${roleName}" granted to user. Approve the change request to finalize.`);
+            await refreshData();
+        } catch (error: any) {
+            setMessage(`Error granting realm role: ${error.message}`);
+        }
+    };
+
     const handleLogout = () => {
         IAMService.doLogout();
     };
@@ -366,6 +467,7 @@ export default function AdminPage() {
             <button onClick={handleLogout}>Logout</button>
             <button onClick={refreshData}>Refresh Data</button>
             <button onClick={handleRefreshToken}>Refresh Token</button>
+            <a href="/forseti-crypto" style={{ marginLeft: "10px" }}>Forseti Crypto</a>
             {message && <p data-testid="message"><strong>{message}</strong></p>}
 
             <hr />
@@ -432,12 +534,23 @@ export default function AdminPage() {
                 <button onClick={handleCreatePolicy} data-testid="create-policy-btn">Create Policy</button>
             </div>
 
+            <h3>Encryption Policy</h3>
+            <p>Create a PolicyEnabledEncryption:1 policy using SimpleTagBasedDecryption:1 contract.</p>
+            <button onClick={handleCreateEncryptionPolicy} data-testid="create-encryption-policy-btn">Create Encryption Policy</button>
+
+            <h3>Forseti Encryption Policy</h3>
+            <p>Create a PolicyEnabledEncryption:1 policy using a custom Forseti contract (EXPLICIT approval). Requires 3 executives to encrypt, 1 executive to decrypt.</p>
+            <button onClick={handleCreateForsetiEncryptionPolicy} data-testid="create-forseti-policy-btn">Create Forseti Encryption Policy</button>
+
             <h3>Pending Policy Requests ({pendingPolicies.length})</h3>
             <ul data-testid="pending-policies-list">
                 {pendingPolicies.map((policy) => (
                     <li key={policy.id} data-testid={`policy-${policy.id.substring(0, 8)}`}>
-                        <strong>Role:</strong> {policy.role || "Unknown"} |
-                        <strong> Threshold:</strong> {policy.threshold || "?"} |
+                        {policy.role ? (
+                            <><strong>Role:</strong> {policy.role} | <strong>Threshold:</strong> {policy.threshold || "?"} | </>
+                        ) : (
+                            <><strong>Model:</strong> {policy.modelId || "Unknown"} | <strong>Contract:</strong> {policy.contractId || "Unknown"} | </>
+                        )}
                         <strong> Approvals:</strong> {policy.approvedBy?.length || 0} |
                         <strong> Ready:</strong> {policy.commitReady ? "Yes" : "No"}
                         {!policy.approvedBy?.includes(vuid) && (
@@ -461,6 +574,16 @@ export default function AdminPage() {
                                 Grant {roles[0].name}
                             </button>
                         )}
+                        {realmRoles.map((role) => (
+                            <button
+                                key={role.id}
+                                onClick={() => handleGrantRealmRole(user.id, role.name!)}
+                                data-testid={`grant-realm-role-${role.name}-${user.username}`}
+                                style={{ marginLeft: "4px" }}
+                            >
+                                Grant {role.name}
+                            </button>
+                        ))}
                     </li>
                 ))}
             </ul>

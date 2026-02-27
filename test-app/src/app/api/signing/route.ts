@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/database/connection";
 import { base64ToBytes, bytesToBase64 } from "@/lib/tideSerialization";
-import { BaseTideRequest, Policy, GenericResourceAccessThresholdRoleContract } from "asgard-tide";
+import { Models, Contracts } from "tide-js";
+const BaseTideRequest = Models.BaseTideRequest;
+const Policy = Models.Policy;
+type Policy = InstanceType<typeof Policy>;
+const GenericResourceAccessThresholdRoleContract = Contracts.GenericResourceAccessThresholdRoleContract;
 
 // Initialize signing requests table
 db.exec(`
@@ -11,6 +15,8 @@ db.exec(`
         data TEXT NOT NULL,
         staticData TEXT,
         dynamicData TEXT,
+        requestType TEXT DEFAULT 'signing',
+        approvalThreshold INTEGER DEFAULT 2,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
 `);
@@ -32,13 +38,18 @@ interface PendingSigningRequest {
     data: string;
     staticData?: string;
     dynamicData?: string;
+    requestType?: string;
+    approvalThreshold?: number;
 }
 
 export async function GET(req: NextRequest) {
     try {
-        // Get all pending signing requests with their approvals
-        const rows = db.prepare('SELECT * FROM pending_signing_requests')
-            .all() as PendingSigningRequest[];
+        const typeFilter = req.nextUrl.searchParams.get("type");
+
+        // Get pending signing requests, optionally filtered by requestType
+        const rows = typeFilter
+            ? db.prepare('SELECT * FROM pending_signing_requests WHERE requestType = ?').all(typeFilter) as PendingSigningRequest[]
+            : db.prepare('SELECT * FROM pending_signing_requests WHERE requestType = ?').all('signing') as PendingSigningRequest[];
 
         // Get all committed policies
         const policiesRows = db.prepare('SELECT * FROM committed_policies')
@@ -69,11 +80,15 @@ export async function GET(req: NextRequest) {
                 }
             }
 
-            // Use testPolicy() to determine if the request is ready to be committed
+            // Determine commit readiness based on requestType
             let commitReady = false;
             let updatedData = row.data;
 
-            if (committedPolicy) {
+            if (row.requestType && row.requestType !== 'signing') {
+                // Non-signing requests (e.g. forseti-encryption): use approval count threshold
+                commitReady = approvers.length >= (row.approvalThreshold ?? 1);
+            } else if (committedPolicy) {
+                // Standard signing requests: use testPolicy() contract check
                 try {
                     const request = BaseTideRequest.decode(base64ToBytes(row.data));
                     const contract = new GenericResourceAccessThresholdRoleContract(request);
@@ -105,7 +120,9 @@ export async function GET(req: NextRequest) {
                 deniedBy: deniers.map(a => a.user_vuid),
                 policyRole: policyInfo.role,
                 policyThreshold: policyInfo.threshold,
-                policyData: policyInfo.policyData
+                policyData: policyInfo.policyData,
+                requestType: row.requestType ?? 'signing',
+                approvalThreshold: row.approvalThreshold ?? 2
             };
         }));
 
@@ -118,7 +135,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     try {
-        const { signingRequest, decision, submitted, requestedBy, userVuid, staticData, dynamicData } = await req.json();
+        const { signingRequest, decision, submitted, requestedBy, userVuid, staticData, dynamicData, requestType, approvalThreshold, requestId } = await req.json();
 
         if (submitted) {
             // Remove the signing request after successful submission
@@ -132,8 +149,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: "success", signatureReceived: true });
         } else if (decision) {
             // Operator made approval/denial decision
-            const req_decoded = BaseTideRequest.decode(base64ToBytes(signingRequest));
-            const id = req_decoded.getUniqueId();
+            // For non-signing types, use the provided requestId; otherwise decode from bytes
+            let id: string;
+            if (requestId) {
+                id = requestId;
+            } else {
+                const req_decoded = BaseTideRequest.decode(base64ToBytes(signingRequest));
+                id = req_decoded.getUniqueId();
+            }
 
             db.prepare('INSERT INTO signing_request_decisions (signing_request_id, user_vuid, decision) VALUES (?, ?, ?)')
                 .run(id, userVuid, decision.rejected ? 0 : 1);
@@ -146,16 +169,25 @@ export async function POST(req: NextRequest) {
 
             return NextResponse.json({ message: "success" });
         } else {
-            // Initial creation of signing request
-            const req_decoded = BaseTideRequest.decode(base64ToBytes(signingRequest));
-            if (!req_decoded.isInitialized()) {
-                return NextResponse.json({ error: "Request has not been initialized" }, { status: 400 });
+            // Initial creation of signing/forseti request
+            let id: string;
+            if (requestType && requestType !== 'signing') {
+                // Non-signing types: use caller-provided requestId (UUID) — no BaseTideRequest decode
+                if (!requestId) {
+                    return NextResponse.json({ error: "requestId is required for non-signing request types" }, { status: 400 });
+                }
+                id = requestId;
+            } else {
+                // Standard signing request: decode and validate as BaseTideRequest
+                const req_decoded = BaseTideRequest.decode(base64ToBytes(signingRequest));
+                if (!req_decoded.isInitialized()) {
+                    return NextResponse.json({ error: "Request has not been initialized" }, { status: 400 });
+                }
+                id = req_decoded.getUniqueId();
             }
 
-            const id = req_decoded.getUniqueId();
-
-            db.prepare('INSERT INTO pending_signing_requests (id, requestedBy, data, staticData, dynamicData) VALUES (?, ?, ?, ?, ?)')
-                .run(id, requestedBy || "unknown", signingRequest, staticData || null, dynamicData || null);
+            db.prepare('INSERT INTO pending_signing_requests (id, requestedBy, data, staticData, dynamicData, requestType, approvalThreshold) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                .run(id, requestedBy || "unknown", signingRequest, staticData || null, dynamicData || null, requestType || 'signing', approvalThreshold ?? 2);
 
             return NextResponse.json({ message: "success", id });
         }

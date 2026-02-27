@@ -1,5 +1,7 @@
 import { getAuthServerUrl, getRealm, getResource, getVendorId, initTcData } from "./tidecloakConfig";
-import { Policy } from "asgard-tide";
+import { Models } from "tide-js";
+const Policy = Models.Policy;
+type Policy = InstanceType<typeof Policy>;
 import { base64ToBytes } from "./tideSerialization";
 
 const getTcUrl = () => `${getAuthServerUrl()}/admin/realms/${getRealm()}`;

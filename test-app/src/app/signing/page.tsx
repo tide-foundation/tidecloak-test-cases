@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { IAMService, BaseTideRequest, TideMemory } from "@tidecloak/js";
-import { Policy } from "asgard-tide";
+import { IAMService } from "@tidecloak/js";
+import { Models } from "tide-js";
+const Policy = Models.Policy;
+const BaseTideRequest = Models.BaseTideRequest;
 import { useAuth } from "@/hooks/useAuth";
 import { bytesToBase64, base64ToBytes } from "@/lib/tideSerialization";
 

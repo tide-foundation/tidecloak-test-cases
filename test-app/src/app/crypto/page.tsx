@@ -2,7 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { IAMService } from "@tidecloak/js";
+import { Models } from "tide-js";
+const Policy = Models.Policy;
 import { useAuth } from "@/hooks/useAuth";
+import { base64ToBytes } from "@/lib/tideSerialization";
+
+interface CommittedPolicy {
+    data: string;
+    role: string;
+    threshold: number;
+    resource: string;
+}
 
 export default function CryptoPage() {
     const { isAuthenticated, isLoading, vuid, tokenRoles, doEncrypt, doDecrypt } = useAuth();
@@ -12,11 +22,48 @@ export default function CryptoPage() {
     const [decryptedData, setDecryptedData] = useState("");
     const [message, setMessage] = useState("");
 
+    // Policy-based encryption/decryption state
+    const [policyPlaintext, setPolicyPlaintext] = useState("");
+    const [policyTag, setPolicyTag] = useState("secret");
+    const [policyEncryptedData, setPolicyEncryptedData] = useState("");
+    const [policyDecryptedData, setPolicyDecryptedData] = useState("");
+    const [policyMessage, setPolicyMessage] = useState("");
+    const [encryptionPolicy, setEncryptionPolicy] = useState<Uint8Array | null>(null);
+    const [policyLoaded, setPolicyLoaded] = useState(false);
+
     useEffect(() => {
         if (!isLoading && !isAuthenticated) {
             window.location.href = "/";
         }
     }, [isAuthenticated, isLoading]);
+
+    useEffect(() => {
+        if (isAuthenticated) {
+            fetchEncryptionPolicy();
+        }
+    }, [isAuthenticated]);
+
+    const fetchEncryptionPolicy = async () => {
+        try {
+            const response = await fetch("/api/policies?type=committed");
+            if (response.ok) {
+                const policies: CommittedPolicy[] = await response.json();
+                // Find the PolicyEnabledEncryption:1 policy
+                for (const p of policies) {
+                    const policy = Policy.from(base64ToBytes(p.data));
+                    if (policy.modelIds[0] === "PolicyEnabledEncryption:1") {
+                        setEncryptionPolicy(policy.toBytes());
+                        setPolicyLoaded(true);
+                        return;
+                    }
+                }
+                setPolicyLoaded(false);
+            }
+        } catch (error: any) {
+            console.error("Error fetching encryption policy:", error);
+            setPolicyLoaded(false);
+        }
+    };
 
     const handleEncrypt = async () => {
         if (!plaintext.trim()) {
@@ -49,6 +96,52 @@ export default function CryptoPage() {
             setMessage("Decryption successful!");
         } catch (error: any) {
             setMessage(`Decryption error: ${error.message}`);
+        }
+    };
+
+    const handlePolicyEncrypt = async () => {
+        if (!policyPlaintext.trim()) {
+            setPolicyMessage("Please enter text to encrypt");
+            return;
+        }
+        if (!encryptionPolicy) {
+            setPolicyMessage("No encryption policy loaded. Create and commit one on the Admin page first.");
+            return;
+        }
+        try {
+            setPolicyMessage("Encrypting with policy...");
+            const [encrypted] = await doEncrypt(
+                [{ data: policyPlaintext, tags: [policyTag] }],
+                encryptionPolicy
+            );
+            setPolicyEncryptedData(encrypted);
+            setPolicyMessage("Policy-based encryption successful!");
+        } catch (error: any) {
+            console.error(error);
+            setPolicyMessage(`Policy encryption error: ${error.message}`);
+        }
+    };
+
+    const handlePolicyDecrypt = async () => {
+        if (!policyEncryptedData.trim()) {
+            setPolicyMessage("No policy-encrypted data to decrypt");
+            return;
+        }
+        if (!encryptionPolicy) {
+            setPolicyMessage("No encryption policy loaded. Create and commit one on the Admin page first.");
+            return;
+        }
+        try {
+            setPolicyMessage("Decrypting with policy...");
+            const [decrypted] = await doDecrypt(
+                [{ encrypted: policyEncryptedData, tags: [policyTag] }],
+                encryptionPolicy
+            );
+            setPolicyDecryptedData(decrypted as string);
+            setPolicyMessage("Policy-based decryption successful!");
+        } catch (error: any) {
+            console.error(error);
+            setPolicyMessage(`Policy decryption error: ${error.message}`);
         }
     };
 
@@ -133,6 +226,95 @@ export default function CryptoPage() {
                 <p data-testid="match-result">
                     <strong>Match: </strong>
                     {decryptedData === plaintext ? "✓ Decrypted text matches original!" : "✗ Text does not match"}
+                </p>
+            )}
+
+            <hr />
+
+            <h2>Policy-Based Encryption</h2>
+            <p>
+                Encrypts data using a committed PolicyEnabledEncryption:1 policy (SimpleTagBasedDecryption:1 contract).
+                Requires realm role <code>_tide_{"{tag}"}.encrypt</code> assigned to the user.
+            </p>
+            <p data-testid="policy-status">
+                <strong>Policy Status:</strong> {policyLoaded ? "Loaded" : "Not found"}
+                {!policyLoaded && (
+                    <span> - <a href="/admin">Create and commit an encryption policy on the Admin page</a></span>
+                )}
+                <button onClick={fetchEncryptionPolicy} style={{ marginLeft: "10px" }}>Reload Policy</button>
+            </p>
+
+            {policyMessage && <p data-testid="policy-message"><strong>{policyMessage}</strong></p>}
+
+            <div style={{ marginBottom: "20px" }}>
+                <div style={{ marginBottom: "10px" }}>
+                    <label>Tag: </label>
+                    <input
+                        type="text"
+                        value={policyTag}
+                        onChange={(e) => setPolicyTag(e.target.value)}
+                        placeholder="Tag name"
+                        data-testid="policy-tag-input"
+                        style={{ width: "200px" }}
+                    />
+                    <span style={{ marginLeft: "10px", color: "#666" }}>
+                        (requires realm role: <code>_tide_{policyTag}.encrypt</code>)
+                    </span>
+                </div>
+                <div style={{ marginBottom: "10px" }}>
+                    <label>Plaintext: </label>
+                    <textarea
+                        value={policyPlaintext}
+                        onChange={(e) => setPolicyPlaintext(e.target.value)}
+                        placeholder="Enter text to encrypt with policy"
+                        data-testid="policy-plaintext-input"
+                        rows={3}
+                        style={{ width: "100%", display: "block" }}
+                    />
+                </div>
+                <button onClick={handlePolicyEncrypt} data-testid="policy-encrypt-btn" disabled={!policyLoaded}>
+                    Encrypt with Policy
+                </button>
+            </div>
+
+            <h2>Policy Encrypted Result</h2>
+            <div style={{ marginBottom: "20px" }}>
+                <textarea
+                    value={policyEncryptedData}
+                    onChange={(e) => setPolicyEncryptedData(e.target.value)}
+                    placeholder="Policy-encrypted data will appear here (or paste encrypted data to decrypt)"
+                    data-testid="policy-encrypted-output"
+                    rows={3}
+                    style={{ width: "100%", display: "block" }}
+                />
+            </div>
+
+            <h2>Policy-Based Decryption</h2>
+            <p>
+                Requires realm role <code>_tide_{policyTag}.decrypt</code> assigned to the user.
+            </p>
+            <div style={{ marginBottom: "20px" }}>
+                <button onClick={handlePolicyDecrypt} data-testid="policy-decrypt-btn" disabled={!policyLoaded}>
+                    Decrypt with Policy
+                </button>
+            </div>
+
+            <h2>Policy Decrypted Result</h2>
+            <div style={{ marginBottom: "20px" }}>
+                <textarea
+                    value={policyDecryptedData}
+                    placeholder="Policy-decrypted data will appear here"
+                    data-testid="policy-decrypted-output"
+                    rows={3}
+                    style={{ width: "100%", display: "block" }}
+                    readOnly
+                />
+            </div>
+
+            {policyDecryptedData && policyPlaintext && (
+                <p data-testid="policy-match-result">
+                    <strong>Match: </strong>
+                    {policyDecryptedData === policyPlaintext ? "✓ Decrypted text matches original!" : "✗ Text does not match"}
                 </p>
             )}
         </div>

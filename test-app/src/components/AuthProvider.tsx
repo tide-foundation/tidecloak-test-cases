@@ -1,7 +1,9 @@
 "use client";
 
 import { createContext, useEffect, useState, ReactNode } from "react";
-import { IAMService, BaseTideRequest } from "@tidecloak/js";
+import { IAMService } from "@tidecloak/js";
+import { Cryptide, Models, Clients, Tools, Contracts } from "tide-js";
+const BaseTideRequest = Models.BaseTideRequest;
 import { initTcData } from "@/lib/tidecloakConfig";
 
 export enum Status {
@@ -15,8 +17,18 @@ interface EncryptPayload {
     tags: string[];
 }
 
+interface DraftEncryptPayload {
+    data: Uint8Array;
+    tags: string[];
+}
+
 interface DecryptPayload {
     encrypted: string;
+    tags: string[];
+}
+
+interface DraftDecryptPayload {
+    encrypted: Uint8Array;
     tags: string[];
 }
 
@@ -28,7 +40,7 @@ interface AuthContextType {
     tokenRoles: string[];
     getToken: () => Promise<string>;
     refreshToken: () => Promise<void>;
-    initializeTideRequest: (request: BaseTideRequest) => Promise<BaseTideRequest>;
+    initializeTideRequest: (request: Models.BaseTideRequest) => Promise<Models.BaseTideRequest>;
     approveTideRequests: (requests: { id: string, request: Uint8Array }[]) => Promise<{
         id: string;
         approved?: { request: Uint8Array };
@@ -36,8 +48,12 @@ interface AuthContextType {
         pending?: boolean;
     }[]>;
     executeTideRequest: (request: Uint8Array) => Promise<Uint8Array[]>;
-    doEncrypt: (payloads: EncryptPayload[]) => Promise<string[]>;
-    doDecrypt: (payloads: DecryptPayload[]) => Promise<(string | Uint8Array)[]>;
+    doEncrypt: (payloads: EncryptPayload[], decryptionPolicy?: Uint8Array | null) => Promise<string[]>;
+    doDecrypt: (payloads: DecryptPayload[], decryptionPolicy?: Uint8Array | null) => Promise<(string | Uint8Array)[]>;
+    doDraftEncryption: (payloads: DraftEncryptPayload[]) => Promise<Uint8Array>;
+    doCommitEncryption: (request: Uint8Array, policy: Uint8Array) => Promise<Uint8Array[]>;
+    doDraftDecryption: (data: DraftDecryptPayload[]) => Promise<Uint8Array>;
+    doCommitDecryption: (request: Uint8Array, policy: Uint8Array) => Promise<Uint8Array[]>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -113,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         updateTokenRoles();
     };
 
-    const initializeTideRequest = async (request: BaseTideRequest): Promise<BaseTideRequest> => {
+    const initializeTideRequest = async (request: Models.BaseTideRequest): Promise<Models.BaseTideRequest> => {
         return BaseTideRequest.decode(await IAMService._tc?.createTideRequest(request.encode()) as any);
     };
 
@@ -139,16 +155,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return await IAMService._tc?.executeSignRequest(request) as any;
     };
 
-    const doEncrypt = async (payloads: EncryptPayload[]): Promise<string[]> => {
-        return await IAMService.doEncrypt(payloads) as any;
+    const doEncrypt = async (payloads: EncryptPayload[], decryptionPolicy?: Uint8Array | null): Promise<string[]> => {
+        return await (IAMService as any).doEncrypt(payloads, decryptionPolicy);
     };
 
-    const doDecrypt = async (payloads: DecryptPayload[]): Promise<(string | Uint8Array)[]> => {
-        return await IAMService.doDecrypt(payloads);
+    const doDecrypt = async (payloads: DecryptPayload[], decryptionPolicy?: Uint8Array | null): Promise<(string | Uint8Array)[]> => {
+        return await (IAMService as any).doDecrypt(payloads, decryptionPolicy);
+    };
+
+    const doDraftEncryption = async (payloads: DraftEncryptPayload[]): Promise<Uint8Array> => {
+        return await (IAMService as any).doDraftEncryption(payloads);
+    };
+
+    const doCommitEncryption = async (request: Uint8Array, policy: Uint8Array): Promise<Uint8Array[]> => {
+        return await (IAMService as any).doCommitEncryption(request, policy);
+    };
+
+    const doDraftDecryption = async (data: DraftDecryptPayload[]): Promise<Uint8Array> => {
+        return await (IAMService as any).doDraftDecryption(data);
+    };
+
+    const doCommitDecryption = async (request: Uint8Array, policy: Uint8Array): Promise<Uint8Array[]> => {
+        return await (IAMService as any).doCommitDecryption(request, policy);
     };
 
     return (
-        <AuthContext.Provider value={{ isAuthenticated, isLoading, vuid, userId, tokenRoles, getToken, refreshToken, initializeTideRequest, approveTideRequests, executeTideRequest, doEncrypt, doDecrypt }}>
+        <AuthContext.Provider value={{ isAuthenticated, isLoading, vuid, userId, tokenRoles, getToken, refreshToken, initializeTideRequest, approveTideRequests, executeTideRequest, doEncrypt, doDecrypt, doDraftEncryption, doCommitEncryption, doDraftDecryption, doCommitDecryption }}>
             {children}
         </AuthContext.Provider>
     );

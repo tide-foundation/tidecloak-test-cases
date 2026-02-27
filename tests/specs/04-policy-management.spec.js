@@ -132,7 +132,7 @@ test.describe('F4: Policy Management', () => {
 
     test('When: I create a policy with threshold 2 for the TestRole', async ({ page }) => {
         const takeScreenshot = createScreenshotHelper(page, 'F4_create_policy');
-        const createPolicyTimeoutMs = 90_000;
+        const createPolicyTimeoutMs = 10_000;
         /** @type {string[]} */
         const netLog = [];
         const pushNetLog = (line) => {
