@@ -101,6 +101,15 @@ jobs:
           path: heimdall
           token: ${{ secrets.CHECKOUT_TOKEN || secrets.GH_TOKEN || github.token }}
 
+      # Clone tide-js for staging tests
+      - name: Checkout tide-js
+        if: env.TIDE_ENV == 'staging'
+        uses: actions/checkout@v4
+        with:
+          repository: tide-foundation/tide-js
+          path: tide-js
+          token: ${{ secrets.CHECKOUT_TOKEN || secrets.GH_TOKEN || github.token }}
+
       - name: Verify Docker is available
         run: |
           docker --version
