@@ -157,7 +157,7 @@ jobs:
           rm -rf node_modules/asgard-tide
           ln -s ${{ github.workspace }}/asgard node_modules/asgard-tide
           rm -rf node_modules/@tide/js
-          ln -s ${{ github.workspace }}/@tide/js node_modules/@tide/js
+          ln -s ${{ github.workspace }}/tide-js node_modules/@tide/js
           npm run build
           echo "heimdall-tide built successfully"
 
