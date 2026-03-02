@@ -139,6 +139,13 @@ jobs:
           echo "Building asgard-tide..."
           cd asgard && npm install && npm run build
           echo "asgard-tide built successfully"
+          
+      - name: Build tide-js
+        if: env.TIDE_ENV == 'staging'
+        run: |
+          echo "Building tide-js..."
+          cd tide-js && npm install && npm run build
+          echo "tide-js built successfully"
 
       # Build heimdall-tide for staging
       - name: Build heimdall-tide
@@ -149,6 +156,8 @@ jobs:
           npm install
           rm -rf node_modules/asgard-tide
           ln -s ${{ github.workspace }}/asgard node_modules/asgard-tide
+          rm -rf node_modules/tide-js
+          ln -s ${{ github.workspace }}/tide-js node_modules/tide-js
           npm run build
           echo "heimdall-tide built successfully"
 
