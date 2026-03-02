@@ -19,8 +19,6 @@ public class Contract : IAccessPolicy
 	private const string BatchAmounts = "batch amounts";
 	private const string Process = "process";
 	
-	private static string[] AllTags = [Ingredients, BatchAmounts, Process];
-	
 	private const string Executive = "executive";
 	private const string FactoryOperator = "factoryoperator";
 	private const string ProcurementOfficer = "procurementofficer";
@@ -142,11 +140,7 @@ public class Contract : IAccessPolicy
 	
 	private static bool IsAllowedTag(string tag)
 	{
-		foreach (var allowed in AllTags)
-		{
-			if (tag == allowed) return true;
-		}
-		return false;
+		return tag == Ingredients || tag == BatchAmounts || tag == Process;
 	}
 	
 	private static int CountWithRole(List<DokenDto> approvers, string role)
@@ -168,4 +162,4 @@ public class Contract : IAccessPolicy
 		return true;
 	}
 }`
-export const contractid = "2E5162FBC87023B1E076FE8439A4A5345FEC7BED4DF74656878E2DF7F45A1996E83B9F697DFA9A0A1D53720E7B5F83E05356E92231469D7E36838DB8B1B8B450"
+export const contractid = "7F14B6B8D97836DCE980F7792821EBAC8C5BAFB781DADF923CA95096B6CBB5529F0A6259B3F5E09EB9C95FD390D02779882E4E99303387149E083F9A9BF1C1E9"
