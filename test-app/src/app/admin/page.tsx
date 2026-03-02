@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { IAMService } from "@tidecloak/js";
-import { Cryptide, Models, Clients } from "tide-js";
+import { Cryptide, Models, Clients } from "@tide/js";
 const Policy = Models.Policy;
 const ExecutionType = Models.ExecutionType;
 const ApprovalType = Models.ApprovalType;

@@ -1,6 +1,6 @@
 import { db } from './connection';
 import { base64ToBytes, bytesToBase64 } from '../tideSerialization';
-import { Models, Contracts } from "tide-js";
+import { Models, Contracts } from "@tide/js";
 const Policy = Models.Policy;
 type Policy = InstanceType<typeof Policy>;
 const GenericResourceAccessThresholdRoleContract = Contracts.GenericResourceAccessThresholdRoleContract;

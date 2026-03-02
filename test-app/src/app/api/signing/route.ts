@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/database/connection";
 import { base64ToBytes, bytesToBase64 } from "@/lib/tideSerialization";
-import { Models, Contracts } from "tide-js";
+import { Models, Contracts } from "@tide/js";
 const BaseTideRequest = Models.BaseTideRequest;
 const Policy = Models.Policy;
 type Policy = InstanceType<typeof Policy>;

@@ -1,5 +1,5 @@
 import { getAuthServerUrl, getRealm, getResource, getVendorId, initTcData } from "./tidecloakConfig";
-import { Models } from "tide-js";
+import { Models } from "@tide/js";
 const Policy = Models.Policy;
 type Policy = InstanceType<typeof Policy>;
 import { base64ToBytes } from "./tideSerialization";

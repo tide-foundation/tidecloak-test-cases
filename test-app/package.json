@@ -8,10 +8,10 @@
     "start": "next start"
   },
   "dependencies": {
-    "@tidecloak/js": "^0.13.9",
-    "asgard-tide": "0.12.47",
+    "@tidecloak/js": "file:~/tidecloak-js/packages/tidecloak-js",
+    "@tide/js": "file:~/project/tide-js",
     "better-sqlite3": "^11.8.1",
-    "heimdall-tide": "0.12.47",
+    "heimdall-tide": "file:~/heimdall",
     "jose": "^6.1.3",
     "next": "16.1.4",
     "react": "19.2.3",

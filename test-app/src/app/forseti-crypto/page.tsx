@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { IAMService } from "@tidecloak/js";
-import { Models } from "tide-js";
+import { Models } from "@tide/js";
 const Policy = Models.Policy;
 import { useAuth } from "@/hooks/useAuth";
 import { base64ToBytes, bytesToBase64 } from "@/lib/tideSerialization";
