@@ -218,6 +218,18 @@ jobs:
           echo "TIDEJS_PATH=${{ github.workspace }}/tide-js" >> $GITHUB_ENV
 
 
+      # test-app/package.json uses file:~/... paths for local packages.
+      # In CI, ~ resolves to /home/runner but repos are in $GITHUB_WORKSPACE.
+      # Create symlinks so npm can find the built packages.
+      - name: Create local package symlinks for test-app
+        if: env.TIDE_ENV == 'staging'
+        run: |
+          mkdir -p ~/tidecloak-js/packages
+          ln -s ${{ github.workspace }}/tidecloak-js/packages/tidecloak-js ~/tidecloak-js/packages/tidecloak-js
+          mkdir -p ~/project
+          ln -s ${{ github.workspace }}/tide-js ~/project/tide-js
+          ln -s ${{ github.workspace }}/heimdall ~/heimdall
+
       - name: Install test-app dependencies
         run: |
           cd test-app
