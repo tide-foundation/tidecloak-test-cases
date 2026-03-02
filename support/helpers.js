@@ -685,6 +685,7 @@ function getTideCloakPackageSource(packageName) {
         '@tidecloak/verify': 'TIDECLOAK_VERIFY_PATH',
         '@tidecloak/create-nextjs': 'TIDECLOAK_CREATE_NEXTJS_PATH',
         '@tidecloak/js': 'TIDECLOAK_JS_PATH',
+        '@tide/js': 'TIDEJS_PATH'
     };
 
     const envVar = envVarMap[packageName];
