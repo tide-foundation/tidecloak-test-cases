@@ -215,6 +215,8 @@ jobs:
           echo "TIDECLOAK_JS_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-js" >> $GITHUB_ENV
           echo "HEIMDALL_PATH=${{ github.workspace }}/heimdall" >> $GITHUB_ENV
           echo "ASGARD_PATH=${{ github.workspace }}/asgard" >> $GITHUB_ENV
+          echo "TIDEJS_PATH=${{ github.workspace }}/tide-js" >> $GITHUB_ENV
+
 
       - name: Install test-app dependencies
         run: |
@@ -412,6 +414,7 @@ jobs:
           echo "TIDECLOAK_JS_PATH=${{ github.workspace }}/tidecloak-js/packages/tidecloak-js" >> $GITHUB_ENV
           echo "HEIMDALL_PATH=${{ github.workspace }}/heimdall" >> $GITHUB_ENV
           echo "ASGARD_PATH=${{ github.workspace }}/asgard" >> $GITHUB_ENV
+          echo "TIDEJS_PATH=${{ github.workspace }}/tide-js" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: npm install
