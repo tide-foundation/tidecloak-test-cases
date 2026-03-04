@@ -483,9 +483,16 @@ test.describe('F10: Forseti Policy-Based Encryption', () => {
             takeScreenshot,
         });
 
-        // Refresh token to get executive role into Doken
-        await page.getByRole('button', { name: 'Refresh Token' }).click();
-        await page.waitForTimeout(2000);
+        // Refresh token until executive role appears in Doken
+        const tokenRoles = page.locator('[data-testid="token-roles"]');
+        for (let attempt = 0; attempt < 5; attempt++) {
+            await page.getByRole('button', { name: 'Refresh Token' }).click();
+            await page.waitForTimeout(2000);
+            const rolesText = await tokenRoles.textContent();
+            if (rolesText && rolesText.includes('executive')) break;
+            console.log(`Admin2 token refresh attempt ${attempt + 1}: executive role not yet present`);
+        }
+        await expect(tokenRoles).toContainText('executive', { timeout: 5000 });
 
         await page.goto(`${config.BASE_URL}/forseti-crypto`, { waitUntil: 'domcontentloaded', timeout: 90000 });
         await expect(page.getByText('Forseti Policy-Based Encryption')).toBeVisible({ timeout: 15000 });
