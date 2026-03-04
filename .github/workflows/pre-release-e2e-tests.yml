@@ -156,8 +156,8 @@ jobs:
           npm install
           rm -rf node_modules/asgard-tide
           ln -s ${{ github.workspace }}/asgard node_modules/asgard-tide
-          rm -rf node_modules/@tide/js
-          ln -s ${{ github.workspace }}/tide-js node_modules/@tide/js
+          rm -rf node_modules/@tideorg/js
+          ln -s ${{ github.workspace }}/tide-js node_modules/@tideorg/js
           npm run build
           echo "heimdall-tide built successfully"
 
@@ -228,7 +228,7 @@ jobs:
           node -e "
             const pkg = require('./package.json');
             pkg.dependencies['@tidecloak/js'] = 'file:../tidecloak-js/packages/tidecloak-js';
-            pkg.dependencies['@tide/js'] = 'file:../tide-js';
+            pkg.dependencies['@tideorg/js'] = 'file:../tide-js';
             pkg.dependencies['heimdall-tide'] = 'file:../heimdall';
             require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
