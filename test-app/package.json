@@ -8,12 +8,13 @@
     "start": "next start"
   },
   "dependencies": {
-    "@tidecloak/js": "file:~/tidecloak-js/packages/tidecloak-js",
     "@tide/js": "file:~/project/tide-js",
+    "@tidecloak/js": "file:~/tidecloak-js/packages/tidecloak-js",
     "better-sqlite3": "^11.8.1",
     "heimdall-tide": "file:~/heimdall",
     "jose": "^6.1.3",
     "next": "16.1.4",
+    "oauth2-dpop": "^1.0.0",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
