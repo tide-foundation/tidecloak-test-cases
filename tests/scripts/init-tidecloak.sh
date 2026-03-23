@@ -49,6 +49,8 @@ ADMIN_ROLE_NAME="tide-realm-admin"
 KC_USER="${KC_USER:-admin}"
 KC_PASSWORD="${KC_PASSWORD:-password}"
 CLIENT_NAME="${CLIENT_NAME:-myclient}"
+DPOP_CLIENT_NAME="${DPOP_CLIENT_NAME:-mydpopclient}"
+DPOP_ADAPTER_OUTPUT_PATH="${DPOP_ADAPTER_OUTPUT_PATH:-$REPO_ROOT/test-app/data/tidecloak-dpop.json}"
 
 CURL_OPTS="-f"
 if [[ "$TIDECLOAK_LOCAL_URL" == https://* ]]; then
@@ -100,6 +102,7 @@ TMP_REALM_JSON="$(mktemp)"
 cp "$REALM_JSON_PATH" "$TMP_REALM_JSON"
 sed -i "s|http://localhost:3000|$CLIENT_APP_URL|g" "$TMP_REALM_JSON"
 sed -i "s|nextjs-test|$REALM_NAME|g" "$TMP_REALM_JSON"
+sed -i "s|mydpopclient|$DPOP_CLIENT_NAME|g" "$TMP_REALM_JSON"
 sed -i "s|myclient|$CLIENT_NAME|g" "$TMP_REALM_JSON"
 
 # Create realm
@@ -238,6 +241,27 @@ fi
 
 echo "✅ Adapter config saved to $ADAPTER_OUTPUT_PATH"
 log_info "  auth-server-url: $TIDECLOAK_EXTERNAL_URL"
+
+# Fetch DPoP client adapter config
+TOKEN="$(get_admin_token)"
+echo "📥 Fetching DPoP adapter config…"
+DPOP_CLIENT_UUID=$(curl -s $CURL_OPTS -X GET "${TIDECLOAK_LOCAL_URL}/admin/realms/${REALM_NAME}/clients?clientId=${DPOP_CLIENT_NAME}" \
+    -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id')
+
+mkdir -p "$(dirname "$DPOP_ADAPTER_OUTPUT_PATH")"
+
+curl -s $CURL_OPTS -X GET "${TIDECLOAK_LOCAL_URL}/admin/realms/${REALM_NAME}/vendorResources/get-installations-provider?clientId=${DPOP_CLIENT_UUID}&providerId=keycloak-oidc-keycloak-json" \
+    -H "Authorization: Bearer $TOKEN" > "$DPOP_ADAPTER_OUTPUT_PATH"
+
+# Inject useDPoP config
+TMP_DPOP_JSON="$(mktemp)"
+jq '. + {"useDPoP": {"mode": "strict", "alg": "ES256"}}' "$DPOP_ADAPTER_OUTPUT_PATH" > "$TMP_DPOP_JSON" && mv "$TMP_DPOP_JSON" "$DPOP_ADAPTER_OUTPUT_PATH"
+
+if [ "$TIDECLOAK_LOCAL_URL" != "$TIDECLOAK_EXTERNAL_URL" ]; then
+    sed -i "s|$TIDECLOAK_LOCAL_URL|$TIDECLOAK_EXTERNAL_URL|g" "$DPOP_ADAPTER_OUTPUT_PATH"
+fi
+
+echo "✅ DPoP adapter config saved to $DPOP_ADAPTER_OUTPUT_PATH"
 
 rm -f "$TMP_REALM_JSON"
 

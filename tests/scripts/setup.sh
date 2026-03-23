@@ -478,6 +478,7 @@ if [ -f "$TIDECLOAK_JSON_PATH" ]; then
     if [ "$FULL_REINIT" = true ]; then
         log_info "Re-initializing Tidecloak (--full flag)..."
         rm "$TIDECLOAK_JSON_PATH"
+        rm -f "$TEST_APP_DIR/data/tidecloak-dpop.json"
         chmod +x init-tidecloak.sh
         export ADAPTER_OUTPUT_PATH="$TIDECLOAK_JSON_PATH"
         ./init-tidecloak.sh
@@ -487,6 +488,7 @@ if [ -f "$TIDECLOAK_JSON_PATH" ]; then
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             log_info "Re-initializing Tidecloak..."
             rm "$TIDECLOAK_JSON_PATH"
+            rm -f "$TEST_APP_DIR/data/tidecloak-dpop.json"
             chmod +x init-tidecloak.sh
             export ADAPTER_OUTPUT_PATH="$TIDECLOAK_JSON_PATH"
             ./init-tidecloak.sh
