@@ -10,7 +10,7 @@ export async function GET() {
         status: 200,
         headers: {
             "Content-Type": "text/html",
-            "Content-Security-Policy": "default-src 'self'; script-src 'unsafe-inline'",
+            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'sha256-utc6UrebuHOyLd/2aiMXS/p1EDy9UZBDe/XEMKDw9Mc='; style-src 'self' 'sha256-F7OJTdJYct4J+cQfuJUoDauitndqt8pAc8EbA8gwDPU='",
             "Allow-CSP-From": "*",
         },
     });
