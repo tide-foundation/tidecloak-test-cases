@@ -1,4 +1,4 @@
-# 🌊 Tide Cloak UI Testing Suite
+# 🌊 Tide Cloak UI Testing Suite 
 
 [![Tests](https://img.shields.io/badge/tests-pytest--bdd-green)](https://pytest-bdd.readthedocs.io/)
 [![Browser](https://img.shields.io/badge/browser-playwright-blue)](https://playwright.dev/python/)
