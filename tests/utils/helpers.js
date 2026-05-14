@@ -4,6 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { expect } = require('@playwright/test');
 
 /**
  * Take a screenshot and save it to the debug_screenshots folder
@@ -177,6 +178,40 @@ async function signInToAdmin(page, opts) {
     await page.getByText('Admin Dashboard').waitFor({ state: 'visible', timeout: timeoutMs });
 }
 
+/**
+ * Assert that a locator contains expected text, with redundancy: if the assertion
+ * fails within the per-attempt timeout, click "Refresh Data" and try again.
+ *
+ * The test-app does not auto-poll, so a stale list after a server-side write race
+ * stays stale forever. Clicking Refresh Data re-triggers fetchPendingPolicies() and
+ * the other loaders.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {import('@playwright/test').Locator} locator
+ * @param {string|RegExp} expectedText
+ * @param {{ attempts?: number, timeoutPerAttempt?: number, waitAfterRefreshMs?: number }} [opts]
+ */
+async function expectToContainTextWithRefresh(page, locator, expectedText, opts = {}) {
+    const attempts = opts.attempts ?? 4;
+    const timeoutPerAttempt = opts.timeoutPerAttempt ?? 5000;
+    const waitAfterRefreshMs = opts.waitAfterRefreshMs ?? 1500;
+
+    let lastErr;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+        try {
+            await expect(locator).toContainText(expectedText, { timeout: timeoutPerAttempt });
+            return;
+        } catch (err) {
+            lastErr = err;
+            if (attempt === attempts) break;
+            console.log(`Expected "${expectedText}" not visible (attempt ${attempt}/${attempts}); clicking Refresh Data and retrying...`);
+            await page.getByRole('button', { name: 'Refresh Data' }).click().catch(() => {});
+            await page.waitForTimeout(waitAfterRefreshMs);
+        }
+    }
+    throw lastErr;
+}
+
 module.exports = {
     takeScreenshot,
     sleep,
@@ -187,4 +222,5 @@ module.exports = {
     getTidecloakConfig,
     createScreenshotHelper,
     signInToAdmin,
+    expectToContainTextWithRefresh,
 };

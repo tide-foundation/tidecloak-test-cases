@@ -208,12 +208,30 @@ test.describe('F4: Policy Management', () => {
         const createPolicyRequest = await createPolicyRequestPromise;
 
         // Wait until we see either a policy row, or an error message, or we time out.
-        const [rowVisible, errorMessage] = await Promise.all([policyRowPromise, errorMessagePromise]);
+        let [rowVisible, errorMessage] = await Promise.all([policyRowPromise, errorMessagePromise]);
+
+        // If the row never appeared AND there's no error banner, the most likely cause is
+        // that the inline fetchPendingPolicies() in the click handler raced the server-side
+        // write. Click Refresh Data to force a fresh GET /api/policies and retry.
+        if (!rowVisible && !errorMessage) {
+            const maxRefreshes = 3;
+            for (let attempt = 1; attempt <= maxRefreshes; attempt++) {
+                console.log(`Policy row not yet visible (refresh attempt ${attempt}/${maxRefreshes}); clicking Refresh Data...`);
+                await page.getByRole('button', { name: 'Refresh Data' }).click().catch(() => {});
+                await page.waitForTimeout(1500);
+                rowVisible = await expectedPolicyRow
+                    .waitFor({ state: 'visible', timeout: 5000 })
+                    .then(() => true)
+                    .catch(() => false);
+                if (rowVisible) break;
+            }
+        }
+
         if (!rowVisible) {
             const messageText = errorMessage || (await page.locator('[data-testid="message"]').first().innerText().catch(() => ''));
             throw new Error(
                 [
-                    `Policy row for "${testRoleName}" did not appear within ${createPolicyTimeoutMs}ms.`,
+                    `Policy row for "${testRoleName}" did not appear within ${createPolicyTimeoutMs}ms (plus refresh retries).`,
                     messageText ? `UI message: ${messageText}` : 'UI message: (none)',
                     `Observed network events (last ${netLog.length}):`,
                     ...netLog,

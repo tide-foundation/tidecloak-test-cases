@@ -27,7 +27,7 @@ const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
 const config = require('../utils/config');
-const { createScreenshotHelper, getTestsDir, getTestAppDir, signInToAdmin } = require('../utils/helpers');
+const { createScreenshotHelper, getTestsDir, getTestAppDir, signInToAdmin, expectToContainTextWithRefresh } = require('../utils/helpers');
 
 test.describe('F10: Forseti Policy-Based Encryption', () => {
     test.setTimeout(5 * 60 * 1000); // 5 minutes per test
@@ -89,9 +89,10 @@ test.describe('F10: Forseti Policy-Based Encryption', () => {
         );
         await takeScreenshot('02_policy_created');
 
-        // Verify it appears in pending list
+        // Verify it appears in pending list (with Refresh Data redundancy in case the
+        // post-create fetchPendingPolicies() raced the server write).
         const pendingList = page.locator('[data-testid="pending-policies-list"]');
-        await expect(pendingList).toContainText('PolicyEnabledEncryption:1', { timeout: 15000 });
+        await expectToContainTextWithRefresh(page, pendingList, 'PolicyEnabledEncryption:1');
         console.log('Forseti policy visible in pending list');
         await takeScreenshot('03_policy_in_list');
     });

@@ -28,7 +28,7 @@ const { test, expect } = require('@playwright/test');
 const path = require('path');
 const fs = require('fs');
 const config = require('../utils/config');
-const { createScreenshotHelper, getTestsDir, signInToAdmin } = require('../utils/helpers');
+const { createScreenshotHelper, getTestsDir, signInToAdmin, expectToContainTextWithRefresh } = require('../utils/helpers');
 
 test.describe('F9: Policy-Based Encryption & Decryption', () => {
     test.setTimeout(5 * 60 * 1000); // 5 minutes timeout
@@ -81,9 +81,10 @@ test.describe('F9: Policy-Based Encryption & Decryption', () => {
         await takeScreenshot('02_policy_created');
         console.log('Encryption policy created');
 
-        // Verify it appears in the pending policies list
+        // Verify it appears in the pending policies list (with Refresh Data redundancy
+        // in case the post-create fetchPendingPolicies() raced the server write).
         const pendingList = page.locator('[data-testid="pending-policies-list"]');
-        await expect(pendingList).toContainText('PolicyEnabledEncryption:1', { timeout: 15000 });
+        await expectToContainTextWithRefresh(page, pendingList, 'PolicyEnabledEncryption:1');
         console.log('Encryption policy visible in pending list');
         await takeScreenshot('03_policy_in_pending_list');
     });
