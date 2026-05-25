@@ -879,19 +879,37 @@ When('I sign up or sign in with Tide', async function() {
                                  postAuthUrl.includes('link-tide-account');
 
     if (this.appUrl && !isLinkAccountFlow && !isOnLinkAccountPage) {
-        // Only wait for app redirect if we're NOT in Link Account flow
+        // Wait for the full OAuth redirect chain to complete back to the app.
+        // For a brand-new user the Tide ORK first runs account enrollment (the
+        // "cmkOnly" voucher / CMK-generation step) BEFORE redirecting back through
+        // the TideCloak broker callback. In a headless browser that enrollment can
+        // take well over a minute, so a single short wait is flaky. Wait in stages
+        // with a generous budget instead.
         console.log('Waiting for OAuth redirect chain to complete...');
+
+        const onTideOrk = (href) => /tideprotocol\.com/.test(href);
+        const backAtApp = (href) =>
+            href.startsWith(this.appUrl) && !onTideOrk(href) && !href.includes('/realms/');
+
+        // Stage 1: leave the Tide ORK (enrollment / voucher finished). New-user
+        // CMK enrollment is the slow part, so give it the largest budget.
+        if (onTideOrk(this.page.url())) {
+            try {
+                await this.page.waitForURL(url => !onTideOrk(url.href), { timeout: 180000 });
+                console.log(`Left Tide ORK, now at: ${this.page.url()}`);
+            } catch (e) {
+                console.log(`Still on Tide ORK after enrollment wait: ${this.page.url()}`);
+            }
+        }
+
+        // Stage 2: arrive back at the app (through the broker callback and the
+        // /auth/redirect handoff, where the SDK exchanges the code and sets the
+        // session cookie before redirecting on).
         try {
-            await this.page.waitForURL(url => {
-                const href = url.href;
-                const isBackAtApp = href.startsWith(this.appUrl) &&
-                                   !href.includes('tideprotocol.com') &&
-                                   !href.includes('/realms/');
-                return isBackAtApp;
-            }, { timeout: 60000 });
+            await this.page.waitForURL(url => backAtApp(url.href), { timeout: 120000 });
             console.log(`Redirect complete, now at: ${this.page.url()}`);
         } catch (e) {
-            console.log('Redirect wait timed out, continuing...');
+            console.log(`Redirect wait timed out, continuing... (at ${this.page.url()})`);
         }
     } else {
         console.log('Link Account flow detected - skipping app redirect wait');

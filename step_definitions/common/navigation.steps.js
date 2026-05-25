@@ -301,7 +301,20 @@ Then('I see Dashboard heading', async function() {
         await this.page.waitForLoadState('networkidle').catch(() => {});
     }
 
-    await expect(this.page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 120000 });
+    const heading = this.page.getByRole('heading', { name: 'Dashboard' });
+
+    // The session cookie is set during the /auth/redirect handoff. If we navigated
+    // to /dashboard a hair before the cookie landed, the protected page renders the
+    // unauthenticated view. Reload once after a short grace period to pick up the
+    // freshly-set session before failing.
+    if (!(await heading.isVisible({ timeout: 10000 }).catch(() => false))) {
+        console.log('Dashboard heading not visible yet, reloading to pick up session...');
+        await this.page.waitForTimeout(3000);
+        await this.page.goto(`${this.appUrl}/dashboard`, { waitUntil: 'domcontentloaded' });
+        await this.page.waitForLoadState('networkidle').catch(() => {});
+    }
+
+    await expect(heading).toBeVisible({ timeout: 120000 });
     console.log('Dashboard heading visible');
 });
 
