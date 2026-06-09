@@ -184,8 +184,8 @@ test.describe('F2: Admin Handover - Link Tide Account', () => {
         }).trim();
         console.log(`Role assignment: ${roleResult}`);
 
-        // Approve and commit users change-set
-        console.log('Approving users change-set...');
+        // Approve and commit pending IGA change requests
+        console.log('Approving pending change requests...');
         const approveResult = execSync(`${scriptPath} -a users`, {
             encoding: 'utf-8',
             env: {

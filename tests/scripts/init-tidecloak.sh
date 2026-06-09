@@ -152,61 +152,89 @@ curl -s $CURL_OPTS -X POST "${TIDECLOAK_LOCAL_URL}/admin/realms/${REALM_NAME}/ve
     -H "Authorization: Bearer $TOKEN" > /dev/null 2>&1
 echo "✅ CustomAdminUIDomain updated + signed."
 
+# Drain all PENDING IGA change requests via the new change-request API:
+#   GET  /iga/change-requests?status=PENDING   -> list of CRs (id, actionType, ...)
+#   POST /iga/change-requests/{id}/authorize    -> record this admin's approval
+#   POST /iga/change-requests/{id}/commit        -> replay/apply the CR
+# firstAdmin mode (threshold=1, VRK-approved): toggle-iga-on auto-commits the
+# baseline defaults; anything still PENDING (e.g. provisioned clients) is
+# authorized+committed here. Idempotent: re-runs over whatever is still PENDING.
+# The optional $1 label is cosmetic (the new API is not typed by entity kind).
 approve_and_commit() {
-    local TYPE=$1
-    echo "🔄 Processing ${TYPE} change-sets..."
-    TOKEN="$(get_admin_token)"
+    local LABEL="${1:-pending}"
+    echo "🔄 Processing ${LABEL} change requests..."
 
-    # Get change-sets (don't use -f here as empty results are OK)
-    local requests
-    requests=$(curl -s -X GET "${TIDECLOAK_LOCAL_URL}/admin/realms/${REALM_NAME}/tide-admin/change-set/${TYPE}/requests" \
-        -H "Authorization: Bearer $TOKEN" 2>/dev/null || echo "[]")
+    local max_passes=10
+    local pass=0
+    while [ "$pass" -lt "$max_passes" ]; do
+        pass=$((pass + 1))
+        TOKEN="$(get_admin_token)"
 
-    # Check if there are any requests to process
-    local count
-    count=$(echo "$requests" | jq 'length' 2>/dev/null || echo "0")
+        # List PENDING change requests (don't use -f: an empty array is valid/OK).
+        local requests
+        requests=$(curl -s -X GET "${TIDECLOAK_LOCAL_URL}/admin/realms/${REALM_NAME}/iga/change-requests?status=PENDING" \
+            -H "Authorization: Bearer $TOKEN" 2>/dev/null || echo "[]")
 
-    if [ "$count" = "0" ] || [ "$count" = "" ]; then
-        echo "  No ${TYPE} change-sets to process"
-    else
-        echo "$requests" | jq -c '.[]' | while read -r req; do
-            payload=$(jq -n --arg id "$(echo "$req" | jq -r .draftRecordId)" \
-                            --arg cst "$(echo "$req" | jq -r .changeSetType)" \
-                            --arg at "$(echo "$req" | jq -r .actionType)" \
-                            '{changeSetId:$id,changeSetType:$cst,actionType:$at}')
+        local count
+        count=$(echo "$requests" | jq 'length' 2>/dev/null || echo "0")
 
-            # Sign the change-set
-            local sign_response
-            sign_response=$(curl -s -w "\n%{http_code}" -X POST "${TIDECLOAK_LOCAL_URL}/admin/realms/${REALM_NAME}/tide-admin/change-set/sign" \
+        if [ "$count" = "0" ] || [ "$count" = "" ]; then
+            if [ "$pass" -eq 1 ]; then
+                echo "  No ${LABEL} change requests to process"
+            fi
+            break
+        fi
+
+        echo "  Pass ${pass}: ${count} PENDING change request(s)"
+
+        local committed_any=false
+        local ids
+        ids=$(echo "$requests" | jq -r '.[].id')
+        local cr_id
+        while read -r cr_id; do
+            [ -z "$cr_id" ] && continue
+
+            # Authorize (record this admin's approval). 409 = already signed by
+            # this admin (or already authorized in a prior pass) — not fatal.
+            local auth_response auth_status
+            auth_response=$(curl -s -w "\n%{http_code}" -X POST "${TIDECLOAK_LOCAL_URL}/admin/realms/${REALM_NAME}/iga/change-requests/${cr_id}/authorize" \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
-                -d "$payload" 2>&1)
-            local sign_status=$(echo "$sign_response" | tail -1)
-            local sign_body=$(echo "$sign_response" | sed '$d')
-
-            if [[ ! "$sign_status" =~ ^2 ]]; then
-                log_error "Failed to sign ${TYPE} change-set (HTTP $sign_status): $(echo "$req" | jq -r .draftRecordId)"
-                log_error "Response: $sign_body"
+                -d '{}' 2>&1)
+            auth_status=$(echo "$auth_response" | tail -1)
+            if [[ ! "$auth_status" =~ ^2 ]] && [ "$auth_status" != "409" ]; then
+                log_error "Failed to authorize change request (HTTP $auth_status): $cr_id"
+                log_error "Response: $(echo "$auth_response" | sed '$d')"
                 return 1
             fi
 
-            # Commit the change-set
-            local commit_response
-            commit_response=$(curl -s -w "\n%{http_code}" -X POST "${TIDECLOAK_LOCAL_URL}/admin/realms/${REALM_NAME}/tide-admin/change-set/commit" \
+            # Commit (replay/apply). A CR that is dependency-blocked (412) is
+            # retried on a later pass once its prerequisite commits; treat 412 as
+            # soft (skip this pass), anything else non-2xx as fatal.
+            local commit_response commit_status
+            commit_response=$(curl -s -w "\n%{http_code}" -X POST "${TIDECLOAK_LOCAL_URL}/admin/realms/${REALM_NAME}/iga/change-requests/${cr_id}/commit" \
                 -H "Authorization: Bearer $TOKEN" \
-                -H "Content-Type: application/json" \
-                -d "$payload" 2>&1)
-            local commit_status=$(echo "$commit_response" | tail -1)
-            local commit_body=$(echo "$commit_response" | sed '$d')
-
-            if [[ ! "$commit_status" =~ ^2 ]]; then
-                log_error "Failed to commit ${TYPE} change-set (HTTP $commit_status): $(echo "$req" | jq -r .draftRecordId)"
-                log_error "Response: $commit_body"
+                -H "Content-Type: application/json" 2>&1)
+            commit_status=$(echo "$commit_response" | tail -1)
+            if [[ "$commit_status" =~ ^2 ]]; then
+                committed_any=true
+            elif [ "$commit_status" = "412" ]; then
+                echo "  Deferring change request $cr_id (dependency/threshold not yet met)"
+            else
+                log_error "Failed to commit change request (HTTP $commit_status): $cr_id"
+                log_error "Response: $(echo "$commit_response" | sed '$d')"
                 return 1
             fi
-        done
-    fi
-    echo "✅ ${TYPE^} change-sets done."
+        done <<< "$ids"
+
+        # No forward progress (everything left is deferred) — stop to avoid spinning.
+        if [ "$committed_any" = false ]; then
+            log_warn "  No further change requests could be committed (remaining are deferred)"
+            break
+        fi
+    done
+
+    echo "✅ ${LABEL} change requests done."
 }
 
 approve_and_commit clients

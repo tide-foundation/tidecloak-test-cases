@@ -210,56 +210,91 @@ assign_client_role() {
     echo "User '${username}' now has '${role_name}' role from client '${client_id}'"
 }
 
-# Function 5: Approve and commit change-sets
-# Usage: approve_and_commit <type>  (type: clients, users, roles, etc.)
+# Function 5: Approve and commit pending IGA change requests
+# Usage: approve_and_commit [type]  (the <type> label is cosmetic — the new
+#        change-request API is NOT typed by entity kind; ALL pending CRs for the
+#        realm are drained in one sweep)
 # Requires REALM_NAME environment variable
+#
+# Migrated to the new IGA change-request flow:
+#   GET  /iga/change-requests?status=PENDING   -> [ {id, actionType, ...}, ... ]
+#   POST /iga/change-requests/{id}/authorize    -> record this admin's approval
+#   POST /iga/change-requests/{id}/commit        -> replay/apply the CR
+# firstAdmin mode (threshold=1, VRK-approved). Idempotent; 409=already authorized,
+# 412=dependency/threshold not yet met (retried on a later pass).
 approve_and_commit() {
-    local type="$1"
+    local type="${1:-pending}"
 
-    if [[ -z "$REALM_NAME" || -z "$type" ]]; then
-        echo "Usage: approve_and_commit <type>" >&2
+    if [[ -z "$REALM_NAME" ]]; then
+        echo "Usage: approve_and_commit [type]" >&2
         echo "       Requires REALM_NAME environment variable" >&2
         return 1
     fi
 
     local realm_name="$REALM_NAME"
-    local token
-    token="$(get_admin_token)"
 
-    # Get change-sets
-    local requests
-    requests=$(curl -s -X GET "${TIDECLOAK_LOCAL_URL}/admin/realms/${realm_name}/tide-admin/change-set/${type}/requests" \
-        -H "Authorization: Bearer $token" 2>/dev/null || echo "[]")
+    local max_passes=10
+    local pass=0
+    while [ "$pass" -lt "$max_passes" ]; do
+        pass=$((pass + 1))
+        local token
+        token="$(get_admin_token)"
 
-    local count
-    count=$(echo "$requests" | jq 'length' 2>/dev/null || echo "0")
+        # List PENDING change requests (empty array is valid/OK — don't use -f).
+        local requests
+        requests=$(curl -s -X GET "${TIDECLOAK_LOCAL_URL}/admin/realms/${realm_name}/iga/change-requests?status=PENDING" \
+            -H "Authorization: Bearer $token" 2>/dev/null || echo "[]")
 
-    if [ "$count" = "0" ] || [ "$count" = "" ]; then
-        echo "No ${type} change-sets to process"
-        return 0
-    fi
+        local count
+        count=$(echo "$requests" | jq 'length' 2>/dev/null || echo "0")
 
-    echo "$requests" | jq -c '.[]' | while read -r req; do
-        local payload
-        payload=$(jq -n --arg id "$(echo "$req" | jq -r .draftRecordId)" \
-                        --arg cst "$(echo "$req" | jq -r .changeSetType)" \
-                        --arg at "$(echo "$req" | jq -r .actionType)" \
-                        '{changeSetId:$id,changeSetType:$cst,actionType:$at}')
+        if [ "$count" = "0" ] || [ "$count" = "" ]; then
+            if [ "$pass" -eq 1 ]; then
+                echo "No ${type} change requests to process"
+            fi
+            break
+        fi
 
-        # Sign the change-set
-        curl -s $CURL_OPTS -X POST "${TIDECLOAK_LOCAL_URL}/admin/realms/${realm_name}/tide-admin/change-set/sign" \
-            -H "Authorization: Bearer $token" \
-            -H "Content-Type: application/json" \
-            -d "$payload" > /dev/null 2>&1
+        local committed_any=false
+        local ids
+        ids=$(echo "$requests" | jq -r '.[].id')
+        local cr_id
+        while read -r cr_id; do
+            [ -z "$cr_id" ] && continue
 
-        # Commit the change-set
-        curl -s $CURL_OPTS -X POST "${TIDECLOAK_LOCAL_URL}/admin/realms/${realm_name}/tide-admin/change-set/commit" \
-            -H "Authorization: Bearer $token" \
-            -H "Content-Type: application/json" \
-            -d "$payload" > /dev/null 2>&1
+            # Authorize (record this admin's approval). 409 = already authorized.
+            local auth_status
+            auth_status=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${TIDECLOAK_LOCAL_URL}/admin/realms/${realm_name}/iga/change-requests/${cr_id}/authorize" \
+                -H "Authorization: Bearer $token" \
+                -H "Content-Type: application/json" \
+                -d '{}' 2>/dev/null)
+            if [[ ! "$auth_status" =~ ^2 ]] && [ "$auth_status" != "409" ]; then
+                echo "Failed to authorize change request (HTTP $auth_status): $cr_id" >&2
+                return 1
+            fi
+
+            # Commit (replay/apply). 412 = dependency/threshold not yet met; retry later.
+            local commit_status
+            commit_status=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${TIDECLOAK_LOCAL_URL}/admin/realms/${realm_name}/iga/change-requests/${cr_id}/commit" \
+                -H "Authorization: Bearer $token" \
+                -H "Content-Type: application/json" 2>/dev/null)
+            if [[ "$commit_status" =~ ^2 ]]; then
+                committed_any=true
+            elif [ "$commit_status" = "412" ]; then
+                : # deferred — retried on a later pass
+            else
+                echo "Failed to commit change request (HTTP $commit_status): $cr_id" >&2
+                return 1
+            fi
+        done <<< "$ids"
+
+        # No forward progress — stop to avoid spinning.
+        if [ "$committed_any" = false ]; then
+            break
+        fi
     done
 
-    echo "${type^} change-sets processed"
+    echo "${type^} change requests processed"
 }
 
 # Function 6: Setup user (create + invite link, optionally assign role)
@@ -369,7 +404,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             echo "  -i, --invite <username>  Get Tide invite link"
             echo "  -r, --role <username>    Assign tide-realm-admin role to user"
             echo "  --client-role <username> <client_id> <role_name>  Assign client role to user"
-            echo "  -a, --approve <type>     Approve and commit change-sets (users, clients, etc.)"
+            echo "  -a, --approve [type]     Approve and commit pending IGA change requests (type label is cosmetic)"
             echo "  -c, --confirm <username> Check if user is linked"
             echo "  -h, --help               Show this help"
             echo ""
