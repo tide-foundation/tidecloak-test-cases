@@ -212,6 +212,52 @@ async function expectToContainTextWithRefresh(page, locator, expectedText, opts 
     throw lastErr;
 }
 
+/**
+ * Approve & commit the first pending change request in a given section, driving the
+ * Tide enclave approval popup ("Y" then "Submit Approvals") and waiting for the
+ * "committed" confirmation message.
+ *
+ * Under IGA every governed authorization-graph action (CREATE_ROLE, GRANT_ROLES, ...)
+ * is captured as a change request and only takes effect once approved and committed
+ * through this enclave ceremony — there is no server-side shortcut for role changes.
+ * CREATE_* role requests surface under "Client Change Requests"; user grants surface
+ * under "User Change Requests".
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {{
+ *   section?: string,
+ *   takeScreenshot?: ((name: string) => Promise<void>) | null,
+ *   buttonTimeoutMs?: number,
+ *   committedTimeoutMs?: number,
+ * }} [opts]
+ */
+async function approveAndCommitChangeRequest(page, opts = {}) {
+    const section = opts.section ?? 'User Change Requests';
+    const buttonTimeoutMs = opts.buttonTimeoutMs ?? 15000;
+    const committedTimeoutMs = opts.committedTimeoutMs ?? 30000;
+
+    const approveButton = page
+        .locator(`h2:has-text("${section}")`).locator('..')
+        .getByRole('button', { name: 'Approve & Commit' }).first();
+    await expect(approveButton, `No "Approve & Commit" button under "${section}"`)
+        .toBeVisible({ timeout: buttonTimeoutMs });
+
+    const popupPromise = page.waitForEvent('popup', { timeout: 60000 });
+    await approveButton.click();
+
+    const popup = await popupPromise;
+    await popup.waitForLoadState('load');
+    if (opts.takeScreenshot) await opts.takeScreenshot('approval_popup');
+
+    // force: true bypasses the popup's main-content overlay.
+    await popup.getByRole('button', { name: 'Y' }).click({ force: true });
+    await popup.getByRole('button', { name: 'Submit Approvals' }).click({ force: true });
+    await popup.close().catch(() => {});
+
+    await expect(page.locator('[data-testid="message"]').first())
+        .toContainText(/committed/i, { timeout: committedTimeoutMs });
+}
+
 module.exports = {
     takeScreenshot,
     sleep,
@@ -223,4 +269,5 @@ module.exports = {
     createScreenshotHelper,
     signInToAdmin,
     expectToContainTextWithRefresh,
+    approveAndCommitChangeRequest,
 };

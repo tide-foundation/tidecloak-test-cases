@@ -5,7 +5,6 @@ type Policy = InstanceType<typeof Policy>;
 import { base64ToBytes } from "./tideSerialization";
 
 const getTcUrl = () => `${getAuthServerUrl()}/admin/realms/${getRealm()}`;
-const getNonAdminTcUrl = () => `${getAuthServerUrl()}/realms/${getRealm()}`;
 
 export interface RoleRepresentation {
     id?: string;
@@ -21,23 +20,69 @@ export interface ClientRepresentation {
     description?: string;
 }
 
-export interface ChangeSetRequest {
-    changeSetId: string;
-    changeSetType: string;
-    actionType: string;
+// A change request (CR) as returned by the IGA change-request API
+// (GET /iga/change-requests). The new API is NOT typed by entity kind — a single
+// endpoint returns every pending CR and callers filter on `entityType`.
+export interface ChangeRequest {
+    id: string;
+    realmId?: string;
+    entityType: string;   // USER / ROLE / GROUP / CLIENT / CLIENT_SCOPE / ... / BATCH
+    entityId?: string;
+    actionType: string;   // GRANT_ROLES / CREATE_CLIENT / ADD_COMPOSITE / ...
+    status: string;       // PENDING / APPROVED / DENIED / CANCELLED
+    requestedBy?: string;
+    createdAt?: number;
+    threshold?: number;
+    authorizationCount?: number;
+    readyToCommit?: boolean;
+    requiredApproverRoles?: string[];
+    scopeMode?: string;
+    dependsOn?: string[];
+    blocked?: boolean;
+    blockedReason?: string;
+    [key: string]: any;
 }
 
-// Get admin policy from TideCloak (used for policy validation)
-export const getAdminPolicy = async (): Promise<Policy> => {
+// The Phase-1 payload the admin's Tide enclave must approve (two-phase multiAdmin
+// model). `requestModel` is a base64-serialized Policy:1 ModelRequest.
+export interface ApprovalModel {
+    changeRequestId: string;
+    actionType: string;
+    requiresApprovalPopup: boolean;
+    requestModel: string;
+}
+
+// Get the realm's admin (M0) policy from TideCloak (used for policy validation).
+// This is the role policy bound to the tide-realm-admin client role. Replaces the
+// removed unauthenticated /tide-policy-resources/admin-policy endpoint: it now needs
+// a manage-realm admin token and a tide-realm-admin role-id lookup first.
+export const getAdminPolicy = async (token: string): Promise<Policy> => {
     // Ensure config is loaded (important for server-side calls)
     await initTcData();
-    const url = `${getNonAdminTcUrl()}/tide-policy-resources/admin-policy`;
-    const response = await fetch(url);
+
+    // tide-realm-admin is a client role on the realm-management client.
+    const rmClient = await getClientByClientId("realm-management", token);
+    if (!rmClient) throw new Error("realm-management client not found");
+
+    const roleResponse = await fetch(`${getTcUrl()}/clients/${rmClient.id}/roles/tide-realm-admin`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!roleResponse.ok) {
+        throw new Error(`Error resolving tide-realm-admin role: ${await roleResponse.text()}`);
+    }
+    const adminRoleId = (await roleResponse.json()).id;
+
+    // The role policy bound to that role is the admin (M0) policy.
+    const response = await fetch(`${getTcUrl()}/iga/role-policies/role/${adminRoleId}`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+    });
     if (!response.ok) {
         throw new Error(`Error fetching admin policy: ${await response.text()}`);
     }
-    const policy = Policy.from(base64ToBytes(await response.text()));
-    return policy;
+    const { policy } = await response.json();
+    return Policy.from(base64ToBytes(policy));
 };
 
 // Get vendor ID for policy creation
@@ -115,101 +160,79 @@ export const createRoleForClient = async (roleName: string, description: string,
     }
 };
 
-// Get user change requests (drafts)
-export const getUserChangeRequests = async (token: string): Promise<{ data: any, retrievalInfo: ChangeSetRequest }[]> => {
-    const response = await fetch(`${getTcUrl()}/tide-admin/change-set/users/requests`, {
+// List change requests (PENDING by default). The IGA change-request API is not
+// typed by entity kind — this single endpoint returns every CR for the realm, and
+// callers bucket them by `entityType` (e.g. USER vs everything else).
+export const getPendingChangeRequests = async (token: string, status = "PENDING"): Promise<ChangeRequest[]> => {
+    const response = await fetch(`${getTcUrl()}/iga/change-requests?status=${status}`, {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
     });
     if (!response.ok) {
-        throw new Error(`Error getting user change requests: ${await response.text()}`);
+        throw new Error(`Error getting change requests: ${await response.text()}`);
     }
-    const json = await response.json();
-    return json.map((d: any) => ({
-        data: d,
-        retrievalInfo: {
-            changeSetId: d.draftRecordId,
-            changeSetType: d.changeSetType,
-            actionType: d.actionType
-        }
-    }));
+    return await response.json();
 };
 
-// Get client (policy) change requests
-export const getClientChangeRequests = async (token: string): Promise<{ data: any, retrievalInfo: ChangeSetRequest }[]> => {
-    const response = await fetch(`${getTcUrl()}/tide-admin/change-set/clients/requests`, {
+// Phase 1 of the two-phase multiAdmin approval: fetch the Policy:1 ModelRequest
+// that the admin's Tide enclave must sign. Returns 409 (NOT_MULTI_ADMIN) on
+// firstAdmin / Tideless / simple realms, where the single-phase authorize is used.
+export const getApprovalModel = async (crId: string, token: string): Promise<ApprovalModel> => {
+    const response = await fetch(`${getTcUrl()}/iga/change-requests/${crId}/approval-model`, {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
     });
     if (!response.ok) {
-        throw new Error(`Error getting client change requests: ${await response.text()}`);
+        throw new Error(`Error getting approval model: ${await response.text()}`);
     }
-    const json = await response.json();
-    return json.map((d: any) => ({
-        data: d,
-        retrievalInfo: {
-            changeSetId: d.draftRecordId,
-            changeSetType: d.changeSetType,
-            actionType: d.actionType
-        }
-    }));
+    return await response.json();
 };
 
-// Get raw change set request for signing
-export const getRawChangeSetRequest = async (changeSet: ChangeSetRequest, token: string): Promise<Uint8Array> => {
-    const response = await fetch(`${getTcUrl()}/tide-admin/change-set/sign/batch`, {
+// Phase 2 of the two-phase multiAdmin approval: hand the doken-embedded model back
+// to TideCloak. Records ONE approval toward threshold; does not commit.
+export const submitApprovalModel = async (crId: string, approvedModel: Uint8Array, token: string): Promise<void> => {
+    const base64 = btoa(String.fromCharCode(...approvedModel));
+    const response = await fetch(`${getTcUrl()}/iga/change-requests/${crId}/approval-model`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ changeSets: [changeSet] })
+        body: JSON.stringify({ requestModel: base64 }),
     });
     if (!response.ok) {
-        throw new Error(`Error getting raw change set: ${await response.text()}`);
-    }
-    const r = (await response.json())[0];
-    // Decode base64 to Uint8Array
-    const binaryString = atob(r.changeSetDraftRequests);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes;
-};
-
-// Add approval to change set
-export const addApproval = async (changeSet: ChangeSetRequest, approvedRequest: Uint8Array, token: string): Promise<void> => {
-    const formData = new FormData();
-    formData.append("changeSetId", changeSet.changeSetId);
-    formData.append("actionType", changeSet.actionType);
-    formData.append("changeSetType", changeSet.changeSetType);
-    // Encode Uint8Array to base64
-    const base64 = btoa(String.fromCharCode(...approvedRequest));
-    formData.append("requests", base64);
-
-    const response = await fetch(`${getTcUrl()}/tideAdminResources/add-review`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData
-    });
-    if (!response.ok) {
-        throw new Error(`Error adding approval: ${await response.text()}`);
+        throw new Error(`Error submitting approval: ${await response.text()}`);
     }
 };
 
-// Commit change request
-export const commitChangeRequest = async (changeSet: ChangeSetRequest, token: string): Promise<void> => {
-    const response = await fetch(`${getTcUrl()}/tide-admin/change-set/commit`, {
+// Single-phase approval (firstAdmin / non-multiAdmin realms): records this admin's
+// username-only approval toward threshold. 409 if already signed or not PENDING.
+export const authorizeChangeRequest = async (crId: string, token: string): Promise<void> => {
+    const response = await fetch(`${getTcUrl()}/iga/change-requests/${crId}/authorize`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(changeSet)
+        body: JSON.stringify({}),
     });
     if (!response.ok) {
-        throw new Error(`Error committing change set: ${await response.text()}`);
+        throw new Error(`Error authorizing change request: ${await response.text()}`);
+    }
+};
+
+// Commit a CR: re-checks the approver/dependency/threshold gates, then replays and
+// applies the change. May return 412 (under threshold / dependency not yet met).
+export const commitChangeRequest = async (crId: string, token: string): Promise<void> => {
+    const response = await fetch(`${getTcUrl()}/iga/change-requests/${crId}/commit`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+        },
+    });
+    if (!response.ok) {
+        throw new Error(`Error committing change request: ${await response.text()}`);
     }
 };
 

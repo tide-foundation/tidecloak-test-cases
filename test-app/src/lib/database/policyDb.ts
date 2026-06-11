@@ -8,13 +8,13 @@ import { PolicySignRequest } from 'heimdall-tide';
 import { AddPolicyChangeLog } from './logDb';
 import { getAdminPolicy } from '../tidecloakApi';
 
-export async function GetAllPendingPolicies() {
+export async function GetAllPendingPolicies(adminToken: string) {
     const rows = db.prepare('SELECT * FROM pending_policy_requests')
         .all() as { id: string, requestedBy: string, data: string }[];
 
     // Get tide-realm-admin policy from tidecloak
     // so we can determine which request is ready to commit
-    const adminPolicy = await getAdminPolicy();
+    const adminPolicy = await getAdminPolicy(adminToken);
 
     // For each policy request, evaluate if it's commitReady and get approvers/deniers
     const rowsWithApprovals = await Promise.all(rows.map(async row => {

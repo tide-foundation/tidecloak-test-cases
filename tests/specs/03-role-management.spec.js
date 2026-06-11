@@ -17,7 +17,7 @@ const { test, expect } = require('@playwright/test');
 const path = require('path');
 const fs = require('fs');
 const config = require('../utils/config');
-const { createScreenshotHelper, getTestsDir, signInToAdmin } = require('../utils/helpers');
+const { createScreenshotHelper, getTestsDir, signInToAdmin, approveAndCommitChangeRequest } = require('../utils/helpers');
 
 test.describe('F3: Role Management', () => {
     test.setTimeout(3 * 60 * 1000); // 3 minutes timeout
@@ -88,6 +88,16 @@ test.describe('F3: Role Management', () => {
         // Verify the role appears in the message (this waits for the operation to complete)
         await expect(page.locator('[data-testid="message"]').first()).toContainText(`Role "${createdRoleName}" created`, { timeout: 30000 });
         console.log(`Role created: ${createdRoleName}`);
+
+        // Under IGA, creating a role is captured as a CREATE_ROLE change request (it does
+        // not apply immediately). Approve & commit it — it surfaces under "Client Change
+        // Requests" — before the role exists and can be assigned.
+        await approveAndCommitChangeRequest(page, { section: 'Client Change Requests', takeScreenshot });
+        console.log(`Role creation committed: ${createdRoleName}`);
+        await takeScreenshot('04b_role_create_committed');
+
+        // The committed role now appears in the list. Refresh to defeat any stale-list race.
+        await page.getByRole('button', { name: 'Refresh Data' }).click().catch(() => {});
 
         // Assign the role to myself (scope the click to the specific role row to avoid clicking a Realm Role)
         const createdRoleRow = page.locator('li', { hasText: createdRoleName }).first();

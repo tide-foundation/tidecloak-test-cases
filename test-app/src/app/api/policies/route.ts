@@ -37,8 +37,14 @@ export async function GET(req: NextRequest) {
             }
         }
 
-        // Default: return pending policies
-        const policies = await GetAllPendingPolicies();
+        // Default: return pending policies. Evaluating commit-readiness needs the
+        // admin (M0) policy, which is now fetched via an authenticated endpoint, so
+        // the caller must supply a manage-realm admin bearer token.
+        const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+        if (!token) {
+            return NextResponse.json({ error: "Missing authorization token" }, { status: 401 });
+        }
+        const policies = await GetAllPendingPolicies(token);
         return NextResponse.json(policies);
     } catch (ex) {
         console.error("Error getting policies:", ex);

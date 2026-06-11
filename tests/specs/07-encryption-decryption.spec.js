@@ -23,7 +23,7 @@ const { test, expect } = require('@playwright/test');
 const path = require('path');
 const fs = require('fs');
 const config = require('../utils/config');
-const { createScreenshotHelper, getTestsDir } = require('../utils/helpers');
+const { createScreenshotHelper, getTestsDir, approveAndCommitChangeRequest } = require('../utils/helpers');
 
 test.describe('F7: Encryption & Decryption', () => {
     test.setTimeout(5 * 60 * 1000); // 5 minutes timeout (role setup takes time)
@@ -78,6 +78,11 @@ test.describe('F7: Encryption & Decryption', () => {
         await expect(page.locator('[data-testid="message"]').first()).toContainText(`Realm role "${encryptRole}" created`, { timeout: 15000 });
         console.log(`Realm role created: ${encryptRole}`);
 
+        // Under IGA, creating a role is captured as a CREATE_ROLE change request; approve
+        // & commit it (under "Client Change Requests") so the role actually exists.
+        await approveAndCommitChangeRequest(page, { section: 'Client Change Requests', takeScreenshot });
+        console.log(`Realm role creation committed: ${encryptRole}`);
+
         // Create the selfdecrypt REALM role
         await page.locator('[data-testid="realm-role-name-input"]').fill(decryptRole);
         await takeScreenshot('05_decrypt_role_name');
@@ -89,6 +94,10 @@ test.describe('F7: Encryption & Decryption', () => {
         // Verify the decrypt role was created
         await expect(page.locator('[data-testid="message"]').first()).toContainText(`Realm role "${decryptRole}" created`, { timeout: 15000 });
         console.log(`Realm role created: ${decryptRole}`);
+
+        // Commit the decrypt role's CREATE_ROLE change request too.
+        await approveAndCommitChangeRequest(page, { section: 'Client Change Requests', takeScreenshot });
+        console.log(`Realm role creation committed: ${decryptRole}`);
 
         // Store the role names for later tests
         const testsDir = getTestsDir();

@@ -28,7 +28,7 @@ const { test, expect } = require('@playwright/test');
 const path = require('path');
 const fs = require('fs');
 const config = require('../utils/config');
-const { createScreenshotHelper, getTestsDir, signInToAdmin, expectToContainTextWithRefresh } = require('../utils/helpers');
+const { createScreenshotHelper, getTestsDir, signInToAdmin, expectToContainTextWithRefresh, approveAndCommitChangeRequest } = require('../utils/helpers');
 
 test.describe('F9: Policy-Based Encryption & Decryption', () => {
     test.setTimeout(5 * 60 * 1000); // 5 minutes timeout
@@ -198,6 +198,11 @@ test.describe('F9: Policy-Based Encryption & Decryption', () => {
         console.log(`Realm role created: ${encryptRole}`);
         await takeScreenshot('02_encrypt_role_created');
 
+        // Under IGA, creating a role is captured as a CREATE_ROLE change request; approve
+        // & commit it (under "Client Change Requests") so the role actually exists.
+        await approveAndCommitChangeRequest(page, { section: 'Client Change Requests', takeScreenshot });
+        console.log(`Realm role creation committed: ${encryptRole}`);
+
         // Create the decrypt REALM role
         await page.locator('[data-testid="realm-role-name-input"]').fill(decryptRole);
         await page.locator('[data-testid="add-realm-role-btn"]').click();
@@ -209,6 +214,10 @@ test.describe('F9: Policy-Based Encryption & Decryption', () => {
         );
         console.log(`Realm role created: ${decryptRole}`);
         await takeScreenshot('03_decrypt_role_created');
+
+        // Commit the decrypt role's CREATE_ROLE change request too.
+        await approveAndCommitChangeRequest(page, { section: 'Client Change Requests', takeScreenshot });
+        console.log(`Realm role creation committed: ${decryptRole}`);
     });
 
     test('When: I assign the encrypt REALM role to myself and approve it', async ({ page }) => {

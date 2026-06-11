@@ -27,7 +27,7 @@ const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
 const config = require('../utils/config');
-const { createScreenshotHelper, getTestsDir, getTestAppDir, signInToAdmin, expectToContainTextWithRefresh } = require('../utils/helpers');
+const { createScreenshotHelper, getTestsDir, getTestAppDir, signInToAdmin, expectToContainTextWithRefresh, approveAndCommitChangeRequest } = require('../utils/helpers');
 
 test.describe('F10: Forseti Policy-Based Encryption', () => {
     test.setTimeout(5 * 60 * 1000); // 5 minutes per test
@@ -174,6 +174,12 @@ test.describe('F10: Forseti Policy-Based Encryption', () => {
         );
         console.log('executive realm role created');
         await takeScreenshot('01_role_created');
+
+        // Under IGA, creating a role is captured as a CREATE_ROLE change request; approve
+        // & commit it (under "Client Change Requests") so the role actually exists before
+        // it can be assigned.
+        await approveAndCommitChangeRequest(page, { section: 'Client Change Requests', takeScreenshot });
+        console.log('executive realm role creation committed');
     });
 
     test('When: I create user3 via CLI and link their Tide account', async ({ page }) => {
@@ -819,6 +825,12 @@ test.describe('F10: Forseti Policy-Based Encryption', () => {
         );
         console.log('procurementofficer realm role created');
         await takeScreenshot('01_role_created');
+
+        // Under IGA, creating a role is captured as a CREATE_ROLE change request; approve
+        // & commit it (under "Client Change Requests") so the role actually exists before
+        // it can be assigned.
+        await approveAndCommitChangeRequest(page, { section: 'Client Change Requests', takeScreenshot });
+        console.log('procurementofficer realm role creation committed');
     });
 
     test('When: I create user4 via CLI and link their Tide account', async ({ page }) => {

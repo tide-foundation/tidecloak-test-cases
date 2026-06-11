@@ -152,31 +152,33 @@ curl -s $CURL_OPTS -X POST "${TIDECLOAK_LOCAL_URL}/admin/realms/${REALM_NAME}/ve
     -H "Authorization: Bearer $TOKEN" > /dev/null 2>&1
 echo "✅ CustomAdminUIDomain updated + signed."
 
-# Drain all PENDING IGA change requests via the new change-request API:
-#   GET  /iga/change-requests?status=PENDING   -> list of CRs (id, actionType, ...)
-#   POST /iga/change-requests/{id}/authorize    -> record this admin's approval
-#   POST /iga/change-requests/{id}/commit        -> replay/apply the CR
-# firstAdmin mode (threshold=1, VRK-approved): toggle-iga-on auto-commits the
-# baseline defaults; anything still PENDING (e.g. provisioned clients) is
-# authorized+committed here. Idempotent: re-runs over whatever is still PENDING.
-# The optional $1 label is cosmetic (the new API is not typed by entity kind).
+# Drain all PENDING IGA change requests via the bulk-authorize operator endpoint
+# (change-request-guide.md §3.4) — the purpose-built one-shot for the toggle-on ADOPT
+# closure. It authorizes AND commits every candidate using the same per-CR gate as the
+# single-CR endpoints, and sorts REGEN_ADMIN_POLICY last so it cannot strand still-
+# pending grants:
+#   GET  /iga/change-requests?status=PENDING          -> [ {id, actionType, ...}, ... ]
+#   POST /iga/change-requests/bulk-authorize {crIdIn}  -> { results[], summary{} }
+# firstAdmin mode (threshold=1, VRK-approved): toggle-iga-on auto-commits the baseline
+# defaults; anything still PENDING (e.g. provisioned clients) is drained here. Idempotent:
+# loops while forward progress is made so dependency chains clear over successive passes.
+# The optional $1 label is cosmetic (the API is not typed by entity kind).
 approve_and_commit() {
     local LABEL="${1:-pending}"
     echo "🔄 Processing ${LABEL} change requests..."
 
+    local base="${TIDECLOAK_LOCAL_URL}/admin/realms/${REALM_NAME}/iga/change-requests"
     local max_passes=10
     local pass=0
     while [ "$pass" -lt "$max_passes" ]; do
         pass=$((pass + 1))
         TOKEN="$(get_admin_token)"
 
-        # List PENDING change requests (don't use -f: an empty array is valid/OK).
-        local requests
-        requests=$(curl -s -X GET "${TIDECLOAK_LOCAL_URL}/admin/realms/${REALM_NAME}/iga/change-requests?status=PENDING" \
-            -H "Authorization: Bearer $TOKEN" 2>/dev/null || echo "[]")
-
-        local count
-        count=$(echo "$requests" | jq 'length' 2>/dev/null || echo "0")
+        # Collect all PENDING CR ids (don't use -f: an empty array is valid/OK).
+        local ids_json count
+        ids_json=$(curl -s -X GET "${base}?status=PENDING" \
+            -H "Authorization: Bearer $TOKEN" 2>/dev/null | jq -c '[.[].id]' 2>/dev/null || echo "[]")
+        count=$(echo "$ids_json" | jq 'length' 2>/dev/null || echo "0")
 
         if [ "$count" = "0" ] || [ "$count" = "" ]; then
             if [ "$pass" -eq 1 ]; then
@@ -185,51 +187,40 @@ approve_and_commit() {
             break
         fi
 
-        echo "  Pass ${pass}: ${count} PENDING change request(s)"
+        echo "  Pass ${pass}: draining ${count} PENDING change request(s) via bulk-authorize"
 
-        local committed_any=false
-        local ids
-        ids=$(echo "$requests" | jq -r '.[].id')
-        local cr_id
-        while read -r cr_id; do
-            [ -z "$cr_id" ] && continue
+        # One-shot authorize + commit of the whole pending set.
+        local resp http_status body
+        resp=$(curl -s -w "\n%{http_code}" -X POST "${base}/bulk-authorize" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"crIdIn\":${ids_json},\"limit\":1000}" 2>/dev/null)
+        http_status=$(echo "$resp" | tail -1)
+        body=$(echo "$resp" | sed '$d')
 
-            # Authorize (record this admin's approval). 409 = already signed by
-            # this admin (or already authorized in a prior pass) — not fatal.
-            local auth_response auth_status
-            auth_response=$(curl -s -w "\n%{http_code}" -X POST "${TIDECLOAK_LOCAL_URL}/admin/realms/${REALM_NAME}/iga/change-requests/${cr_id}/authorize" \
-                -H "Authorization: Bearer $TOKEN" \
-                -H "Content-Type: application/json" \
-                -d '{}' 2>&1)
-            auth_status=$(echo "$auth_response" | tail -1)
-            if [[ ! "$auth_status" =~ ^2 ]] && [ "$auth_status" != "409" ]; then
-                log_error "Failed to authorize change request (HTTP $auth_status): $cr_id"
-                log_error "Response: $(echo "$auth_response" | sed '$d')"
-                return 1
+        # Another bulk-authorize is already running for this realm — wait and retry.
+        if [ "$http_status" = "429" ]; then
+            echo "  bulk-authorize busy (429); waiting and retrying..."
+            sleep 2
+            continue
+        fi
+        if [[ ! "$http_status" =~ ^2 ]]; then
+            log_error "bulk-authorize failed (HTTP $http_status): $body"
+            return 1
+        fi
+
+        local committed rejected skipped
+        committed=$(echo "$body" | jq -r '.summary.committed // 0' 2>/dev/null || echo "0")
+        rejected=$(echo "$body" | jq -r '.summary.rejected // 0' 2>/dev/null || echo "0")
+        skipped=$(echo "$body" | jq -r '.summary.skipped // 0' 2>/dev/null || echo "0")
+        echo "  committed=${committed} rejected=${rejected} skipped=${skipped}"
+
+        # No forward progress this pass — remaining CRs are blocked/deferred; stop.
+        if [ "$committed" = "0" ]; then
+            if [ "$rejected" != "0" ]; then
+                log_warn "  ${rejected} change request(s) could not be committed (blocked/deferred):"
+                echo "$body" | jq -r '.results[] | select(.status=="REJECTED") | "    REJECTED \(.actionType) \(.crId): \(.reason // "?")"' 2>/dev/null >&2 || true
             fi
-
-            # Commit (replay/apply). A CR that is dependency-blocked (412) is
-            # retried on a later pass once its prerequisite commits; treat 412 as
-            # soft (skip this pass), anything else non-2xx as fatal.
-            local commit_response commit_status
-            commit_response=$(curl -s -w "\n%{http_code}" -X POST "${TIDECLOAK_LOCAL_URL}/admin/realms/${REALM_NAME}/iga/change-requests/${cr_id}/commit" \
-                -H "Authorization: Bearer $TOKEN" \
-                -H "Content-Type: application/json" 2>&1)
-            commit_status=$(echo "$commit_response" | tail -1)
-            if [[ "$commit_status" =~ ^2 ]]; then
-                committed_any=true
-            elif [ "$commit_status" = "412" ]; then
-                echo "  Deferring change request $cr_id (dependency/threshold not yet met)"
-            else
-                log_error "Failed to commit change request (HTTP $commit_status): $cr_id"
-                log_error "Response: $(echo "$commit_response" | sed '$d')"
-                return 1
-            fi
-        done <<< "$ids"
-
-        # No forward progress (everything left is deferred) — stop to avoid spinning.
-        if [ "$committed_any" = false ]; then
-            log_warn "  No further change requests could be committed (remaining are deferred)"
             break
         fi
     done
@@ -245,7 +236,7 @@ echo "👤 Creating admin user..."
 curl -s $CURL_OPTS -X POST "${TIDECLOAK_LOCAL_URL}/admin/realms/${REALM_NAME}/users" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
-    -d '{"username":"admin","email":"admin@tidecloak.com","firstName":"admin","lastName":"user","enabled":true,"emailVerified":false,"requiredActions":[],"attributes":{"locale":""},"groups":[]}' > /dev/null 2>&1
+    -d '{"username":"admin","email":"admin@tidecloak.com","firstName":"admin","lastName":"user","enabled":true,"emailVerified":false,"requiredActions":[],"attributes":{"locale":"","tideInvitable":"true"},"groups":[]}' > /dev/null 2>&1
 
 approve_and_commit users
 

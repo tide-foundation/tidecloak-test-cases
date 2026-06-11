@@ -12,10 +12,9 @@ import { useAuth } from "@/hooks/useAuth";
 import {
     getClientRoles,
     createRoleForClient,
-    getUserChangeRequests,
-    getClientChangeRequests,
-    getRawChangeSetRequest,
-    addApproval,
+    getPendingChangeRequests,
+    getApprovalModel,
+    submitApprovalModel,
     commitChangeRequest,
     getUsers,
     grantUserRole,
@@ -24,16 +23,11 @@ import {
     getRealmRoles,
     createRealmRole,
     grantUserRealmRole,
-    ChangeSetRequest,
+    ChangeRequest,
     RoleRepresentation,
 } from "@/lib/tidecloakApi";
 import { bytesToBase64, base64ToBytes } from "@/lib/tideSerialization";
 import { contract as forsetiContract, contractid as forsetiContractId } from "@/lib/forsetiDecryptionContract";
-
-interface ChangeRequest {
-    data: any;
-    retrievalInfo: ChangeSetRequest;
-}
 
 interface PendingPolicy {
     id: string;
@@ -77,18 +71,19 @@ export default function AdminPage() {
     const refreshData = async () => {
         try {
             const token = await getToken();
-            const [rolesData, realmRolesData, usersData, userChanges, clientChanges] = await Promise.all([
+            const [rolesData, realmRolesData, usersData, changeRequests] = await Promise.all([
                 getClientRoles(token),
                 getRealmRoles(token),
                 getUsers(token),
-                getUserChangeRequests(token),
-                getClientChangeRequests(token),
+                getPendingChangeRequests(token),
             ]);
             setRoles(rolesData);
             setRealmRoles(realmRolesData);
             setUsers(usersData);
-            setUserChangeRequests(userChanges);
-            setClientChangeRequests(clientChanges);
+            // The IGA API returns one untyped list; bucket by entityType so the
+            // existing user/client sections (and their tests) keep working.
+            setUserChangeRequests(changeRequests.filter((cr) => cr.entityType === "USER"));
+            setClientChangeRequests(changeRequests.filter((cr) => cr.entityType !== "USER"));
 
             // Fetch pending policies
             await fetchPendingPolicies();
@@ -99,7 +94,10 @@ export default function AdminPage() {
 
     const fetchPendingPolicies = async () => {
         try {
-            const response = await fetch("/api/policies");
+            const token = await getToken();
+            const response = await fetch("/api/policies", {
+                headers: { Authorization: `Bearer ${token}` },
+            });
             if (response.ok) {
                 const data = await response.json();
                 // Parse policy data to extract role and threshold
@@ -378,29 +376,31 @@ export default function AdminPage() {
     const handleApproveAndCommit = async (changeRequest: ChangeRequest) => {
         try {
             const token = await getToken();
+            const crId = changeRequest.id;
 
-            // Get the raw request for signing
-            const rawRequest = await getRawChangeSetRequest(changeRequest.retrievalInfo, token);
+            // Phase 1: fetch the Policy:1 ModelRequest the enclave must approve.
+            const approvalModel = await getApprovalModel(crId, token);
+            const rawRequest = base64ToBytes(approvalModel.requestModel);
 
-            // Request Tide operator approval
+            // Request Tide operator approval (enclave produces the signed doken).
             const approvalResults = await approveTideRequests([{
-                id: changeRequest.retrievalInfo.changeSetId,
+                id: crId,
                 request: rawRequest
             }]);
 
             const result = approvalResults[0];
             if (result.approved) {
-                // Add approval to TideCloak
-                await addApproval(changeRequest.retrievalInfo, result.approved.request, token);
-                setMessage(`Change ${changeRequest.retrievalInfo.changeSetId} approved`);
+                // Phase 2: hand the doken-embedded model back, then commit.
+                await submitApprovalModel(crId, result.approved.request, token);
+                setMessage(`Change ${crId} approved`);
 
-                // Commit the change
-                await commitChangeRequest(changeRequest.retrievalInfo, token);
-                setMessage(`Change ${changeRequest.retrievalInfo.changeSetId} committed`);
+                // Commit the change (replays/applies it for real).
+                await commitChangeRequest(crId, token);
+                setMessage(`Change ${crId} committed`);
             } else if (result.denied) {
-                setMessage(`Change ${changeRequest.retrievalInfo.changeSetId} denied`);
+                setMessage(`Change ${crId} denied`);
             } else {
-                setMessage(`Change ${changeRequest.retrievalInfo.changeSetId} pending`);
+                setMessage(`Change ${crId} pending`);
             }
 
             await refreshData();
@@ -592,8 +592,8 @@ export default function AdminPage() {
             <h2>User Change Requests ({userChangeRequests.length})</h2>
             <ul>
                 {userChangeRequests.map((req) => (
-                    <li key={req.retrievalInfo.changeSetId}>
-                        {req.retrievalInfo.changeSetType} - {req.retrievalInfo.actionType}
+                    <li key={req.id}>
+                        {req.entityType} - {req.actionType}
                         <button onClick={() => handleApproveAndCommit(req)}>Approve & Commit</button>
                     </li>
                 ))}
@@ -603,8 +603,8 @@ export default function AdminPage() {
             <h2>Client Change Requests ({clientChangeRequests.length})</h2>
             <ul>
                 {clientChangeRequests.map((req) => (
-                    <li key={req.retrievalInfo.changeSetId}>
-                        {req.retrievalInfo.changeSetType} - {req.retrievalInfo.actionType}
+                    <li key={req.id}>
+                        {req.entityType} - {req.actionType}
                         <button onClick={() => handleApproveAndCommit(req)}>Approve & Commit</button>
                     </li>
                 ))}
