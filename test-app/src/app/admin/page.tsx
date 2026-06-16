@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { IAMService } from "@tidecloak/js";
-import { Cryptide, Models, Clients } from "@tide/js";
+import { Models } from "@tide/js";
 const Policy = Models.Policy;
 const ExecutionType = Models.ExecutionType;
 const ApprovalType = Models.ApprovalType;
@@ -10,21 +10,8 @@ const ApprovalType = Models.ApprovalType;
 import { PolicySignRequest } from "heimdall-tide";
 import { useAuth } from "@/hooks/useAuth";
 import {
-    getClientRoles,
-    createRoleForClient,
-    getPendingChangeRequests,
-    getApprovalModel,
-    submitApprovalModel,
-    commitChangeRequest,
-    getUsers,
-    grantUserRole,
     getResourceForPolicy,
     getVendorIdForPolicy,
-    getRealmRoles,
-    createRealmRole,
-    grantUserRealmRole,
-    ChangeRequest,
-    RoleRepresentation,
 } from "@/lib/tidecloakApi";
 import { bytesToBase64, base64ToBytes } from "@/lib/tideSerialization";
 import { contract as forsetiContract, contractid as forsetiContractId } from "@/lib/forsetiDecryptionContract";
@@ -44,14 +31,7 @@ interface PendingPolicy {
 
 export default function AdminPage() {
     const { isAuthenticated, isLoading, vuid, userId, tokenRoles, getToken, refreshToken, initializeTideRequest, approveTideRequests, executeTideRequest } = useAuth();
-    const [roles, setRoles] = useState<RoleRepresentation[]>([]);
-    const [realmRoles, setRealmRoles] = useState<RoleRepresentation[]>([]);
-    const [users, setUsers] = useState<any[]>([]);
-    const [userChangeRequests, setUserChangeRequests] = useState<ChangeRequest[]>([]);
-    const [clientChangeRequests, setClientChangeRequests] = useState<ChangeRequest[]>([]);
     const [pendingPolicies, setPendingPolicies] = useState<PendingPolicy[]>([]);
-    const [newRoleName, setNewRoleName] = useState("");
-    const [newRealmRoleName, setNewRealmRoleName] = useState("");
     const [policyRoleName, setPolicyRoleName] = useState("");
     const [policyThreshold, setPolicyThreshold] = useState("2");
     const [message, setMessage] = useState("");
@@ -70,22 +50,6 @@ export default function AdminPage() {
 
     const refreshData = async () => {
         try {
-            const token = await getToken();
-            const [rolesData, realmRolesData, usersData, changeRequests] = await Promise.all([
-                getClientRoles(token),
-                getRealmRoles(token),
-                getUsers(token),
-                getPendingChangeRequests(token),
-            ]);
-            setRoles(rolesData);
-            setRealmRoles(realmRolesData);
-            setUsers(usersData);
-            // The IGA API returns one untyped list; bucket by entityType so the
-            // existing user/client sections (and their tests) keep working.
-            setUserChangeRequests(changeRequests.filter((cr) => cr.entityType === "USER"));
-            setClientChangeRequests(changeRequests.filter((cr) => cr.entityType !== "USER"));
-
-            // Fetch pending policies
             await fetchPendingPolicies();
         } catch (error: any) {
             setMessage(`Error: ${error.message}`);
@@ -120,43 +84,6 @@ export default function AdminPage() {
             }
         } catch (error: any) {
             console.error("Error fetching pending policies:", error);
-        }
-    };
-
-    const handleCreateRole = async () => {
-        if (!newRoleName.trim()) return;
-        try {
-            const token = await getToken();
-            await createRoleForClient(newRoleName, `Role: ${newRoleName}`, token);
-            setMessage(`Role "${newRoleName}" created`);
-            setNewRoleName("");
-            await refreshData();
-        } catch (error: any) {
-            setMessage(`Error creating role: ${error.message}`);
-        }
-    };
-
-    const handleCreateRealmRole = async () => {
-        if (!newRealmRoleName.trim()) return;
-        try {
-            const token = await getToken();
-            await createRealmRole(newRealmRoleName, `Realm Role: ${newRealmRoleName}`, token);
-            setMessage(`Realm role "${newRealmRoleName}" created`);
-            setNewRealmRoleName("");
-            await refreshData();
-        } catch (error: any) {
-            setMessage(`Error creating realm role: ${error.message}`);
-        }
-    };
-
-    const handleAssignRealmRoleToSelf = async (roleName: string) => {
-        try {
-            const token = await getToken();
-            await grantUserRealmRole(userId, roleName, token);
-            setMessage(`Realm role "${roleName}" assigned to current user. Approve the change request then refresh token.`);
-            await refreshData();
-        } catch (error: any) {
-            setMessage(`Error assigning realm role: ${error.message}`);
         }
     };
 
@@ -373,64 +300,6 @@ export default function AdminPage() {
         }
     };
 
-    const handleApproveAndCommit = async (changeRequest: ChangeRequest) => {
-        try {
-            const token = await getToken();
-            const crId = changeRequest.id;
-
-            // Phase 1: fetch the Policy:1 ModelRequest the enclave must approve.
-            const approvalModel = await getApprovalModel(crId, token);
-            const rawRequest = base64ToBytes(approvalModel.requestModel);
-
-            // Request Tide operator approval (enclave produces the signed doken).
-            const approvalResults = await approveTideRequests([{
-                id: crId,
-                request: rawRequest
-            }]);
-
-            const result = approvalResults[0];
-            if (result.approved) {
-                // Phase 2: hand the doken-embedded model back, then commit.
-                await submitApprovalModel(crId, result.approved.request, token);
-                setMessage(`Change ${crId} approved`);
-
-                // Commit the change (replays/applies it for real).
-                await commitChangeRequest(crId, token);
-                setMessage(`Change ${crId} committed`);
-            } else if (result.denied) {
-                setMessage(`Change ${crId} denied`);
-            } else {
-                setMessage(`Change ${crId} pending`);
-            }
-
-            await refreshData();
-        } catch (error: any) {
-            setMessage(`Error: ${error.message}`);
-        }
-    };
-
-    const handleGrantRole = async (userId: string, roleName: string) => {
-        try {
-            const token = await getToken();
-            await grantUserRole(userId, roleName, token);
-            setMessage(`Role "${roleName}" granted to user`);
-            await refreshData();
-        } catch (error: any) {
-            setMessage(`Error granting role: ${error.message}`);
-        }
-    };
-
-    const handleGrantRealmRole = async (targetUserId: string, roleName: string) => {
-        try {
-            const token = await getToken();
-            await grantUserRealmRole(targetUserId, roleName, token);
-            setMessage(`Realm role "${roleName}" granted to user. Approve the change request to finalize.`);
-            await refreshData();
-        } catch (error: any) {
-            setMessage(`Error granting realm role: ${error.message}`);
-        }
-    };
-
     const handleLogout = () => {
         IAMService.doLogout();
     };
@@ -441,17 +310,6 @@ export default function AdminPage() {
             setMessage("Token refreshed");
         } catch (error: any) {
             setMessage(`Error refreshing token: ${error.message}`);
-        }
-    };
-
-    const handleAssignRoleToSelf = async (roleName: string) => {
-        try {
-            const token = await getToken();
-            await grantUserRole(userId, roleName, token);
-            setMessage(`Role "${roleName}" assigned to current user. Approve the change request then refresh token.`);
-            await refreshData();
-        } catch (error: any) {
-            setMessage(`Error assigning role: ${error.message}`);
         }
     };
 
@@ -469,48 +327,6 @@ export default function AdminPage() {
             <button onClick={handleRefreshToken}>Refresh Token</button>
             <a href="/forseti-crypto" style={{ marginLeft: "10px" }}>Forseti Crypto</a>
             {message && <p data-testid="message"><strong>{message}</strong></p>}
-
-            <hr />
-            <h2>Client Roles</h2>
-            <div>
-                <input
-                    type="text"
-                    value={newRoleName}
-                    onChange={(e) => setNewRoleName(e.target.value)}
-                    placeholder="Role name"
-                    data-testid="role-name-input"
-                />
-                <button onClick={handleCreateRole}>Add Role</button>
-            </div>
-            <ul>
-                {roles.map((role) => (
-                    <li key={role.id}>
-                        {role.name} - {role.description}
-                        <button onClick={() => handleAssignRoleToSelf(role.name!)}>Assign to Me</button>
-                    </li>
-                ))}
-            </ul>
-
-            <hr />
-            <h2>Realm Roles</h2>
-            <div>
-                <input
-                    type="text"
-                    value={newRealmRoleName}
-                    onChange={(e) => setNewRealmRoleName(e.target.value)}
-                    placeholder="Realm role name"
-                    data-testid="realm-role-name-input"
-                />
-                <button onClick={handleCreateRealmRole} data-testid="add-realm-role-btn">Add Realm Role</button>
-            </div>
-            <ul data-testid="realm-roles-list">
-                {realmRoles.map((role) => (
-                    <li key={role.id}>
-                        {role.name} - {role.description}
-                        <button onClick={() => handleAssignRealmRoleToSelf(role.name!)} data-testid={`assign-realm-role-${role.name}`}>Assign to Me</button>
-                    </li>
-                ))}
-            </ul>
 
             <hr />
             <h2>Policies</h2>
@@ -559,53 +375,6 @@ export default function AdminPage() {
                         {policy.commitReady && (
                             <button onClick={() => handleCommitPolicy(policy)} data-testid="commit-policy-btn">Commit</button>
                         )}
-                    </li>
-                ))}
-            </ul>
-
-            <hr />
-            <h2>Users</h2>
-            <ul>
-                {users.map((user) => (
-                    <li key={user.id}>
-                        {user.username} ({user.email || "no email"})
-                        {roles.length > 0 && (
-                            <button onClick={() => handleGrantRole(user.id, roles[0].name!)}>
-                                Grant {roles[0].name}
-                            </button>
-                        )}
-                        {realmRoles.map((role) => (
-                            <button
-                                key={role.id}
-                                onClick={() => handleGrantRealmRole(user.id, role.name!)}
-                                data-testid={`grant-realm-role-${role.name}-${user.username}`}
-                                style={{ marginLeft: "4px" }}
-                            >
-                                Grant {role.name}
-                            </button>
-                        ))}
-                    </li>
-                ))}
-            </ul>
-
-            <hr />
-            <h2>User Change Requests ({userChangeRequests.length})</h2>
-            <ul>
-                {userChangeRequests.map((req) => (
-                    <li key={req.id}>
-                        {req.entityType} - {req.actionType}
-                        <button onClick={() => handleApproveAndCommit(req)}>Approve & Commit</button>
-                    </li>
-                ))}
-            </ul>
-
-            <hr />
-            <h2>Client Change Requests ({clientChangeRequests.length})</h2>
-            <ul>
-                {clientChangeRequests.map((req) => (
-                    <li key={req.id}>
-                        {req.entityType} - {req.actionType}
-                        <button onClick={() => handleApproveAndCommit(req)}>Approve & Commit</button>
                     </li>
                 ))}
             </ul>
