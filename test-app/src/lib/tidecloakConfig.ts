@@ -22,11 +22,25 @@ export interface TidecloakConfig {
     [key: string]: any;
 }
 
+/**
+ * sessionStorage key a test spec may use to inject a per-realm Tide adapter config at
+ * runtime (so the app can target a freshly iga-engine-provisioned realm without rebuilding
+ * data/tidecloak.json). Set it via page.addInitScript BEFORE navigating; it survives the
+ * OIDC redirect (same origin) and is re-applied on every app page load.
+ */
+export const RUNTIME_ADAPTER_KEY = "tide-adapter-config";
+
 export async function initTcData(): Promise<TidecloakConfig> {
     if (tcData === undefined) {
         if (typeof window !== "undefined") {
-            const res = await fetch("/api/tidecloakAdapter");
-            tcData = await res.json();
+            // Prefer a spec-injected per-realm config; fall back to the server route (file).
+            const injected = window.sessionStorage.getItem(RUNTIME_ADAPTER_KEY);
+            if (injected) {
+                tcData = JSON.parse(injected);
+            } else {
+                const res = await fetch("/api/tidecloakAdapter");
+                tcData = await res.json();
+            }
         } else {
             const fs = require("fs");
             const path = require("path");
@@ -51,8 +65,4 @@ export function getResource(): string {
 
 export function getVendorId(): string {
     return tcData?.["vendorId"] || "";
-}
-
-export function getJWK() {
-    return tcData?.jwk || null;
 }

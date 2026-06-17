@@ -7,11 +7,8 @@
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
     "test:debug": "playwright test --debug",
-    "test:setup": "playwright test 01-setup",
     "report": "playwright show-report reports",
-    "setup": "bash scripts/setup.sh",
-    "setup:full": "bash scripts/setup.sh --full",
-    "cleanup": "bash scripts/setup.sh --cleanup"
+    "provision": "node scripts/provision.js"
   },
   "keywords": ["playwright", "testing", "tidecloak"],
   "author": "",

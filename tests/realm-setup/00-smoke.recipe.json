@@ -1,0 +1,22 @@
+{
+  "name": "00-smoke",
+  "hypothesis": "Smoke test: the iga-engine + tide-admin-cli pipeline provisions a Tide realm with the 'testapp' client and one Tide-linked admin user, and the test-app can bind to the realm and log that admin in.",
+  "tags": ["smoke", "realm-setup"],
+  "setup": [
+    { "kind": "client.create", "args": { "clientId": "testapp", "publicClient": true, "standardFlowEnabled": true, "directAccessGrantsEnabled": true, "redirectUris": ["http://localhost:3000/*"], "webOrigins": ["http://localhost:3000"], "attributes": { "pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "+" } } },
+    { "kind": "user.create", "args": { "username": "admin", "password": "Passw0rd!" }, "as": "admin" }
+  ],
+  "probe": {
+    "kind": "token.request",
+    "args": { "grant": "password", "clientId": "admin-cli", "user": "$admin", "password": "Passw0rd!" }
+  },
+  "expect": { "side": "ork", "outcome": "sign" },
+  "_backs": "tests/specs/00-smoke.spec.js",
+  "_provides": "a Tide realm with the 'testapp' client (origin http://localhost:3000) and one admin user (Tide-linked + tide-realm-admin). No roles — this is the minimal pipeline smoke test.",
+  "_tideSetup": {
+    "appClient": "testapp",
+    "appLoginUser": "admin",
+    "linkUsers": ["admin"],
+    "realmAdmins": ["admin"]
+  }
+}

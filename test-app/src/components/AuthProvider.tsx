@@ -2,7 +2,7 @@
 
 import { createContext, useEffect, useState, ReactNode } from "react";
 import { IAMService } from "@tidecloak/js";
-import { Cryptide, Models, Clients, Tools, Contracts } from "@tide/js";
+import { Models } from "@tide/js";
 const BaseTideRequest = Models.BaseTideRequest;
 import { initTcData } from "@/lib/tidecloakConfig";
 
@@ -67,6 +67,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         const initAuth = async () => {
+            // The /dpop-harness route runs its own TideCloak adapter (per-client, DPoP). Don't
+            // init the global IAMService there — it would race the harness for the OIDC callback.
+            if (typeof window !== "undefined" && window.location.pathname.startsWith("/dpop-harness")) {
+                setIsLoading(false);
+                setIsAuthenticated(false);
+                return;
+            }
+
             const config = await initTcData();
 
             IAMService

@@ -1,0 +1,27 @@
+{
+  "name": "09-policy-encryption-decryption",
+  "hypothesis": "Realm setup for the 09-policy-encryption-decryption Playwright test: the policy encrypt and decrypt realm roles for tag 'secret' exist, the test-app admin holds both, and a public test-app client is registered, so policy-based (SimpleTagBasedDecryption:1) encrypt/decrypt is authorized; the baseline token still ORK-signs.",
+  "tags": ["realm-setup", "encryption", "policy", "ork"],
+  "setup": [
+    { "kind": "role.create", "args": { "name": "_tide_secret.encrypt", "description": "Policy encrypt role for tag 'secret' (09-policy-encryption-decryption)" } },
+    { "kind": "role.create", "args": { "name": "_tide_secret.decrypt", "description": "Policy decrypt role for tag 'secret' (09-policy-encryption-decryption)" } },
+    { "kind": "client.create", "args": { "clientId": "testapp", "publicClient": true, "standardFlowEnabled": true, "directAccessGrantsEnabled": true, "attributes": { "pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "+" } } },
+    { "kind": "client.update", "args": { "clientId": "testapp", "patch": { "redirectUris": ["http://localhost:3000/*"], "webOrigins": ["http://localhost:3000"] } } },
+    { "kind": "user.create", "args": { "username": "admin", "password": "Passw0rd!" }, "as": "admin" },
+    { "kind": "user.assignRealmRole", "args": { "user": "$admin", "role": "_tide_secret.encrypt" } },
+    { "kind": "user.assignRealmRole", "args": { "user": "$admin", "role": "_tide_secret.decrypt" } }
+  ],
+  "probe": {
+    "kind": "token.request",
+    "args": { "grant": "password", "clientId": "admin-cli", "user": "$admin", "password": "Passw0rd!" }
+  },
+  "expect": { "side": "ork", "outcome": "sign" },
+  "_backs": "tests/specs/09-policy-encryption-decryption.spec.js",
+  "_provides": "realm roles '_tide_secret.encrypt' and '_tide_secret.decrypt'; the test-app admin holds both; a public 'testapp' client (origin http://localhost:3000).",
+  "_tideSetup": {
+    "appClient": "testapp",
+    "appLoginUser": "admin",
+    "linkUsers": ["admin"],
+    "realmAdmins": ["admin"]
+  }
+}

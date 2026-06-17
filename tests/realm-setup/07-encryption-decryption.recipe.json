@@ -1,0 +1,27 @@
+{
+  "name": "07-encryption-decryption",
+  "hypothesis": "Realm setup for the 07-encryption-decryption Playwright test: the self-encrypt and self-decrypt realm roles for tag 'secret' exist, the test-app admin holds both, and a public test-app client is registered, so tag-based self encrypt/decrypt is authorized; the baseline token still ORK-signs. NOTE: this scenario needs NO tide-realm-admin (realmAdmins is empty) — there is no policy/role governance, only self encrypt/decrypt.",
+  "tags": ["realm-setup", "encryption", "ork"],
+  "setup": [
+    { "kind": "role.create", "args": { "name": "_tide_secret.selfencrypt", "description": "Self-encrypt role for tag 'secret' (07-encryption-decryption)" } },
+    { "kind": "role.create", "args": { "name": "_tide_secret.selfdecrypt", "description": "Self-decrypt role for tag 'secret' (07-encryption-decryption)" } },
+    { "kind": "client.create", "args": { "clientId": "testapp", "publicClient": true, "standardFlowEnabled": true, "directAccessGrantsEnabled": true, "attributes": { "pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "+" } } },
+    { "kind": "client.update", "args": { "clientId": "testapp", "patch": { "redirectUris": ["http://localhost:3000/*"], "webOrigins": ["http://localhost:3000"] } } },
+    { "kind": "user.create", "args": { "username": "admin", "password": "Passw0rd!" }, "as": "admin" },
+    { "kind": "user.assignRealmRole", "args": { "user": "$admin", "role": "_tide_secret.selfencrypt" } },
+    { "kind": "user.assignRealmRole", "args": { "user": "$admin", "role": "_tide_secret.selfdecrypt" } }
+  ],
+  "probe": {
+    "kind": "token.request",
+    "args": { "grant": "password", "clientId": "admin-cli", "user": "$admin", "password": "Passw0rd!" }
+  },
+  "expect": { "side": "ork", "outcome": "sign" },
+  "_backs": "tests/specs/07-encryption-decryption.spec.js",
+  "_provides": "realm roles '_tide_secret.selfencrypt' and '_tide_secret.selfdecrypt'; the test-app admin holds both; a public 'testapp' client (origin http://localhost:3000).",
+  "_tideSetup": {
+    "appClient": "testapp",
+    "appLoginUser": "admin",
+    "linkUsers": ["admin"],
+    "realmAdmins": []
+  }
+}

@@ -1,40 +1,36 @@
-import { getAuthServerUrl, getRealm, getResource, getVendorId, initTcData } from "./tidecloakConfig";
+import { getResource, getVendorId } from "./tidecloakConfig";
 import { Models } from "@tide/js";
 const Policy = Models.Policy;
 type Policy = InstanceType<typeof Policy>;
 import { base64ToBytes } from "./tideSerialization";
 
-const getTcUrl = () => `${getAuthServerUrl()}/admin/realms/${getRealm()}`;
+// The realm's admin (M0) policy is stored as a realm-level named policy under the
+// reserved name "tide-realm-admin".
+const ADMIN_POLICY_NAME = "tide-realm-admin";
 
-export interface ClientRepresentation {
-    id?: string;
-    clientId?: string;
-    description?: string;
+// Derive the admin REST base URL (`{authServerUrl}/admin/realms/{realm}`) from the
+// access token's `iss` claim (`{authServerUrl}/realms/{realm}`). This route runs
+// server-side, where the baked data/tidecloak.json points at the wrong realm — the
+// token is issued by the realm we actually need to talk to, so it's the source of truth.
+function adminBaseUrlFromToken(token: string): string {
+    const seg = token.split(".")[1];
+    if (!seg) throw new Error("Invalid access token: missing payload");
+    const { iss } = JSON.parse(Buffer.from(seg, "base64url").toString("utf-8")) as { iss?: string };
+    if (!iss || !iss.includes("/realms/")) {
+        throw new Error("Invalid access token: issuer missing realm");
+    }
+    const [base, realm] = iss.split("/realms/");
+    return `${base}/admin/realms/${realm}`;
 }
 
 // Get the realm's admin (M0) policy from TideCloak (used for policy validation).
-// This is the role policy bound to the tide-realm-admin client role. Replaces the
-// removed unauthenticated /tide-policy-resources/admin-policy endpoint: it now needs
-// a manage-realm admin token and a tide-realm-admin role-id lookup first.
+// Replaces the removed unauthenticated /tide-policy-resources/admin-policy endpoint.
+// Realm-level policies are no longer keyed by role, so it's fetched directly by its
+// reserved NAME — the old /iga/role-policies/role/{roleId} lookup (and the
+// realm-management → tide-realm-admin role-id resolution it needed) is gone. The read
+// only needs an authenticated realm-admin token; manage-realm is not required.
 export const getAdminPolicy = async (token: string): Promise<Policy> => {
-    // Ensure config is loaded (important for server-side calls)
-    await initTcData();
-
-    // tide-realm-admin is a client role on the realm-management client.
-    const rmClient = await getClientByClientId("realm-management", token);
-    if (!rmClient) throw new Error("realm-management client not found");
-
-    const roleResponse = await fetch(`${getTcUrl()}/clients/${rmClient.id}/roles/tide-realm-admin`, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!roleResponse.ok) {
-        throw new Error(`Error resolving tide-realm-admin role: ${await roleResponse.text()}`);
-    }
-    const adminRoleId = (await roleResponse.json()).id;
-
-    // The role policy bound to that role is the admin (M0) policy.
-    const response = await fetch(`${getTcUrl()}/iga/role-policies/role/${adminRoleId}`, {
+    const response = await fetch(`${adminBaseUrlFromToken(token)}/iga/role-policies/name/${ADMIN_POLICY_NAME}`, {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
     });
@@ -53,15 +49,4 @@ export const getVendorIdForPolicy = (): string => {
 // Get resource (client ID) for policy creation
 export const getResourceForPolicy = (): string => {
     return getResource();
-};
-
-// Get client by clientId (used to resolve the realm-management client for getAdminPolicy)
-export const getClientByClientId = async (clientId: string, token: string): Promise<ClientRepresentation | null> => {
-    const response = await fetch(`${getTcUrl()}/clients?clientId=${clientId}`, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!response.ok) return null;
-    const clients: ClientRepresentation[] = await response.json();
-    return clients.length > 0 ? clients[0] : null;
 };

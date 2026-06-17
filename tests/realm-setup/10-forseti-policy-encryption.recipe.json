@@ -1,0 +1,35 @@
+{
+  "name": "10-forseti-policy-encryption",
+  "hypothesis": "Realm setup for the 10-forseti-policy-encryption Playwright test: 'executive' and 'procurementofficer' realm roles exist; the test-app admin holds BOTH (it is the 3rd executive and the committer), two more executives (admin2, user3) and two procurement officers (user4, user5) hold theirs; and a public test-app client is registered, so the Forseti contract's threshold approval paths can be exercised; the baseline token still ORK-signs.",
+  "tags": ["realm-setup", "forseti", "encryption", "ork"],
+  "setup": [
+    { "kind": "role.create", "args": { "name": "executive", "description": "Forseti executive approver role (10-forseti-policy-encryption)" } },
+    { "kind": "role.create", "args": { "name": "procurementofficer", "description": "Forseti procurement-officer approver role (10-forseti-policy-encryption)" } },
+    { "kind": "client.create", "args": { "clientId": "testapp", "publicClient": true, "standardFlowEnabled": true, "directAccessGrantsEnabled": true, "attributes": { "pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "+" } } },
+    { "kind": "client.update", "args": { "clientId": "testapp", "patch": { "redirectUris": ["http://localhost:3000/*"], "webOrigins": ["http://localhost:3000"] } } },
+    { "kind": "user.create", "args": { "username": "admin", "password": "Passw0rd!" }, "as": "admin" },
+    { "kind": "user.assignRealmRole", "args": { "user": "$admin", "role": "executive" } },
+    { "kind": "user.assignRealmRole", "args": { "user": "$admin", "role": "procurementofficer" } },
+    { "kind": "user.create", "args": { "username": "admin2", "password": "Passw0rd!" }, "as": "admin2" },
+    { "kind": "user.assignRealmRole", "args": { "user": "$admin2", "role": "executive" } },
+    { "kind": "user.create", "args": { "username": "user3", "password": "Passw0rd!" }, "as": "user3" },
+    { "kind": "user.assignRealmRole", "args": { "user": "$user3", "role": "executive" } },
+    { "kind": "user.create", "args": { "username": "user4", "password": "Passw0rd!" }, "as": "user4" },
+    { "kind": "user.assignRealmRole", "args": { "user": "$user4", "role": "procurementofficer" } },
+    { "kind": "user.create", "args": { "username": "user5", "password": "Passw0rd!" }, "as": "user5" },
+    { "kind": "user.assignRealmRole", "args": { "user": "$user5", "role": "procurementofficer" } }
+  ],
+  "probe": {
+    "kind": "token.request",
+    "args": { "grant": "password", "clientId": "admin-cli", "user": "$user3", "password": "Passw0rd!" }
+  },
+  "expect": { "side": "ork", "outcome": "sign" },
+  "_backs": "tests/specs/10-forseti-policy-encryption.spec.js",
+  "_provides": "realm roles 'executive' and 'procurementofficer'; the test-app admin holds both; admin2+user3 (executive) and user4+user5 (procurementofficer); a public 'testapp' client (origin http://localhost:3000).",
+  "_tideSetup": {
+    "appClient": "testapp",
+    "appLoginUser": "admin",
+    "linkUsers": ["admin", "admin2", "user3", "user4", "user5"],
+    "realmAdmins": ["admin"]
+  }
+}

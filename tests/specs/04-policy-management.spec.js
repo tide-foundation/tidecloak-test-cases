@@ -1,133 +1,62 @@
 // @ts-check
 /**
- * F4: Policy Management - Create, Approve, and Commit Policy with GenericResourceAccessThresholdRoleContract
+ * F4: Policy Management — Create, Approve, and Commit a GenericResourceAccessThresholdRole policy.
  *
- * This test suite verifies policy creation and approval workflow
- * using the @tidecloak/js SDK and GenericResourceAccessThresholdRoleContract.
+ * Scenario: the admin creates a threshold=2 policy for 'TestRole'. The realm admin policy has
+ *           threshold=1, so a single admin approval commits the NEW policy; it then requires 2
+ *           approvers whenever it is later used.
  *
- * Scenario: Admin creates a policy with threshold=2 for the TestRole created in F3.
- *           The admin policy in TideCloak has threshold=1, so only 1 admin approval
- *           is needed to commit the NEW policy.
- *           Once committed, the new policy will require 2 approvers when used later.
- *
- * Prerequisites:
- * - F3 completed (TestRole created and assigned to first admin)
+ * Realm provisioning (Stage 1–5) is done by provisionScenario() from the recipe below:
+ *   tests/realm-setup/04-policy-management.recipe.json
+ * It creates the realm role 'TestRole', the 'testapp' client, and the 'admin' user (Tide-linked
+ * and elevated to tide-realm-admin), and returns a RealmContext with the admin's creds + the
+ * per-realm adapter config the test-app binds to.
  */
 
 const { test, expect } = require('@playwright/test');
 const path = require('path');
-const fs = require('fs');
 const config = require('../utils/config');
-const { createScreenshotHelper, getTestsDir } = require('../utils/helpers');
+const { createScreenshotHelper, signInToRealm, approveViaEnclavePopup, waitForAdminAuthReady } = require('../utils/helpers');
+const { provisionScenario } = require('../utils/provision');
+
+const REALM_SETUP_RECIPE = path.join(__dirname, '..', 'realm-setup', '04-policy-management.recipe.json');
+const testRoleName = 'TestRole';
 
 test.describe('F4: Policy Management', () => {
-    test.setTimeout(3 * 60 * 1000); // 3 minutes timeout
+    test.setTimeout(3 * 60 * 1000); // 3 minutes per test
 
-    let adminCreds = null;
-    let testRoleName = null;
+    /** @type {any} */
+    let ctx;
+    /** @type {{ kcUsername: string, tideUsername: string, password: string }} */
+    let adminCreds;
 
-    const signInAndWaitForAdmin = async (page, takeScreenshot) => {
-        await page.goto(config.BASE_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
-
-        await page.getByRole('button', { name: 'Login' }).click();
-        if (takeScreenshot) await takeScreenshot('02_login_form');
-
-        // If we're already authenticated, the app may redirect immediately.
-        const alreadyOnAdmin = await page
-            .waitForURL(/\/admin(\?|$)/, { timeout: 5000, waitUntil: 'domcontentloaded' })
-            .then(() => true)
-            .catch(() => false);
-        if (alreadyOnAdmin) return;
-
-        // Wait for the Tide login form to appear (the DOM can vary slightly in CI).
-        let nameInput = page.locator('#sign_in-input_name').nth(1);
-        const nameVisible = await nameInput
-            .waitFor({ state: 'visible', timeout: 60000 })
-            .then(() => true)
-            .catch(() => false);
-        if (!nameVisible) {
-            nameInput = page.locator('#sign_in-input_name').first();
-            await nameInput.waitFor({ state: 'visible', timeout: 60000 });
-        }
-
-        let passInput = page.locator('#sign_in-input_password').nth(1);
-        const passVisible = await passInput
-            .waitFor({ state: 'visible', timeout: 10000 })
-            .then(() => true)
-            .catch(() => false);
-        if (!passVisible) {
-            passInput = page.locator('#sign_in-input_password').first();
-            await passInput.waitFor({ state: 'visible', timeout: 10000 });
-        }
-
-        await nameInput.fill(adminCreds.username);
-        await passInput.fill(adminCreds.password);
-        if (takeScreenshot) await takeScreenshot('03_credentials_filled');
-
-        // Click Sign In (primary selector used across the suite).
-        // The "Sign InProcessing" text is a Tide login widget quirk; keep it as the first choice.
-        let signInBtn = page.getByText('Sign InProcessing');
-        const signInTextVisible = await signInBtn
-            .waitFor({ state: 'visible', timeout: 15000 })
-            .then(() => true)
-            .catch(() => false);
-        if (!signInTextVisible) {
-            signInBtn = page.getByRole('button', { name: /sign\s*in/i });
-            await signInBtn.waitFor({ state: 'visible', timeout: 15000 });
-        }
-        await page.waitForTimeout(1000);
-        await signInBtn.click();
-
-        // Successful login generally returns to "/" and then the app redirects to "/admin".
-        const onAdmin = page.waitForURL(/\/admin(\?|$)/, { timeout: 120000, waitUntil: 'domcontentloaded' });
-        const onHomeThenAdmin = page
-            .waitForURL((url) => url.pathname === '/' || url.pathname === '/home', {
-                timeout: 120000,
-                waitUntil: 'domcontentloaded',
-            })
-            .then(() => page.waitForURL(/\/admin(\?|$)/, { timeout: 120000, waitUntil: 'domcontentloaded' }));
-        await Promise.race([onAdmin, onHomeThenAdmin]);
-
-        await expect(page.getByText('Admin Dashboard')).toBeVisible({ timeout: 120000 });
+    /**
+     * Bind the test-app to the provisioned realm, then sign in as the enclave admin.
+     * @param {import('@playwright/test').Page} page
+     * @param {((name: string) => Promise<void>) | null} [takeScreenshot]
+     */
+    const login = async (page, takeScreenshot = null) => {
+        await signInToRealm(page, {
+            adapterConfig: ctx.adapterConfig,
+            baseUrl: config.BASE_URL,
+            username: adminCreds.tideUsername,
+            password: adminCreds.password,
+            takeScreenshot,
+        });
     };
 
     test.beforeAll(async () => {
-        // Read stored credentials from F2
-        const testsDir = getTestsDir();
-        const credsPath = path.join(testsDir, 'tide-admin-creds.json');
-
-        expect(
-            fs.existsSync(credsPath),
-            `Credentials not found at: ${credsPath}. Run F2 tests first.`
-        ).toBeTruthy();
-
-        adminCreds = JSON.parse(fs.readFileSync(credsPath, 'utf-8'));
-        console.log(`Using admin credentials: ${adminCreds.username}`);
-
-        // Read the TestRole created in F3
-        const roleDataPath = path.join(testsDir, 'created-role.json');
-        expect(
-            fs.existsSync(roleDataPath),
-            `created-role.json not found at: ${roleDataPath}. Run F3 tests first.`
-        ).toBeTruthy();
-
-        const roleData = JSON.parse(fs.readFileSync(roleDataPath, 'utf-8'));
-        testRoleName = roleData.roleName;
-        expect(testRoleName, 'Could not find role name in created-role.json').toBeTruthy();
-        console.log(`Using TestRole from F3: ${testRoleName}`);
+        test.setTimeout(20 * 60 * 1000); // provisioning runs the recipe + the Tide link/elevate ceremonies
+        ctx = await provisionScenario(REALM_SETUP_RECIPE, { baseUrl: config.TIDECLOAK_URL });
+        adminCreds = ctx.users[ctx.appLoginUser];
+        console.log(`Realm ${ctx.realm}; admin kc='${adminCreds.kcUsername}' tide='${adminCreds.tideUsername}'; TestRole '${testRoleName}'`);
     });
 
     test('Given: I am an authenticated administrator', async ({ page }) => {
         const takeScreenshot = createScreenshotHelper(page, 'F4_auth');
-
-        // Navigate to test-app
-        await page.goto(config.BASE_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
-        await takeScreenshot('01_home_page');
-
-        await signInAndWaitForAdmin(page, takeScreenshot);
-        await takeScreenshot('05_admin_page');
-
-        console.log(`Authenticated as: ${adminCreds.username}`);
+        await login(page, takeScreenshot);
+        await takeScreenshot('01_admin_page');
+        console.log(`Authenticated as: ${adminCreds.kcUsername}`);
     });
 
     test('When: I create a policy with threshold 2 for the TestRole', async ({ page }) => {
@@ -152,15 +81,12 @@ test.describe('F4: Policy Management', () => {
             }
         });
 
-        await signInAndWaitForAdmin(page, null);
-
+        await login(page);
         await takeScreenshot('01_admin_page');
 
         // Ensure auth state finished initializing (CI can reach /admin before vuid/userId is populated)
-        const vuidLine = page.locator('p').filter({ hasText: 'VUID:' }).first();
-        await expect(vuidLine).toHaveText(/VUID:\s*\S+/, { timeout: 60000 });
+        await waitForAdminAuthReady(page);
 
-        // Fill in policy details using the TestRole from F3
         console.log(`Creating policy for TestRole: ${testRoleName}`);
         const policyRoleInput = page.locator('[data-testid="policy-role-input"]');
         const policyThresholdInput = page.locator('[data-testid="policy-threshold-input"]');
@@ -178,10 +104,6 @@ test.describe('F4: Policy Management', () => {
         await expect(createPolicyButton).toBeEnabled({ timeout: 15000 });
         await takeScreenshot('02_policy_form_filled');
 
-        // Click Create Policy and wait for either:
-        // - the POST /api/policies request (best signal), OR
-        // - an error banner, OR
-        // - the policy row to appear (durable UI state)
         const pendingPoliciesList = page.locator('[data-testid="pending-policies-list"]');
         const expectedPolicyRow = pendingPoliciesList.locator('li', { hasText: testRoleName }).first();
 
@@ -207,12 +129,10 @@ test.describe('F4: Policy Management', () => {
         // which results in UNIQUE constraint errors on slower CI machines
         const createPolicyRequest = await createPolicyRequestPromise;
 
-        // Wait until we see either a policy row, or an error message, or we time out.
         let [rowVisible, errorMessage] = await Promise.all([policyRowPromise, errorMessagePromise]);
 
-        // If the row never appeared AND there's no error banner, the most likely cause is
-        // that the inline fetchPendingPolicies() in the click handler raced the server-side
-        // write. Click Refresh Data to force a fresh GET /api/policies and retry.
+        // If the row never appeared AND there's no error banner, the inline fetchPendingPolicies()
+        // likely raced the server write. Click Refresh Data to force a fresh GET /api/policies.
         if (!rowVisible && !errorMessage) {
             const maxRefreshes = 3;
             for (let attempt = 1; attempt <= maxRefreshes; attempt++) {
@@ -251,13 +171,10 @@ test.describe('F4: Policy Management', () => {
             }
         }
 
-        // Verify it appears in the pending policies list (the durable success signal)
         await expect(expectedPolicyRow).toBeVisible({ timeout: 15000 });
-
         await takeScreenshot('03_after_create_policy');
         console.log(`Policy created for role: ${testRoleName} with threshold 2`);
 
-        // Best-effort: if the message banner is visible, assert its contents (it may be absent if cleared quickly)
         const messageBanner = page.locator('[data-testid="message"]').first();
         await messageBanner
             .waitFor({ state: 'visible', timeout: 5000 })
@@ -272,18 +189,7 @@ test.describe('F4: Policy Management', () => {
 
     test('Then: I approve the policy request (admin policy threshold=1)', async ({ page }) => {
         const takeScreenshot = createScreenshotHelper(page, 'F4_approve_policy');
-
-        // First authenticate
-        await page.goto(config.BASE_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
-        await page.getByRole('button', { name: 'Login' }).click();
-        await page.locator('#sign_in-input_name').nth(1).fill(adminCreds.username);
-        await page.locator('#sign_in-input_password').nth(1).fill(adminCreds.password);
-        const signInBtn = page.getByText('Sign InProcessing');
-        await signInBtn.waitFor({ state: 'visible', timeout: 15000 });
-        await page.waitForTimeout(1000);
-        await signInBtn.click();
-        await page.waitForURL('**/admin**', { timeout: 90000 });
-
+        await login(page);
         await takeScreenshot('01_admin_page');
 
         // Wait for policies to load (by waiting for the review button to appear)
@@ -291,57 +197,27 @@ test.describe('F4: Policy Management', () => {
         await expect(reviewButton).toBeVisible({ timeout: 30000 });
         await takeScreenshot('02_before_review');
 
-        // Click review - this will trigger the Tide popup
-        const popupPromise = page.waitForEvent('popup', { timeout: 60000 });
-        await reviewButton.click();
-        await takeScreenshot('03_waiting_for_popup');
-
-        const popup = await popupPromise;
-        await popup.waitForLoadState('domcontentloaded');
-        await takeScreenshot('04_approval_popup');
-
-        // Click Y to approve
-        await popup.getByRole('button', { name: 'Y' }).click();
-        await popup.getByRole('button', { name: 'Submit Approvals' }).click();
-        await popup.close().catch(() => {});
+        // Click review - this triggers the Tide enclave approval popup
+        await approveViaEnclavePopup(page, { trigger: reviewButton });
         console.log('Policy review approved via popup');
-
         await takeScreenshot('05_after_approve');
 
-        // Verify the approval was recorded (this waits for the operation to complete)
         await expect(page.locator('[data-testid="message"]').first()).toContainText('approved', { timeout: 30000 });
         console.log('Policy approval recorded');
-
         await takeScreenshot('06_approval_recorded');
 
-        // Check that the policy now shows 1 approval and is ready to commit
-        // (admin policy has threshold=1, so 1 approval is enough)
         const policyList = page.locator('[data-testid="pending-policies-list"]');
         await expect(policyList).toContainText('Approvals: 1', { timeout: 10000 });
         console.log('Policy shows 1 approval');
 
-        // The policy should now be ready to commit (admin threshold=1 is met)
         await expect(policyList).toContainText('Ready: Yes', { timeout: 10000 });
         console.log('Policy is ready to commit (admin threshold=1 met)');
-
         await takeScreenshot('07_ready_to_commit');
     });
 
     test('Then: I commit the policy', async ({ page }) => {
         const takeScreenshot = createScreenshotHelper(page, 'F4_commit_policy');
-        const testsDir = getTestsDir();
-
-        // First authenticate
-        await page.goto(config.BASE_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
-        await page.getByRole('button', { name: 'Login' }).click();
-        await page.locator('#sign_in-input_name').nth(1).fill(adminCreds.username);
-        await page.locator('#sign_in-input_password').nth(1).fill(adminCreds.password);
-        const signInBtn = page.getByText('Sign InProcessing');
-        await signInBtn.waitFor({ state: 'visible', timeout: 15000 });
-        await page.waitForTimeout(1000);
-        await signInBtn.click();
-        await page.waitForURL('**/admin**', { timeout: 90000 });
-
+        await login(page);
         await takeScreenshot('01_admin_page');
 
         // Wait for policies to load (by waiting for the commit button to appear)
@@ -353,48 +229,23 @@ test.describe('F4: Policy Management', () => {
         // Click commit - executeTideRequest runs directly without a popup
         await commitButton.click();
         console.log('Commit button clicked - executing policy signature');
-
         await takeScreenshot('03_after_commit');
 
-        // Verify the commit was successful (this waits for the operation to complete)
         await expect(page.locator('[data-testid="message"]').first()).toContainText('committed', { timeout: 30000 });
         console.log('Policy committed successfully!');
 
-        // The policy should no longer be in the pending list
         const policyList = page.locator('[data-testid="pending-policies-list"]');
         await expect(policyList).not.toContainText(testRoleName, { timeout: 10000 });
         console.log('Policy removed from pending list');
-
         await takeScreenshot('04_policy_committed');
 
-        // Fetch the committed policy data from the API
-        console.log('Fetching committed policy from API...');
+        // Confirm it landed in the committed set via the API.
         const response = await page.request.get(`${config.BASE_URL}/api/policies?type=committed`);
         expect(response.ok()).toBeTruthy();
-
+        /** @type {any[]} */
         const committedPolicies = await response.json();
-        console.log(`Found ${committedPolicies.length} committed policies`);
-
-        // Find the policy we just created
-        const ourPolicy = committedPolicies.find(p => p.role === testRoleName);
-        expect(ourPolicy).toBeTruthy();
-        console.log(`Found committed policy for role: ${ourPolicy.role}, threshold: ${ourPolicy.threshold}`);
-
-        // Store the policy status with the serialized policy data
-        // Note: roleName is the TestRole from F3, which first admin already has
-        fs.writeFileSync(
-            path.join(testsDir, 'committed-policy.json'),
-            JSON.stringify({
-                roleName: testRoleName,
-                threshold: ourPolicy.threshold,
-                resource: ourPolicy.resource,
-                policyData: ourPolicy.data,  // Base64 encoded policy bytes
-                committed: true,
-                committedAt: new Date().toISOString(),
-                note: 'Policy requires 2 approvers when used for signing requests. First admin already has this role from F3.'
-            })
-        );
-
-        console.log('SUCCESS: Policy created, committed, and stored for later use');
+        const ourPolicy = committedPolicies.find((p) => p.role === testRoleName);
+        expect(ourPolicy, `committed policy for ${testRoleName} not found`).toBeTruthy();
+        console.log(`SUCCESS: committed policy for role ${ourPolicy.role}, threshold ${ourPolicy.threshold}`);
     });
 });
