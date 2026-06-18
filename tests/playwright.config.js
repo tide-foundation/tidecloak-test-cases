@@ -1,5 +1,8 @@
 // @ts-check
+const path = require('path');
 const { defineConfig, devices } = require('@playwright/test');
+
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 
 /**
  * @see https://playwright.dev/docs/test-configuration
@@ -20,7 +23,7 @@ module.exports = defineConfig({
     ['list']
   ],
   use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:3000',
+    baseURL: BASE_URL,
     trace: 'off',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -50,11 +53,23 @@ module.exports = defineConfig({
     },
   ],
 
-  /* Run local dev server before starting the tests */
-  // webServer: {
-  //   command: 'npm run dev',
-  //   url: 'http://localhost:3000',
-  //   reuseExistingServer: !process.env.CI,
-  //   cwd: '../test-app',
-  // },
+  /*
+   * Provision the test-app for every run: rebuild it (so code changes are always picked up — the
+   * app is served via `next start`, which does NOT hot-reload) and start it, once per run before
+   * any spec. Playwright waits for /api/health, then tears the server down when the run ends.
+   *
+   * reuseExistingServer:false => always build + start fresh, so a stale running build can never
+   * mask a code change. Consequence: nothing else may be listening on :3000 when you start a run,
+   * and the app is only up for the duration of the run. Set PW_SKIP_BUILD=1 to skip the rebuild
+   * (start-only) when you're iterating on test code and the app code hasn't changed.
+   */
+  webServer: {
+    command: process.env.PW_SKIP_BUILD ? 'npm run start' : 'npm run build && npm run start',
+    url: `${BASE_URL}/api/health`,
+    cwd: path.resolve(__dirname, '../test-app'),
+    reuseExistingServer: false,
+    timeout: 180_000,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  },
 });

@@ -57,28 +57,39 @@ async function injectRealmAdapter(page, adapterConfig) {
  * Sign into the test-app and wait until the Admin Dashboard is ready.
  * This is written to be resilient in slow CI environments.
  *
+ * In the default mode this navigates to `baseUrl`, clicks Login, fills the Tide enclave
+ * widget, and waits for the Admin Dashboard. Pass `fillOnly: true` when the caller has
+ * ALREADY landed on the realm login page (e.g. the DPoP harness redirect): the navigation,
+ * the Login-button click, and the Admin-Dashboard wait are all skipped — only the enclave
+ * widget on the current page is filled and submitted. In that mode it returns `'tide'`.
+ *
  * @param {import('@playwright/test').Page} page
  * @param {{
- *   baseUrl: string,
+ *   baseUrl?: string,
  *   username: string,
  *   password: string,
  *   takeScreenshot?: ((name: string) => Promise<void>) | null,
  *   timeoutMs?: number,
+ *   fillOnly?: boolean,
  * }} opts
+ * @returns {Promise<'tide'|void>}
  */
 async function signInToAdmin(page, opts) {
     const timeoutMs = opts.timeoutMs ?? 120000;
 
-    await page.goto(opts.baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
-    await page.getByRole('button', { name: 'Login' }).click();
-    if (opts.takeScreenshot) await opts.takeScreenshot('02_login_form');
+    if (!opts.fillOnly) {
+        if (!opts.baseUrl) throw new Error('signInToAdmin: opts.baseUrl is required unless fillOnly is set');
+        await page.goto(opts.baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+        await page.getByRole('button', { name: 'Login' }).click();
+        if (opts.takeScreenshot) await opts.takeScreenshot('02_login_form');
 
-    // If already authenticated, the app may redirect immediately.
-    const alreadyOnAdmin = await page
-        .waitForURL(/\/admin(\?|$)/, { timeout: 5000, waitUntil: 'domcontentloaded' })
-        .then(() => true)
-        .catch(() => false);
-    if (alreadyOnAdmin) return;
+        // If already authenticated, the app may redirect immediately.
+        const alreadyOnAdmin = await page
+            .waitForURL(/\/admin(\?|$)/, { timeout: 5000, waitUntil: 'domcontentloaded' })
+            .then(() => true)
+            .catch(() => false);
+        if (alreadyOnAdmin) return;
+    }
 
     try{
         console.log('[runtime-fixture] clicking Tide social-login button (#social-tide) …');
@@ -126,10 +137,14 @@ async function signInToAdmin(page, opts) {
     await signInBtn.click();
     if (opts.takeScreenshot) await opts.takeScreenshot('04_after_signin');
 
+    // fillOnly: the caller owns whatever the post-login redirect lands on (e.g. the DPoP
+    // harness), so don't wait for the Admin Dashboard — just report which form we filled.
+    if (opts.fillOnly) return 'tide';
+
     // Successful login often returns to "/" and then the app redirects to "/admin".
     const onAdmin = page.waitForURL(/\/admin(\?|$)/, { timeout: timeoutMs, waitUntil: 'domcontentloaded' });
     const onHomeThenAdmin = page
-        .waitForURL((url) => url.pathname === '/' || url.pathname === '/home', {
+        .waitForURL((url) => url.pathname === '/' || url.pathname === '/home' || url.pathname === '/dpop-harness', {
             timeout: timeoutMs,
             waitUntil: 'domcontentloaded',
         })
@@ -264,7 +279,7 @@ async function goToCryptoPage(page, baseUrl) {
  * @param {{
  *   adapterConfig: object,
  *   baseUrl: string,
- *   creds: { username: string, password: string },
+ *   creds: { kcUsername: string, tideUsername: string, password: string },
  *   takeScreenshot?: ((name: string) => Promise<void>) | null,
  *   requireRole?: string | null,
  * }} opts - pass requireRole to poll the token until that realm role is present (Doken lag)
@@ -273,7 +288,9 @@ async function goToForsetiPage(page, opts) {
     await signInToRealm(page, {
         adapterConfig: opts.adapterConfig,
         baseUrl: opts.baseUrl,
-        username: opts.creds.username,
+        // Log in with the global enclave identity (tideUsername), NOT kcUsername — RealmContext
+        // user creds are { kcUsername, tideUsername, password } and have no `username` field.
+        username: opts.creds.tideUsername,
         password: opts.creds.password,
         takeScreenshot: opts.takeScreenshot ?? null,
     });

@@ -7,30 +7,8 @@ const Policy = Models.Policy;
 type Policy = InstanceType<typeof Policy>;
 const GenericResourceAccessThresholdRoleContract = Contracts.GenericResourceAccessThresholdRoleContract;
 
-// Initialize signing requests table
-db.exec(`
-    CREATE TABLE IF NOT EXISTS pending_signing_requests (
-        id TEXT PRIMARY KEY,
-        requestedBy TEXT NOT NULL,
-        data TEXT NOT NULL,
-        staticData TEXT,
-        dynamicData TEXT,
-        requestType TEXT DEFAULT 'signing',
-        approvalThreshold INTEGER DEFAULT 2,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-`);
-
-db.exec(`
-    CREATE TABLE IF NOT EXISTS signing_request_decisions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        signing_request_id TEXT NOT NULL,
-        user_vuid TEXT NOT NULL,
-        decision INTEGER NOT NULL,
-        FOREIGN KEY (signing_request_id) REFERENCES pending_signing_requests(id) ON DELETE CASCADE,
-        UNIQUE(signing_request_id, user_vuid)
-    )
-`);
+// The pending_signing_requests / signing_request_decisions tables are created centrally in
+// connection.ts (createSchema) so resetDatabase() can recreate the full schema in one place.
 
 interface PendingSigningRequest {
     id: string;
@@ -105,6 +83,7 @@ export async function GET(req: NextRequest) {
                         db.prepare('UPDATE pending_signing_requests SET data = ? WHERE id = ?')
                             .run(updatedData, row.id);
                     } else {
+                        console.log(committedPolicy.contractId);
                         console.log(`Request ${row.id} not ready:`, testResult.failed);
                     }
                 } catch (e) {

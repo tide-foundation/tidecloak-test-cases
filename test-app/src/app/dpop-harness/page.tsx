@@ -31,6 +31,7 @@ type Result = {
 export default function DpopHarness() {
     const [ready, setReady] = useState(false);
     const [error, setError] = useState("");
+    const [stage, setStage] = useState("boot");
     const [result, setResult] = useState<Result>({ jkt: "", sub: "", azp: "", tokenType: "", resourceStatus: "" });
 
     useEffect(() => {
@@ -43,6 +44,7 @@ export default function DpopHarness() {
                 if (!url || !realm || !clientId) throw new Error("missing url/realm/clientId query params");
                 const mode = (p.get("mode") || "strict") as "strict" | "auto";
                 const alg = p.get("alg") || "ES256";
+                console.log(`[dpop-harness] params url=${url} realm=${realm} clientId=${clientId} mode=${mode} alg=${alg}`);
 
                 // 1. Construct the TideCloak adapter for THIS client.
                 const tc = new TideCloak({
@@ -53,14 +55,22 @@ export default function DpopHarness() {
                     ...(p.get("homeOrkUrl") ? { homeOrkUrl: p.get("homeOrkUrl") } : {}),
                 } as any);
 
+                // DEBUG watchdog: if init() hasn't settled (resolve OR redirect away) in 20s, say so.
+                const watchdog = setTimeout(
+                    () => console.warn(`[dpop-harness] init() STILL PENDING after 20s (stage=${stage}) — likely hung before the login redirect`),
+                    20000,
+                );
+
                 // 2. Initialize WITH DPoP. login-required performs the auth-code flow (and SSO on
                 //    the second client, since the browser session cookie is already set).
                 const authenticated = await tc.init({
                     onLoad: "login-required",
                     checkLoginIframe: false,
                     pkceMethod: "S256",
+                    enableLogging: true, // DEBUG: emit the SDK's own [TIDECLOAK] logs to the console
                     useDPoP: { mode, alg } as any,
                 } as any);
+                clearTimeout(watchdog);
 
                 if (!authenticated) {
                     // init() is mid-redirect to the login page; this effect re-runs on return.
@@ -81,6 +91,7 @@ export default function DpopHarness() {
                     resourceStatus = resp.status;
                 } catch (e: any) {
                     resourceStatus = `error:${e?.message || e}`;
+                    console.warn(`[dpop-harness] secureFetch threw: ${e?.message || e}`);
                 }
 
                 setResult({
@@ -92,7 +103,9 @@ export default function DpopHarness() {
                 });
                 setReady(true);
             } catch (e: any) {
+                console.error(`[dpop-harness] init/flow threw at stage=${stage}:`, e?.message || e, e?.stack || "");
                 setError(e?.message || String(e));
+                setStage((s) => `error:${s}`);
                 setReady(true);
             }
         })();
@@ -102,6 +115,7 @@ export default function DpopHarness() {
         <div>
             <h1>DPoP Harness</h1>
             <p data-testid="dpop-ready">{ready ? "true" : "false"}</p>
+            <p data-testid="dpop-stage">{stage}</p>
             <p data-testid="dpop-error">{error}</p>
             <p data-testid="dpop-jkt">{result.jkt}</p>
             <p data-testid="dpop-sub">{result.sub}</p>

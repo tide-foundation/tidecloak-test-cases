@@ -5,8 +5,7 @@
   "setup": [
     { "kind": "role.create", "args": { "name": "_tide_secret.selfencrypt", "description": "Self-encrypt role for tag 'secret' (07-encryption-decryption)" } },
     { "kind": "role.create", "args": { "name": "_tide_secret.selfdecrypt", "description": "Self-decrypt role for tag 'secret' (07-encryption-decryption)" } },
-    { "kind": "client.create", "args": { "clientId": "testapp", "publicClient": true, "standardFlowEnabled": true, "directAccessGrantsEnabled": true, "attributes": { "pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "+" } } },
-    { "kind": "client.update", "args": { "clientId": "testapp", "patch": { "redirectUris": ["http://localhost:3000/*"], "webOrigins": ["http://localhost:3000"] } } },
+    { "kind": "client.create", "args": { "clientId": "testapp", "publicClient": true, "standardFlowEnabled": true, "directAccessGrantsEnabled": true, "redirectUris": ["http://localhost:3000/*"], "webOrigins": ["http://localhost:3000"], "attributes": { "pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "+" } } },
     { "kind": "user.create", "args": { "username": "admin", "password": "Passw0rd!" }, "as": "admin" },
     { "kind": "user.assignRealmRole", "args": { "user": "$admin", "role": "_tide_secret.selfencrypt" } },
     { "kind": "user.assignRealmRole", "args": { "user": "$admin", "role": "_tide_secret.selfdecrypt" } }

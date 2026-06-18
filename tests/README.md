@@ -20,6 +20,13 @@ and walks these stages:
 | 4. Elevate | **tide-admin-cli** `add-tide-realm-admin` / `link-user --grant-realm-admin` | Elevates **only** the users listed in `realmAdmins` to `tide-realm-admin`. Most users are *not* elevated. |
 | 5. Bind | TideCloak `get-installations-provider` | Fetches the per-realm Tide adapter config. The spec injects it into the test-app at runtime (`injectRealmAdapter`), so the app targets *this* realm without rebuilding `data/tidecloak.json`. |
 
+> **Before Stage 1**, `provisionScenario()` also POSTs `/api/test/reset` to the test-app to clear
+> its **shared policy DB** (pending + committed policies and their decisions). That store is a
+> single SQLite file, *not* realm-scoped and *not* wiped between runs, so without this reset stale
+> pending policies leak across runs and poison `.first()`-style selectors / approval counts. It's
+> best-effort: a missing route (un-rebuilt app) or an unreachable app warns and continues, so the
+> browserless `npm run provision` still works with the app down.
+
 `provisionScenario()` returns a **RealmContext**:
 
 ```js
@@ -98,7 +105,10 @@ npm run provision -- 10-forseti-policy-encryption
 
 - The **Tide stack** up: TideCloak (`TIDECLOAK_URL`, default `:8080`) and the ORK/enclave origin
   (`HOME_ORK_ORIGIN`, default `:1001`).
-- The **test-app** running at `BASE_URL` (default `:3000`) — `cd ../test-app && npm run dev`.
+- The **test-app** is started for you: Playwright's `webServer` runs `npm run build && npm run
+  start` (cwd `../test-app`) once per run and tears it down after — keep `:3000` free, since the
+  run owns it (`reuseExistingServer: false`). Set `PW_SKIP_BUILD=1` to skip the rebuild when only
+  test code changed. (The browserless `npm run provision` does **not** start the app.)
 - **tidecloak-iga-engine-tests** present (`IGA_ENGINE_DIR`, default `~/tidecloak-iga-engine-tests`).
 - The **tide-admin-cli** e2e suite present & installed (`TIDE_ADMIN_CLI_DIR`, default
   `~/project/tidecloak-idp-extensions/tidecloak-key-provider/frontend/e2e`): `npm install` +

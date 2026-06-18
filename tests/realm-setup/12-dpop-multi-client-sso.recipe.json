@@ -3,10 +3,8 @@
   "hypothesis": "Two DPoP-bound OIDC clients in one realm share one browser SSO session: after an interactive login to client A, client B authorizes with NO second login (near-instant SSO) yet still mints an access token DPoP-bound to client B's OWN key.",
   "tags": ["realm-setup", "dpop", "sso", "multi-client", "ork"],
   "setup": [
-    { "kind": "client.create", "args": { "clientId": "dpop-app-a", "publicClient": true, "standardFlowEnabled": true, "directAccessGrantsEnabled": true, "attributes": { "dpop.bound.access.tokens": "true", "pkce.code.challenge.method": "S256" } } },
-    { "kind": "client.update", "args": { "clientId": "dpop-app-a", "patch": { "redirectUris": ["http://localhost:3000/dpop-harness", "http://localhost:3000/*"], "webOrigins": ["+"] } } },
-    { "kind": "client.create", "args": { "clientId": "dpop-app-b", "publicClient": true, "standardFlowEnabled": true, "directAccessGrantsEnabled": true, "attributes": { "dpop.bound.access.tokens": "true", "pkce.code.challenge.method": "S256" } } },
-    { "kind": "client.update", "args": { "clientId": "dpop-app-b", "patch": { "redirectUris": ["http://localhost:3000/dpop-harness", "http://localhost:3000/*"], "webOrigins": ["+"] } } },
+    { "kind": "client.create", "args": { "clientId": "dpop-app-a", "publicClient": true, "standardFlowEnabled": true, "directAccessGrantsEnabled": true, "redirectUris": ["http://localhost:3000/*"], "webOrigins": ["http://localhost:3000"], "attributes": { "dpop.bound.access.tokens": "true", "pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "+" } } },
+    { "kind": "client.create", "args": { "clientId": "dpop-app-b", "publicClient": true, "standardFlowEnabled": true, "directAccessGrantsEnabled": true, "redirectUris": ["http://localhost:3000/*"], "webOrigins": ["http://localhost:3000"], "attributes": { "dpop.bound.access.tokens": "true", "pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "+" } } },
     { "kind": "user.create", "args": { "username": "ssouser", "password": "Passw0rd!" }, "as": "ssouser" }
   ],
   "probe": {
@@ -15,6 +13,12 @@
   },
   "expect": { "side": "ork", "outcome": "sign" },
   "_backs": "tests/specs/12-dpop-multi-client-sso.spec.js",
-  "_provides": "two DPoP-required public OIDC clients 'dpop-app-a' & 'dpop-app-b' (auth-code flow + PKCE, redirect to the test-app DPoP harness http://localhost:3000/dpop-harness, attribute dpop.bound.access.tokens=true) + a plain user 'ssouser'.",
-  "_enclaveGap": "Setup is fully recipe-expressible. The probe uses the non-DPoP admin-cli client (a DPoP-required client would reject a password grant that carries no DPoP proof), so it only baselines that the realm ORK-signs. The spec's interactive browser login to client A needs a credential the realm's browser flow accepts; if the realm forces the Tide enclave widget the plain 'ssouser' may not complete it (the spec tries the standard Keycloak form first, then the Tide widget). The DPoP token binding (cnf.jkt) and the SSO session cookie are runtime/browser concerns exercised by the spec, not recipe setup."
+  "_provides": "two DPoP-required public OIDC clients 'dpop-app-a' & 'dpop-app-b' (auth-code flow + PKCE, redirect to the test-app DPoP harness http://localhost:3000/dpop-harness, attribute dpop.bound.access.tokens=true) + a user 'ssouser' that is Tide-linked out-of-band (see _tideSetup) so the spec's interactive enclave login can succeed.",
+  "_enclaveGap": "CLOSED. The probe uses the non-DPoP admin-cli client (a DPoP-required client would reject a password grant that carries no DPoP proof), so it only baselines that the realm ORK-signs — it stays on the API path and never forces the Heimdall browser enclave (per the iga-engine hard rules). The recipe itself still only creates a PLAIN user; the spec's interactive browser login is satisfied because provisionScenario() Tide-links 'ssouser' out-of-band via tide-admin-cli (the _tideSetup overlay below), so the realm's enclave widget accepts it. The DPoP token binding (cnf.jkt) and the SSO session cookie remain runtime/browser concerns exercised by the spec, not recipe setup.",
+  "_tideSetup": {
+    "appClient": "dpop-app-a",
+    "appLoginUser": "ssouser",
+    "linkUsers": ["ssouser"],
+    "realmAdmins": []
+  }
 }

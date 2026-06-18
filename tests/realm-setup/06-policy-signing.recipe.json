@@ -1,27 +1,18 @@
 {
   "name": "06-policy-signing",
-  "hypothesis": "Realm setup for the 06-policy-signing Playwright test: a realm role 'TestRole' exists, both threshold approvers (the test-app admin and admin2) hold it, and a public test-app client is registered, so a threshold-2 TestInit:1 signing request can gather two role-holding approvals; the baseline token still ORK-signs.",
+  "hypothesis": "A CLIENT role 'TestRole' on 'testapp' exists; admin and admin2 both hold it, so their Dokens carry resource_access.testapp.roles=[TestRole] and a threshold-2 TestInit:1 signing request can gather two role-holding approvals; the baseline token still ORK-signs.",
   "tags": ["realm-setup", "policy", "signing", "ork"],
   "setup": [
-    { "kind": "role.create", "args": { "name": "TestRole", "description": "Role required to approve the threshold-2 signing request (06-policy-signing)" } },
-    { "kind": "client.create", "args": { "clientId": "testapp", "publicClient": true, "standardFlowEnabled": true, "directAccessGrantsEnabled": true, "attributes": { "pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "+" } } },
-    { "kind": "client.update", "args": { "clientId": "testapp", "patch": { "redirectUris": ["http://localhost:3000/*"], "webOrigins": ["http://localhost:3000"] } } },
+    { "kind": "client.create", "args": { "clientId": "testapp", "publicClient": true, "standardFlowEnabled": true, "directAccessGrantsEnabled": true, "redirectUris": ["http://localhost:3000/*"], "webOrigins": ["http://localhost:3000"], "attributes": { "pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "+" } } },
+    { "kind": "client.role.create", "args": { "clientId": "testapp", "name": "TestRole" } },
     { "kind": "user.create", "args": { "username": "admin", "password": "Passw0rd!" }, "as": "admin" },
-    { "kind": "user.assignRealmRole", "args": { "user": "$admin", "role": "TestRole" } },
+    { "kind": "user.assignClientRole", "args": { "user": "$admin", "clientId": "testapp", "role": "TestRole" } },
     { "kind": "user.create", "args": { "username": "admin2", "password": "Passw0rd!" }, "as": "admin2" },
-    { "kind": "user.assignRealmRole", "args": { "user": "$admin2", "role": "TestRole" } }
+    { "kind": "user.assignClientRole", "args": { "user": "$admin2", "clientId": "testapp", "role": "TestRole" } }
   ],
-  "probe": {
-    "kind": "token.request",
-    "args": { "grant": "password", "clientId": "admin-cli", "user": "$admin2", "password": "Passw0rd!" }
-  },
+  "probe": { "kind": "token.request", "args": { "grant": "password", "clientId": "admin-cli", "user": "$admin2", "password": "Passw0rd!" } },
   "expect": { "side": "ork", "outcome": "sign" },
   "_backs": "tests/specs/06-policy-signing.spec.js",
-  "_provides": "realm role 'TestRole'; the test-app admin and admin2 both hold it (the two threshold approvers); a public 'testapp' client (origin http://localhost:3000).",
-  "_tideSetup": {
-    "appClient": "testapp",
-    "appLoginUser": "admin",
-    "linkUsers": ["admin", "admin2"],
-    "realmAdmins": ["admin"]
-  }
+  "_provides": "client role 'TestRole' on the 'testapp' client; admin and admin2 both hold it; a public 'testapp' client (origin http://localhost:3000).",
+  "_tideSetup": { "appClient": "testapp", "appLoginUser": "admin", "linkUsers": ["admin", "admin2"], "realmAdmins": ["admin"] }
 }

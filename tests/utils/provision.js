@@ -127,6 +127,40 @@ async function fetchAdapterConfig(request, o) {
 }
 
 /**
+ * Wipe the test-app's policy scratch state (pending requests + decisions, committed policies, the
+ * change log) before a scenario runs. The test-app keeps these in one shared, non-realm-scoped
+ * SQLite file that survives across runs of the manually-started dev server, so stale rows from
+ * prior runs otherwise pollute the pending list (e.g. `.first()` selecting an ancient policy with
+ * accumulated approvals). Per-spec (not per-test) reset: specs are stateful Given/When/Then flows.
+ * @param {import('@playwright/test').APIRequestContext} request
+ * @param {string} baseUrl  the test-app URL (config.BASE_URL), NOT TideCloak
+ */
+async function resetTestAppState(request, baseUrl) {
+    const res = await request.post(`${baseUrl}/api/test/reset`).catch((e) => ({
+        ok: () => false, status: () => 0, text: async () => String(e),
+    }));
+    if (res.ok()) return;
+    const status = res.status();
+    // Best-effort. Two non-fatal cases:
+    //   404 => the test-app build predates the /api/test/reset route (needs a rebuild).
+    //   0   => the app is unreachable (not running) — e.g. browserless `npm run provision`.
+    // Under the Playwright suite the webServer guarantees a freshly-built, running app, so this
+    // only bites out-of-band provisioning. Warn loudly and continue; real HTTP errors (5xx) throw.
+    if (status === 404 || status === 0) {
+        console.warn(
+            `[provision] could not reset test-app policy state at ${baseUrl}/api/test/reset ` +
+            `(status ${status}) — continuing WITHOUT a reset; stale policies from prior runs may ` +
+            `persist. (Under \`npm test\` the webServer always has a fresh app; this usually only ` +
+            `shows up when provisioning out-of-band with the app down or an un-rebuilt app.)`
+        );
+        return;
+    }
+    throw new Error(
+        `reset test-app policy state failed: ${status} ${await res.text()} (${baseUrl}/api/test/reset)`
+    );
+}
+
+/**
  * Provision the full realm for a scenario and return its RealmContext.
  *
  * @param {string} recipePath  absolute path to tests/realm-setup/<name>.recipe.json
@@ -154,6 +188,10 @@ async function provisionScenario(recipePath, opts = {}) {
     }
     const linkUsers = tideSetup.linkUsers || [];
     const realmAdmins = tideSetup.realmAdmins || [];
+
+    // ── 0. Reset the test-app's shared policy scratch state so this spec starts clean (stale
+    //       pending policies from prior runs otherwise pollute the list and approval counts).
+    await resetTestAppState(request, config.BASE_URL);
 
     // ── 1. Scaffold the realm from the recipe (roles + plain users + grants + testapp client).
     provisionRealmFromRecipe(recipePath);
@@ -208,8 +246,13 @@ async function provisionScenario(recipePath, opts = {}) {
     });
 
     // ── 5. Fetch the adapter config the spec injects into the test-app at runtime.
+    //       Re-acquire the admin token first: the one minted after Stage 1 is a master-realm
+    //       admin-cli token (default 60s lifespan), and the Stage 3/4 enclave sign-ups can take
+    //       minutes (esp. recipes that link many users, e.g. F10's five) — long enough to expire
+    //       it, which surfaced as a 401 resolving the client here. Return the fresh token too.
+    const freshToken = await getKcAdminToken(request, { baseUrl });
     const adapterConfig = await fetchAdapterConfig(request, {
-        baseUrl, realm, token, clientId: tideSetup.appClient,
+        baseUrl, realm, token: freshToken, clientId: tideSetup.appClient,
     });
 
     if (ownRequest) await ownRequest.dispose();
@@ -220,12 +263,13 @@ async function provisionScenario(recipePath, opts = {}) {
         appLoginUser: tideSetup.appLoginUser,
         users: userCtx,
         adapterConfig,
-        token,
+        token: freshToken,
     };
 }
 
 module.exports = {
     provisionScenario,
+    resetTestAppState,
     signIdpSettings,
     fetchAdapterConfig,
     readScenario,

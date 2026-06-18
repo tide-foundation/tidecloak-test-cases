@@ -71,18 +71,20 @@ If your sibling suites live elsewhere, point at them with `IGA_ENGINE_DIR` and
 
 ## 3. Running tests
 
-Start the two long-running services in their own terminals, then run the suite:
+The suite **builds and starts the test-app for you** — you only need the Tide stack running:
 
 ```bash
 # Terminal A — your local Tide stack (TideCloak :8080 + ORK :1001). Start it however you
 # normally do; the suite does NOT start it for you.
 
-# Terminal B — the test-app
-cd test-app && npm run dev          # serves http://localhost:3000
-
-# Terminal C — the tests (from the repo root)
-npm test                            # runs the whole suite
+# Terminal B — the tests (from the repo root)
+npm test                            # builds + starts the test-app, runs the suite, tears it down
 ```
+
+Playwright's `webServer` runs `npm run build && npm run start` once per run, waits for the app to
+be healthy, then shuts it down when the run ends. The rebuild is deliberate: the app is served via
+`next start` (which does **not** hot-reload), so building every run guarantees your latest code is
+always under test. You do **not** start the test-app by hand for tests.
 
 More ways to run (all from the `tests/` directory):
 
@@ -101,6 +103,15 @@ npm run report                                        # open the HTML report aft
 Notes that will save you confusion:
 - The suite runs **serially** (`workers: 1`) and **stops on the first failure**
   (`maxFailures: 1`, `retries: 0`). Fix one thing, re-run.
+- **The test-app is built + started for you every run, and the run owns `:3000`**
+  (`reuseExistingServer: false`). Free that port before starting — if you keep an app up for
+  manual browser/MCP testing, kill it first. The app is only up for the run's duration; for
+  ad-hoc testing, start it yourself with `cd test-app && npm run start`.
+- **Iterating on test code?** Set `PW_SKIP_BUILD=1` to skip the per-run rebuild (start-only) when
+  the app's code hasn't changed — `PW_SKIP_BUILD=1 npx playwright test specs/04-*`.
+- **State is reset per spec.** `provisionScenario()` clears the test-app's policy DB (pending +
+  committed policies, decisions) in each `beforeAll`, so stale policy state can't leak between
+  runs. (Rebuilding/restarting the app does *not* clear it — it's a SQLite file on disk.)
 - `tests/.env` ships with `HEADLESS=false`, so locally the browser is **visible by default** —
   handy for watching the enclave popups. Set `HEADLESS=true` for a headless run.
 - **Provisioning is slow** (minutes per spec — recipe + enclave sign-ups), so `beforeAll`
@@ -158,7 +169,8 @@ prints a `RealmContext`, provisioning is fine and the issue is in the browser st
 | `tide-admin-cli … failed (stage=quorum/rest)` | 3/4 | a governed change-request couldn't commit — check the stack / admin creds |
 | `get-installations-provider failed` or `adapter config … looks incomplete` | 5 | the `testapp` client origin wasn't signed (Stage 2) or the client is missing |
 | login test stalls on the Tide widget / never reaches "Admin Dashboard" | login | the user isn't Tide-linked (Stage 3 didn't run) **or** the wrong realm was bound — run smoke, run headed |
-| `connect ECONNREFUSED 127.0.0.1:3000` | — | the **test-app isn't running** (`cd test-app && npm run dev`) |
+| `connect ECONNREFUSED 127.0.0.1:3000` | — | the **webServer didn't bring the test-app up** — read the `[WebServer]` build/start output above (a build error or a TS failure); or a stray process is holding `:3000` (free it, since the run owns the port) |
+| `Timed out waiting … from config.webServer` / `EADDRINUSE :3000` | — | something is already on `:3000` (`reuseExistingServer: false` means the run must own it) — kill the stray app, then re-run |
 | `connect ECONNREFUSED 127.0.0.1:8080` | — | **TideCloak isn't up** |
 
 ### Step 4: use the artifacts
@@ -196,6 +208,7 @@ Set these in `tests/.env` or the shell. Defaults assume an all-localhost stack.
 | `HOME_ORK_ORIGIN` | `http://localhost:1001` | the enclave / approval-popup origin |
 | `KC_ADMIN_USER` / `KC_ADMIN_PASSWORD` | `admin` / `password` | master-realm admin for the admin REST API (not a tide-realm-admin) |
 | `HEADLESS` | `false` (in `tests/.env`) | `true` for a headless run |
+| `PW_SKIP_BUILD` | — | set to `1` to skip the per-run test-app rebuild (the `webServer` runs `npm run start` only) when iterating on test code |
 | `IGA_ENGINE_DIR` | `~/tidecloak-iga-engine-tests` | the recipe runner suite |
 | `TIDE_ADMIN_CLI_DIR` | `~/project/…/frontend/e2e` | the link-user / add-tide-realm-admin suite |
 | `RECIPE_REALM` | — | pin the realm name (skip Stage-1 discovery) |
@@ -208,7 +221,7 @@ Set these in `tests/.env` or the shell. Defaults assume an all-localhost stack.
 ```
 tidecloak-test-cases/
 ├── README.md                 # ← you are here (run + debug)
-├── test-app/                 # the Next.js app the browser drives (npm run dev → :3000)
+├── test-app/                 # the Next.js app the browser drives (auto-built + started by the suite's webServer → :3000)
 └── tests/
     ├── README.md             # architecture + how to add a new test
     ├── specs/                # the Playwright specs (00-smoke, 04, 06, 07, 09, 10, 11, 12)
