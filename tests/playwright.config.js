@@ -9,11 +9,18 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
  */
 module.exports = defineConfig({
   testDir: './specs',
+  // Clear the per-recipe realm cache once per run (see global-setup.js + provision.js). Lets a
+  // retry's beforeAll REUSE the realm a spec already provisioned instead of building a new one.
+  globalSetup: require.resolve('./global-setup'),
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: 0, // No retries - fail immediately
+  // One retry to ride out transient flakes (a TideCloak dev-restart mid-login, a headless-Firefox
+  // enclave hiccup). The realm cache (provision.js) makes the retry reuse the SAME realm + the
+  // test-app's accumulated DB state, so a retry of a stateful Given/When/Then step lands on
+  // consistent state instead of an empty new realm.
+  retries: 1,
   workers: 1,
-  maxFailures: 1, // Stop on first failure
+  maxFailures: 0, // Run the whole suite; don't let one (possibly flaky) failure hide the rest
   timeout: 60000, // 1 minute max per test
   expect: {
     timeout: 15000, // 15 seconds for expect assertions

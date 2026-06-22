@@ -31,6 +31,7 @@ const {
     discoverRecipeRealm,
 } = require('./helpers');
 const { linkUser, addTideRealmAdmin } = require('./tideAdminCli');
+const { readRealmCache, writeRealmCache } = require('./realmCache');
 
 /**
  * A user in the RealmContext. A Tide identity is GLOBAL to the ORK network (it spans realms),
@@ -189,6 +190,21 @@ async function provisionScenario(recipePath, opts = {}) {
     const linkUsers = tideSetup.linkUsers || [];
     const realmAdmins = tideSetup.realmAdmins || [];
 
+    // ── Retry reuse: if THIS recipe was already provisioned earlier in this run (i.e. a prior
+    //    worker that Playwright restarted for a retry), reuse that realm instead of building a
+    //    new one. The test-app DB (served by the once-per-run webServer) still holds the state
+    //    the spec's earlier steps built, and the realm's keyId still matches its artifacts, so
+    //    the retried step lands on consistent state. Crucially we do NOT reset the test-app here
+    //    (that would wipe the very state we're trying to preserve). Re-mint a fresh admin token
+    //    (the cached one has long since expired).
+    const cached = readRealmCache(name);
+    if (cached && cached.realm) {
+        console.log(`Reusing cached realm ${cached.realm} for recipe "${name}" (retry/worker-restart).`);
+        const token = await getKcAdminToken(request, { baseUrl });
+        if (ownRequest) await ownRequest.dispose();
+        return { ...cached, token };
+    }
+
     // ── 0. Reset the test-app's shared policy scratch state so this spec starts clean (stale
     //       pending policies from prior runs otherwise pollute the list and approval counts).
     await resetTestAppState(request, config.BASE_URL);
@@ -255,9 +271,7 @@ async function provisionScenario(recipePath, opts = {}) {
         baseUrl, realm, token: freshToken, clientId: tideSetup.appClient,
     });
 
-    if (ownRequest) await ownRequest.dispose();
-
-    return {
+    const ctx = {
         realm,
         appClient: tideSetup.appClient,
         appLoginUser: tideSetup.appLoginUser,
@@ -265,6 +279,12 @@ async function provisionScenario(recipePath, opts = {}) {
         adapterConfig,
         token: freshToken,
     };
+
+    // Cache for retry reuse this run (see the readRealmCache() branch above + global-setup.js).
+    writeRealmCache(name, ctx);
+
+    if (ownRequest) await ownRequest.dispose();
+    return ctx;
 }
 
 module.exports = {
