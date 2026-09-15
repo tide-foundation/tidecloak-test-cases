@@ -32,6 +32,7 @@ const {
 } = require('./helpers');
 const { linkUser, addTideRealmAdmin } = require('./tideAdminCli');
 const { readRealmCache, writeRealmCache } = require('./realmCache');
+const { redactText } = require('./redact');
 
 /**
  * A user in the RealmContext. A Tide identity is GLOBAL to the ORK network (it spans realms),
@@ -91,7 +92,7 @@ async function signIdpSettings(request, o) {
         { headers: { Authorization: `Bearer ${o.token}` } },
     );
     if (!res.ok()) {
-        throw new Error(`sign-idp-settings(${o.realm}) failed: ${res.status()} ${await res.text()}`);
+        throw new Error(`sign-idp-settings(${o.realm}) failed: ${res.status()} ${redactText(await res.text())}`);
     }
 }
 
@@ -109,7 +110,7 @@ async function fetchAdapterConfig(request, o) {
         `${o.baseUrl}/admin/realms/${o.realm}/clients?clientId=${encodeURIComponent(o.clientId)}`,
         { headers: { Authorization: `Bearer ${o.token}` } },
     );
-    if (!list.ok()) throw new Error(`resolve client ${o.clientId} failed: ${list.status()} ${await list.text()}`);
+    if (!list.ok()) throw new Error(`resolve client ${o.clientId} failed: ${list.status()} ${redactText(await list.text())}`);
     const clients = await list.json();
     const uuid = clients[0]?.id;
     if (!uuid) throw new Error(`client ${o.clientId} not found in realm ${o.realm}`);
@@ -119,10 +120,10 @@ async function fetchAdapterConfig(request, o) {
         `?clientId=${uuid}&providerId=keycloak-oidc-keycloak-json`,
         { headers: { Authorization: `Bearer ${o.token}` } },
     );
-    if (!res.ok()) throw new Error(`get-installations-provider failed: ${res.status()} ${await res.text()}`);
+    if (!res.ok()) throw new Error(`get-installations-provider failed: ${res.status()} ${redactText(await res.text())}`);
     const cfg = await res.json();
     if (!cfg.resource || !cfg.realm) {
-        throw new Error(`adapter config for ${o.clientId} looks incomplete: ${JSON.stringify(cfg).slice(0, 300)}`);
+        throw new Error(`adapter config for ${o.clientId} looks incomplete: ${redactText(JSON.stringify(cfg)).slice(0, 300)}`);
     }
     return cfg;
 }
@@ -157,7 +158,7 @@ async function resetTestAppState(request, baseUrl) {
         return;
     }
     throw new Error(
-        `reset test-app policy state failed: ${status} ${await res.text()} (${baseUrl}/api/test/reset)`
+        `reset test-app policy state failed: ${status} ${redactText(await res.text())} (${baseUrl}/api/test/reset)`
     );
 }
 

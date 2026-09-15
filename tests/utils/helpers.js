@@ -9,6 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execSync } = require('child_process');
+const { redactText } = require('./redact');
 const { expect } = require('@playwright/test');
 const config = require('./config');
 
@@ -419,7 +420,7 @@ async function getKcAdminToken(request, opts) {
     const res = await request.post(`${opts.baseUrl}/realms/master/protocol/openid-connect/token`, {
         form: { grant_type: 'password', client_id: 'admin-cli', username, password },
     });
-    if (!res.ok()) throw new Error(`admin token request failed: ${res.status()} ${await res.text()}`);
+    if (!res.ok()) throw new Error(`admin token request failed: ${res.status()} ${redactText(await res.text())}`);
     return (await res.json()).access_token;
 }
 
@@ -438,7 +439,7 @@ async function discoverRecipeRealm(request, recipeName, opts) {
     const res = await request.get(`${opts.baseUrl}/admin/realms?briefRepresentation=true`, {
         headers: { Authorization: `Bearer ${opts.token}` },
     });
-    if (!res.ok()) throw new Error(`list realms failed: ${res.status()} ${await res.text()}`);
+    if (!res.ok()) throw new Error(`list realms failed: ${res.status()} ${redactText(await res.text())}`);
     /** @type {Array<{ realm: string }>} */
     const realms = await res.json();
     const prefix = igaRealmPrefix(recipeName);

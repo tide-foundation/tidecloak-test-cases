@@ -21,6 +21,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const config = require('./config');
+const { redactArgs, redactText } = require('./redact');
 
 const DEFAULT_CLI_DIR = path.join(
     os.homedir(),
@@ -80,7 +81,7 @@ function parseResult(stdout) {
             }
         }
     }
-    throw new Error(`tide-admin-cli produced no JSON result line. Raw stdout:\n${stdout}`);
+    throw new Error(`tide-admin-cli produced no JSON result line. Raw stdout:\n${redactText(stdout)}`);
 }
 
 /**
@@ -107,7 +108,8 @@ function runCli(subcommand, args) {
         ...args,
         ...globalFlags(),
     ];
-    console.log(`tide-admin-cli ${subcommand} ${args.join(' ')}`);
+    // Log a masked copy. argv itself goes to the CLI unchanged.
+    console.log(`tide-admin-cli ${subcommand} ${redactArgs(args).join(' ')}`);
     let stdout = '';
     try {
         stdout = execFileSync(cmd, argv, {
@@ -128,10 +130,18 @@ function runCli(subcommand, args) {
         }
         if (parsed && parsed.ok === false) {
             throw new Error(
-                `tide-admin-cli ${subcommand} failed (stage=${parsed.stage}): ${parsed.error}`,
+                `tide-admin-cli ${subcommand} failed (stage=${parsed.stage}): ${redactText(parsed.error)}`,
             );
         }
-        throw new Error(`tide-admin-cli ${subcommand} exited non-zero: ${err.message}`);
+        // err.message from execFileSync embeds the full command line, secrets included,
+        // so rebuild it from a masked argv instead.
+        const reason = err && err.code
+            ? String(err.code)
+            : `status=${err && err.status}, signal=${err && err.signal}`;
+        throw new Error(
+            `tide-admin-cli ${subcommand} exited non-zero (${reason}): ` +
+            `Command failed: ${cmd} ${redactArgs(argv).join(' ')}`,
+        );
     }
     return parseResult(stdout);
 }
@@ -185,7 +195,7 @@ function linkUser(opts) {
     let last;
     for (let round = 1; round <= maxRounds; round++) {
         last = runCli('link-user', [...base, ...credFlags('--approver-admins', opts.approverAdmins)]);
-        if (!last.ok) throw new Error(`link-user(${opts.kcUser}) not ok: ${JSON.stringify(last)}`);
+        if (!last.ok) throw new Error(`link-user(${opts.kcUser}) not ok: ${redactText(JSON.stringify(last))}`);
         if (!last.details?.pending) return last.details;
         console.log(`link-user(${opts.kcUser}) quorum pending (round ${round}); re-invoking…`);
     }
@@ -210,7 +220,7 @@ function addTideRealmAdmin(opts) {
     let last;
     for (let round = 1; round <= maxRounds; round++) {
         last = runCli('add-tide-realm-admin', [...base, ...credFlags('--existing-admins', opts.existingAdmins)]);
-        if (!last.ok) throw new Error(`add-tide-realm-admin(${opts.kcUser}) not ok: ${JSON.stringify(last)}`);
+        if (!last.ok) throw new Error(`add-tide-realm-admin(${opts.kcUser}) not ok: ${redactText(JSON.stringify(last))}`);
         if (!last.details?.pending) return last.details;
         console.log(`add-tide-realm-admin(${opts.kcUser}) quorum pending (round ${round}); re-invoking…`);
     }
