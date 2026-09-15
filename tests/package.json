@@ -9,7 +9,8 @@
     "test:debug": "playwright test --debug",
     "report": "playwright show-report reports",
     "provision": "node scripts/provision.js",
-    "test:unit": "node --test utils/redact.test.js"
+    "test:unit": "node --test utils/redact.test.js",
+    "test:secret-leaks": "bash offline/check-secret-leaks.sh"
   },
   "keywords": ["playwright", "testing", "tidecloak"],
   "author": "",
