@@ -8,7 +8,8 @@
     "test:ui": "playwright test --ui",
     "test:debug": "playwright test --debug",
     "report": "playwright show-report reports",
-    "provision": "node scripts/provision.js"
+    "provision": "node scripts/provision.js",
+    "test:unit": "node --test utils/redact.test.js"
   },
   "keywords": ["playwright", "testing", "tidecloak"],
   "author": "",
