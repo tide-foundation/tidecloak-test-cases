@@ -184,6 +184,11 @@ prints a `RealmContext`, provisioning is fine and the issue is in the browser st
 - **Inspector / time-travel:** `npm run test:debug` (pause + step) or `npm run test:ui` (pick a
   test, watch each action). To capture a Playwright trace, run with `--trace on` and open it via
   the report.
+- **Traces and secrets:** trace is off by default. The enclave password goes in through
+  `fillSecret` (`tests/utils/secretInput.js`), so it stays out of step titles, the report and
+  trace action params, and trace DOM snapshots get a blanked field. That snapshot part leans on
+  Playwright internals, so still only share traces from runs with throwaway credentials.
+  `cd tests && npm run test:secret-leaks` rechecks this offline (after a Playwright upgrade, say).
 
 ### Tip: re-use a realm while debugging
 Provisioning a realm per run is slow. Provision once, then pin it so subsequent runs skip Stage 1

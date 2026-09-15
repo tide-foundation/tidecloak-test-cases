@@ -92,6 +92,8 @@ iga-engine recipe (so it still runs standalone with `npm run recipe`) **plus** a
    `signInToRealm(page, { adapterConfig: ctx.adapterConfig, baseUrl, username: u.tideUsername, password: u.password })`
    helper where `u = ctx.users[ctx.appLoginUser]` (or any approver from `ctx.users.<name>`). **Log
    in with `u.tideUsername`**, not `u.kcUsername`.
+   If a spec types a password or other secret itself, use `fillSecret(locator, value)` from
+   `utils/secretInput.js`, not `fill()`, which records the value in the report and trace.
 3. Specs are **self-contained**: create anything you consume (e.g. a committed policy, a
    ciphertext) inside the spec — there are no cross-spec fixture handoffs.
 
