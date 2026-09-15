@@ -10,6 +10,7 @@ const os = require('os');
 const path = require('path');
 const { execSync } = require('child_process');
 const { redactText } = require('./redact');
+const { fillSecret } = require('./secretInput');
 const { expect } = require('@playwright/test');
 const config = require('./config');
 
@@ -121,7 +122,8 @@ async function signInToAdmin(page, opts) {
     }
 
     await nameInput.fill(opts.username);
-    await passInput.fill(opts.password);
+    // Not fill(): that would put the password in the report and trace.
+    await fillSecret(passInput, opts.password, { label: 'Enter password' });
     if (opts.takeScreenshot) await opts.takeScreenshot('03_credentials_filled');
 
     // Click Sign In (preferred selector used across the suite).
