@@ -195,10 +195,30 @@ Provisioning a realm per run is slow. Provision once, then pin it so subsequent 
 discovery and target the same realm:
 ```bash
 cd tests
+# Pin the password too: each run mints a random one per user and does not keep it, so a realm
+# provisioned without this cannot be logged into afterwards.
+export TIDE_USER_PASSWORD='pick-something-throwaway-1!'
 npm run provision -- 10-forseti-policy-encryption     # note the "Provisioned realm: iga-10-…" line
 RECIPE_REALM=iga-10-forseti-policy-enc-XXXX npx playwright test specs/10-forseti-policy-encryption.spec.js
 ```
 (`RECIPE_REALM` makes `discoverRecipeRealm` return that name instead of searching.)
+
+### The realm cache
+When a test fails, Playwright restarts the worker and re-runs `beforeAll`. So that the retry lands
+on the realm and app state the earlier steps built, the first `provisionScenario()` for a recipe
+writes its RealmContext to a small cache and a later call in the same run reads it back. The suite
+clears the cache at the start of every run (`tests/global-setup.js`).
+
+An entry holds the realm name, the client, the adapter config, and each user's enclave username
+**and password**: the password is what makes a cached realm reusable, so it stays. The admin
+bearer token is not stored; the reuse path mints a fresh one. The cache therefore lives in a
+per-user directory (`$XDG_RUNTIME_DIR/pw-tidecloak-realm-cache`, else `/tmp/pw-tidecloak-realm-cache-<uid>`,
+else `~/.cache/pw-tidecloak-realm-cache`, all overridden by `PW_REALM_CACHE_DIR`), the directory is
+forced to `0700` and entries to `0600`, and an entry that is not an owner-only file we own is
+ignored. Clear it by hand with:
+```bash
+cd tests && npm run cache:purge
+```
 
 ---
 
@@ -217,6 +237,8 @@ Set these in `tests/.env` or the shell. Defaults assume an all-localhost stack.
 | `IGA_ENGINE_DIR` | `~/tidecloak-iga-engine-tests` | the recipe runner suite |
 | `TIDE_ADMIN_CLI_DIR` | `~/project/…/frontend/e2e` | the link-user / add-tide-realm-admin suite |
 | `RECIPE_REALM` | — | pin the realm name (skip Stage-1 discovery) |
+| `TIDE_USER_PASSWORD` | (unset) | pin the password given to every Tide identity the suite provisions. Unset means a random one per user per run; set it when you pin a realm with `RECIPE_REALM` |
+| `PW_REALM_CACHE_DIR` | per-user temp dir | where the realm cache lives (see above) |
 | `DPOP_USER` / `DPOP_PASSWORD` / `DPOP_CLIENT_A` / `DPOP_CLIENT_B` | recipe values | spec 12 overrides (e.g. a login-capable account) |
 
 ---
@@ -237,6 +259,7 @@ tidecloak-test-cases/
     │   ├── helpers.js        # sign-in + enclave/governance flow helpers used by the specs
     │   └── config.js         # env-driven config
     ├── scripts/provision.js  # `npm run provision -- <recipe>` (provision without the browser)
+    ├── scripts/purge-realm-cache.js # `npm run cache:purge` (delete the realm cache)
     ├── debug_screenshots/    # step screenshots from each run
     └── reports/              # HTML report (npm run report)
 ```

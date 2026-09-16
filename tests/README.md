@@ -36,8 +36,8 @@ and walks these stages:
   appLoginUser: 'admin',
   users: {
     // keyed by the Keycloak username; each user has BOTH names (see note below)
-    admin:  { kcUsername: 'admin',  tideUsername: 'admin-l8x2',  password: 'Passw0rd!' },
-    admin2: { kcUsername: 'admin2', tideUsername: 'admin2-l8x2', password: 'Passw0rd!' },
+    admin:  { kcUsername: 'admin',  tideUsername: 'admin-l8x2',  password: '<minted for this run>' },
+    admin2: { kcUsername: 'admin2', tideUsername: 'admin2-l8x2', password: '<minted for this run>' },
     ...
   },
   adapterConfig: { /* full Tide adapter config */ },
@@ -50,6 +50,18 @@ and walks these stages:
 > mints a unique `tideUsername` (`<kcUsername>-<realm-token>`) per user per run. Use
 > **`tideUsername` to LOG IN** (it's what the enclave widget authenticates) and **`kcUsername`
 > for REST lookups / role grants** (it's the stable, realm-scoped Keycloak username).
+
+> **Two passwords too.** `password` goes with `tideUsername`: Stage 3 creates the Tide identity
+> from scratch, so the suite picks its password and mints a random one per user per run
+> ([utils/enclavePassword.js](utils/enclavePassword.js)). The recipe's `user.create` password is
+> the Keycloak one and is only used by the recipe's own probe. Set `TIDE_USER_PASSWORD` to pin the
+> Tide one. `RECIPE_REALM` needs that, since the run that provisioned the realm did not
+> keep the generated value.
+
+> **Where the passwords sit between workers.** A retry reuses the realm through the cache in
+> [utils/realmCache.js](utils/realmCache.js), which means the entry holds each user's enclave
+> password. It is a per-user `0700` directory of `0600` files, holds no admin token, and
+> `npm run cache:purge` deletes it. See the root README, "The realm cache".
 
 ## A scenario = one recipe file with a `_tideSetup` overlay
 
@@ -129,6 +141,8 @@ Then: `npm test` (or `npm run test:headed`).
 | `IGA_ENGINE_DIR` | `~/tidecloak-iga-engine-tests` | the recipe runner suite |
 | `TIDE_ADMIN_CLI_DIR` | `~/project/.../frontend/e2e` | the link-user / add-tide-realm-admin suite |
 | `RECIPE_REALM` | — | pin the realm name (skip discovery) |
+| `TIDE_USER_PASSWORD` | (unset) | pin the password of every provisioned Tide identity (default: random per user per run) |
+| `PW_REALM_CACHE_DIR` | per-user temp dir | where the retry realm cache lives |
 
 ## Spec map
 

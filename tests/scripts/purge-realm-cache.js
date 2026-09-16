@@ -10,7 +10,7 @@
  * version of the suite that left them world-readable in a shared /tmp directory.
  *
  * Entries hold each provisioned user's Tide enclave password. The realms themselves are not
- * touched — this only removes the local file that lets a retry reuse one.
+ * touched: this only removes the local file that lets a retry reuse one.
  */
 
 const fs = require('fs');
@@ -46,14 +46,14 @@ for (const dir of targets()) {
         continue;
     }
     if (typeof process.getuid === 'function' && st.uid !== process.getuid()) {
-        console.log(`not yours:  ${dir} (owned by uid ${st.uid}) — leaving it alone`);
+        console.log(`not yours:  ${dir} (owned by uid ${st.uid}), leaving it alone`);
         kept++;
         continue;
     }
     let entries = 0;
     try {
         if (!st.isDirectory() || !looksLikeCache(dir)) {
-            console.log(`not a cache: ${dir} — holds something else, leaving it alone`);
+            console.log(`not a cache: ${dir} holds something else, leaving it alone`);
             kept++;
             continue;
         }
@@ -75,6 +75,6 @@ for (const dir of targets()) {
 
 console.log(`\n${removed} director${removed === 1 ? 'y' : 'ies'} removed.`);
 if (kept) {
-    console.log('Something was left in place — see the lines above.');
+    console.log('Something was left in place, see the lines above.');
     process.exit(1);
 }

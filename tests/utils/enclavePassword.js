@@ -14,7 +14,7 @@
  * real Tide identity with a password anyone could guess. A fresh one per user per run costs
  * nothing, because it is generated the moment the identity is created.
  *
- * Set TIDE_USER_PASSWORD to pin it — needed when RECIPE_REALM reuses a realm from an earlier run,
+ * Set TIDE_USER_PASSWORD to pin it. RECIPE_REALM needs that: it reuses a realm from an earlier run,
  * whose generated passwords are gone (see the README).
  */
 
