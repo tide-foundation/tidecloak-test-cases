@@ -196,8 +196,8 @@ async function provisionScenario(recipePath, opts = {}) {
     //    new one. The test-app DB (served by the once-per-run webServer) still holds the state
     //    the spec's earlier steps built, and the realm's keyId still matches its artifacts, so
     //    the retried step lands on consistent state. Crucially we do NOT reset the test-app here
-    //    (that would wipe the very state we're trying to preserve). Re-mint a fresh admin token
-    //    (the cached one has long since expired).
+    //    (that would wipe the very state we're trying to preserve). Mint a fresh admin token: the
+    //    cache does not keep one (they live ~60s, so a cached one would always be expired).
     const cached = readRealmCache(name);
     if (cached && cached.realm) {
         console.log(`Reusing cached realm ${cached.realm} for recipe "${name}" (retry/worker-restart).`);
