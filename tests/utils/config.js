@@ -27,10 +27,16 @@ const HOME_ORK_ORIGIN = process.env.HOME_ORK_ORIGIN || process.env.ORK_URL || 'h
 const KC_ADMIN_USER = process.env.KC_ADMIN_USER || 'admin';
 const KC_ADMIN_PASSWORD = process.env.KC_ADMIN_PASSWORD || 'password';
 
+// Pins the password given to every Tide identity the suite provisions. Unset (the default) means
+// a fresh random one per user per run — see utils/enclavePassword.js. Set it when you reuse a
+// realm with RECIPE_REALM, so the login still matches what that realm's identities were given.
+const TIDE_USER_PASSWORD = process.env.TIDE_USER_PASSWORD || '';
+
 module.exports = {
     BASE_URL,
     TIDECLOAK_URL,
     HOME_ORK_ORIGIN,
     KC_ADMIN_USER,
     KC_ADMIN_PASSWORD,
+    TIDE_USER_PASSWORD,
 };

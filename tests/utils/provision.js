@@ -32,6 +32,7 @@ const {
 } = require('./helpers');
 const { linkUser, addTideRealmAdmin } = require('./tideAdminCli');
 const { readRealmCache, writeRealmCache } = require('./realmCache');
+const { enclavePassword } = require('./enclavePassword');
 const { redactText } = require('./redact');
 
 /**
@@ -39,6 +40,8 @@ const { redactText } = require('./redact');
  * so the enclave username must be unique per run — `tideUsername` is the randomized global
  * identity used to LOG IN and to drive enclave approvals. `kcUsername` is the realm-scoped
  * Keycloak username (stable, from the recipe) used for REST lookups, role grants, and `--kc-user`.
+ * `password` goes with `tideUsername`: it is the Tide identity's password, minted per run (see
+ * utils/enclavePassword.js), NOT the Keycloak password the recipe's user.create step sets.
  * @typedef {{ kcUsername: string, tideUsername: string, password: string }} UserCred
  * @typedef {{
  *   appClient: string,
@@ -58,9 +61,9 @@ const { redactText } = require('./redact');
 
 /**
  * Parse a recipe file into { name, tideSetup, users }. `users` maps the Keycloak username ->
- * { kcUsername, password } by reading the recipe's user.create steps (passwords have a single
- * source of truth). The unique per-run `tideUsername` is added later by provisionScenario, once
- * the realm name is known.
+ * { kcUsername, password } by reading the recipe's user.create steps. That password is the
+ * KEYCLOAK one (the default mirrors iga-engine's own default for a step that omits it); the Tide
+ * identity gets its own, minted by provisionScenario along with the per-run `tideUsername`.
  * @param {string} recipePath
  */
 function readScenario(recipePath) {
@@ -222,11 +225,13 @@ async function provisionScenario(recipePath, opts = {}) {
     // reuse a username from another. Derive a per-run token from the realm name's unique suffix
     // (the base36 timestamp) and mint a unique tideUsername = `<kcUsername>-<runToken>` for each
     // user. Realm-derived → unique across runs, and stable if a realm is reused via RECIPE_REALM.
+    // The password is NOT the recipe's Keycloak one: Stage 3 creates the Tide identity from
+    // scratch, so it gets a password minted here (random per user per run unless pinned).
     const runToken = realm.split('-').pop() || Date.now().toString(36);
     /** @type {Record<string, UserCred>} */
     const userCtx = {};
-    for (const [n, u] of Object.entries(users)) {
-        userCtx[n] = { kcUsername: n, tideUsername: `${n}-${runToken}`, password: u.password };
+    for (const n of Object.keys(users)) {
+        userCtx[n] = { kcUsername: n, tideUsername: `${n}-${runToken}`, password: enclavePassword() };
     }
 
     /** look up an enriched user (must exist as a recipe user.create) */

@@ -10,7 +10,7 @@
     "report": "playwright show-report reports",
     "provision": "node scripts/provision.js",
     "cache:purge": "node scripts/purge-realm-cache.js",
-    "test:unit": "node --test utils/redact.test.js utils/realmCache.test.js",
+    "test:unit": "node --test utils/redact.test.js utils/realmCache.test.js utils/enclavePassword.test.js",
     "test:secret-leaks": "bash offline/check-secret-leaks.sh"
   },
   "keywords": ["playwright", "testing", "tidecloak"],
