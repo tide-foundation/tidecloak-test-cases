@@ -118,7 +118,10 @@ fi
 for pair in ${refs//,/ }; do
     name="${pair%%=*}"
     ref="${pair#*=}"
-    [ -n "$name" ] && [ "$name" != "$pair" ] || { echo "bad ref pair: $pair (want name=ref)" >&2; exit 2; }
+    if [ -z "$name" ] || [ "$name" = "$pair" ]; then
+        echo "bad ref pair: $pair (want name=ref)" >&2
+        exit 2
+    fi
     need_known "$name"
     if [ "$ref" != "$(default_ref "$name")" ]; then
         match_component "$name"
