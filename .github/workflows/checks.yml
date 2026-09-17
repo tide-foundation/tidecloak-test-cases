@@ -54,10 +54,10 @@ jobs:
       - name: CI script tests
         run: npm run test:ci
 
-      # The leak check drives a real (offline) Firefox page.
-      - name: Install Firefox for the leak check
+      # The leak check drives real (offline) Firefox and Chromium pages.
+      - name: Install browsers for the leak check
         working-directory: tests
-        run: npx playwright install --with-deps firefox
+        run: npx playwright install --with-deps firefox chromium
 
       - name: Secret leak check
         working-directory: tests
