@@ -101,8 +101,8 @@ npm run report                                        # open the HTML report aft
 ```
 
 Notes that will save you confusion:
-- The suite runs **serially** (`workers: 1`) and **stops on the first failure**
-  (`maxFailures: 1`, `retries: 0`). Fix one thing, re-run.
+- The suite runs **serially** (`workers: 1`), retries a failed test once (`retries: 1`), and
+  runs to the end even after a failure (`maxFailures: 0`), so one flaky test does not hide the rest.
 - **The test-app is built + started for you every run, and the run owns `:3000`**
   (`reuseExistingServer: false`). Free that port before starting — if you keep an app up for
   manual browser/MCP testing, kill it first. The app is only up for the run's duration; for
@@ -112,8 +112,9 @@ Notes that will save you confusion:
 - **State is reset per spec.** `provisionScenario()` clears the test-app's policy DB (pending +
   committed policies, decisions) in each `beforeAll`, so stale policy state can't leak between
   runs. (Rebuilding/restarting the app does *not* clear it — it's a SQLite file on disk.)
-- `tests/.env` ships with `HEADLESS=false`, so locally the browser is **visible by default** —
-  handy for watching the enclave popups. Set `HEADLESS=true` for a headless run.
+- Locally the browser is **visible by default** (handy for watching the enclave popups). Set
+  `HEADLESS=true` (in the shell or in `tests/.env`, see [.sample_env](.sample_env)) for a headless
+  run. `CI=true` also runs headless.
 - **Provisioning is slow** (minutes per spec — recipe + enclave sign-ups), so `beforeAll`
   timeouts are 15–25 minutes. A spec that "hangs" early is usually just provisioning; watch the
   terminal for the iga-engine / tide-admin-cli output.
@@ -224,7 +225,8 @@ cd tests && npm run cache:purge
 
 ## 6. Configuration (env vars)
 
-Set these in `tests/.env` or the shell. Defaults assume an all-localhost stack.
+Set these in `tests/.env` (copy [.sample_env](.sample_env); git ignores it) or the shell.
+Defaults assume an all-localhost stack.
 
 | Var | Default | Meaning |
 |---|---|---|
@@ -232,7 +234,7 @@ Set these in `tests/.env` or the shell. Defaults assume an all-localhost stack.
 | `TIDECLOAK_URL` | `http://localhost:8080` | TideCloak |
 | `HOME_ORK_ORIGIN` | `http://localhost:1001` | the enclave / approval-popup origin |
 | `KC_ADMIN_USER` / `KC_ADMIN_PASSWORD` | `admin` / `password` | master-realm admin for the admin REST API (not a tide-realm-admin) |
-| `HEADLESS` | `false` (in `tests/.env`) | `true` for a headless run |
+| `HEADLESS` | unset (browser visible) | `true` for a headless run (`CI=true` does the same) |
 | `PW_SKIP_BUILD` | — | set to `1` to skip the per-run test-app rebuild (the `webServer` runs `npm run start` only) when iterating on test code |
 | `IGA_ENGINE_DIR` | `~/tidecloak-iga-engine-tests` | the recipe runner suite |
 | `TIDE_ADMIN_CLI_DIR` | `~/project/…/frontend/e2e` | the link-user / add-tide-realm-admin suite |
@@ -240,6 +242,7 @@ Set these in `tests/.env` or the shell. Defaults assume an all-localhost stack.
 | `TIDE_USER_PASSWORD` | (unset) | pin the password given to every Tide identity the suite provisions. Unset means a random one per user per run; set it when you pin a realm with `RECIPE_REALM` |
 | `PW_REALM_CACHE_DIR` | per-user temp dir | where the realm cache lives (see above) |
 | `DPOP_USER` / `DPOP_PASSWORD` / `DPOP_CLIENT_A` / `DPOP_CLIENT_B` | recipe values | spec 12 overrides (e.g. a login-capable account) |
+| `PW_JSON_OUTPUT` | unset | also write a Playwright JSON report there (CI uses it for the summary) |
 
 ---
 
@@ -248,6 +251,8 @@ Set these in `tests/.env` or the shell. Defaults assume an all-localhost stack.
 ```
 tidecloak-test-cases/
 ├── README.md                 # ← you are here (run + debug)
+├── .github/workflows/        # pre-release-e2e-tests.yml (the Tide e2e) and checks.yml (PR checks)
+├── ci/                       # the scripts those workflows call (section 8)
 ├── test-app/                 # the Next.js app the browser drives (auto-built + started by the suite's webServer → :3000)
 └── tests/
     ├── README.md             # architecture + how to add a new test
@@ -266,3 +271,150 @@ tidecloak-test-cases/
 
 For what a recipe looks like, the `_tideSetup` overlay, and how to add a new test, read
 [tests/README.md](tests/README.md).
+
+---
+
+## 8. Continuous integration
+
+Two workflows live in `.github/workflows/`:
+
+- **`checks.yml`** runs on pull requests to this repo. It needs no stack and no secrets: unit tests,
+  the offline secret-leak check, `node --check`, shellcheck and actionlint.
+- **`pre-release-e2e-tests.yml`** ("Tide e2e") builds the Tide stack from source and runs the
+  suites against it. It runs nightly, by hand (`workflow_dispatch`), when a component repo asks
+  for it (`repository_dispatch`, type `tide-e2e`), and from the release hook in
+  tidecloak-override (`workflow_call`).
+
+The workflow YAML mostly calls scripts in `ci/`, so a shard can be reproduced on a laptop.
+
+### How a run is put together
+
+| Job | What it does |
+|---|---|
+| `plan` | Resolves every repo's ref to a SHA (`git ls-remote`). Asks tidecloak-override's `Tidified/ci/image-key.sh` for each image's key. Checks which `ghcr.io/tide-foundation/tide-ci-<image>:<key>` tags already exist. Picks suites with `ci/affected.sh` and splits them into shards. |
+| `build (<image>)` | One job per image whose key is missing: `tidecloak`, `master`, `ork`, `keygen`. It builds with `build-images.sh` and pushes to the **private** GHCR package. |
+| `e2e (<shard>)` | For each shard: pull the four images, start a fresh stack, build the SDK and test-app if needed, run the shard's suites, then upload scrubbed reports. |
+| `summary` | Combines every shard's status into one table. Fails if a shard failed or a planned suite never reported. |
+
+Shards (full run): `iga-engine`; `test-cases-1..4` (spec files split round robin);
+`admin-bootstrap`; `admin-runtime-1..3` (recipes split by title with `ci/lib/partition-tests.js`,
+because the lane is one non-parallel file that Playwright's `--shard` cannot split);
+`admin-runtime-serial` (`quorum-dynamics|social-login`); `docs` (off unless `run_docs`).
+The counts and greps are env values at the top of the workflow.
+
+**Selection.**
+- `full` runs everything. It is the default for nightly and release runs.
+- `affected` runs what `ci/affected.tsv` maps the change to. It is the default for dispatches.
+- `smoke` takes the affected suites, one shard each: iga-engine `ci:smoke`, only `00-smoke`
+  here, and the bootstrap lane. The runtime lane joins only once `ADMIN_RUNTIME_SMOKE_GREP` is set.
+
+A change that only touches `*.md` plans nothing.
+
+**No registry token.** Without `CI_REGISTRY_TOKEN` (for example, today's release hook), the plan
+falls back to a single job. That job builds all four images locally and runs every selected suite
+in turn.
+
+### Public-repo rules the workflow keeps
+
+- Nothing built from private source goes into the Actions cache or into artifacts. The private
+  GHCR packages are the only place images live. `build-image.sh` refuses to push to a package
+  that is not private, and fails the job if the package is not private after a push.
+- Build output from private repos goes to files on the runner, not the public job log.
+- Only test reports (HTML and JSON), per-suite status files and the stack's scrubbed logs are
+  uploaded, with 7-day retention. Staging (`ci/stage-uploads.sh`) drops zips and traces, `.auth/`,
+  env files and key files.
+- `ci/scan-uploads.sh` then fails the upload, and deletes the staged folder, if it finds any of
+  the following. It also unpacks zips and the HTML report's embedded data first.
+  - the value of a known secret (the workflow's secrets plus secret-named keys in `.env.ci`)
+  - a token-shaped string (GitHub, Stripe, JWT, private key and so on)
+  - a password or secret the redaction helpers in `tests/utils/redact.js` would have masked
+- The plan's step summary shows SHAs, not branch names.
+- Fork-triggered runs stop at `plan`. A raw SHA is only accepted when it is the tip of a branch or
+  tag, so commits that exist only on a fork cannot be pulled in by SHA.
+
+### Secrets and variables (names only)
+
+| Name | Kind | Used for |
+|---|---|---|
+| `CHECKOUT_TOKEN` | secret | reading the private Tide repos (`git ls-remote`, checkouts) |
+| `CI_REGISTRY_TOKEN` | secret, org level | `read:packages` + `write:packages` for `ghcr.io/tide-foundation/tide-ci-*` (keep those packages **private**) |
+| `STRIPE_TEST_SK` | secret | the stack's Stripe test key (without it the stack starts, but licensing flows fail) |
+| `STRIPE_FREE_PRICE_ID`, `STRIPE_FREE_PRODUCT_ID`, `STRIPE_BUSINESS_PRODUCT_ID` | variables | the stack's Stripe settings |
+| `CI_REGISTRY_USER` | variable, optional | the user name for `docker login ghcr.io` |
+| `TIDE_E2E_DISPATCH_TOKEN` | secret, in each **calling** repo | sending `repository_dispatch` here and watching the run (see `ci/caller-template.yml`) |
+
+`MAILSLURP_API` and `TEMP_EMAIL_PASSWORD` are still accepted from the release hook but unused.
+
+**Callers.** `ci/caller-template.yml` is a template for component repos. It sends a
+`repository_dispatch` with the repo name, branch and changed paths. It then waits on the run, so
+the component's PR check follows the e2e result.
+
+The existing release hook (`workflow_call`) keeps working as it is, with three limits:
+- It runs on the *caller's* runners.
+- It needs `STRIPE_TEST_SK` and `CI_REGISTRY_TOKEN` passed (or `secrets: inherit`) to run the
+  whole thing.
+- It has no packages permission of its own.
+
+### Running the steps locally
+
+Put the checkouts side by side and point `TIDE_WORKSPACE` at their parent:
+
+```
+$TIDE_WORKSPACE/
+  tidecloak-override  tidecloak (tag 26.7.0)  keycloak-IGA (26.7.0-IGA-main)
+  tidecloak-idp-extensions  tidecloak-iga-extensions  Midgard  ork  master-libs  ragnarok
+  tide-js  heimdall  tidecloak-js  tidecloak-iga-engine-tests  tidecloak-test-cases
+  dauthdocs  tide-test-cases            # only for the docs suite
+```
+
+Then, from this repo:
+
+```bash
+export TIDE_WORKSPACE=~/ci-ws                 # a scratch workspace: the builds edit checkouts
+ci/affected.sh --component tide-js Tools/Utils.ts   # what would run
+ci/images.sh build-local                      # or: docker login ghcr.io && IMAGE_REFS=... ci/images.sh pull
+ci/stack-up.sh                                # gen-stack + compose up (needs STRIPE_* or accepts none)
+SUITES="iga-engine test-cases" ci/prepare-suites.sh
+ci/build-sdk.sh                               # tide-js, heimdall, tidecloak-js, test-app
+ci/stack-wait.sh
+SUITE_MODE=smoke ci/run-iga-engine.sh
+SUITE_PARTITION=1/4 ci/run-test-cases.sh
+ci/run-admin-e2e.sh bootstrap
+SUITE_PARTITION=2/3 SUITE_GREP_INVERT='quorum-dynamics|social-login' ci/run-admin-e2e.sh runtime
+ci/summarize.sh
+ci/stack-down.sh
+```
+
+Every `run-*.sh` takes `SUITE_MODE` (`smoke`/`full`), `SUITE_GREP`, `SUITE_GREP_INVERT` and
+`SUITE_SHARD` (`k/N`, Playwright `--shard`). The test-cases and runtime-lane scripts also take
+`SUITE_PARTITION`. Reports land in `$RUNNER_TEMP/tide-reports` (or `$TMPDIR`), one folder per suite.
+
+`ci/build-sdk.sh` and `ci/rewrite-file-deps.js` change `package.json` in the checkouts they build.
+In particular, `test-app/package.json` is repointed from `file:~/...` to `file:$TIDE_WORKSPACE/...`.
+Use them in a scratch workspace, or undo with `git checkout -- test-app/package.json`. To preview:
+`TIDE_WORKSPACE=... node ci/rewrite-file-deps.js --dry-run test-app/package.json`.
+
+Tests for the CI scripts: `npm run test:ci` (from the repo root).
+
+### Expected timings
+
+These are modelled, not measured on hosted runners, except where marked.
+
+| Piece | Time |
+|---|---|
+| plan | 1-2 min |
+| build `tidecloak` | 30-45 min (about 20 min measured on an 8-core machine) |
+| build `master` / `ork` | 5-8 min each |
+| build `keygen` | 1-2 min |
+| shard setup: pull images, stack boot, installs | 7-10 min (plus 3-5 min for the SDK and test-app build in test-cases shards) |
+| iga-engine | about 5 min |
+| tidecloak-test-cases | 30-45 min in one job, so 8-12 min per shard of 4 |
+| tide-admin-ui runtime | 41.7 min measured in one job, so about 14 min per shard of 3 |
+| docs | 60 min or more |
+
+Wall clock is the plan, plus the slowest missing image build, plus the slowest shard:
+- **Nightly, images already built:** about 25-30 min.
+- **A PR in a suite repo** (no image rebuild): 12-25 min with `affected`, 12-15 min with `smoke`.
+- **A PR that changes `ork` or `tide-js`:** add 8-10 min for the master/ork builds.
+- **A PR that changes a tidecloak input:** add 35-50 min.
+- **No registry token:** everything runs in one job, 3.5-5 hours, close to the 6-hour job limit.

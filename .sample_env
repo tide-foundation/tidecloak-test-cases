@@ -1,49 +1,34 @@
-# Sample .env file for TideCloak Cucumber.js tests
+# Sample settings for the Playwright suite. Copy to tests/.env (git ignores it)
+# or export them in your shell. Every value is optional; the defaults below
+# assume an all-localhost stack. See README.md section 6.
 
-# Test execution options
-HEADLESS=true                    # Set to 'false' to see browser during tests
-PRESERVE_ENV=false               # Set to 'true' to reuse existing containers between runs
+# Browser. Anything other than "true" shows the browser (CI=true also hides it).
+HEADLESS=false
 
-# TideCloak environment - defaults to staging
-# Set to 'production' or 'prod' to test against production Tide network
-TIDE_ENV=staging
+# The stack under test.
+TIDECLOAK_URL=http://localhost:8080
+HOME_ORK_ORIGIN=http://localhost:1001
+KC_ADMIN_USER=admin
+KC_ADMIN_PASSWORD=password
 
-# Or override individual settings:
-# TIDECLOAK_IMAGE=tideorg/tidecloak-dev:latest          # Production image
-# TIDECLOAK_IMAGE=tideorg/tidecloak-stg-dev:latest      # Staging image (default)
-# SYSTEM_HOME_ORK=https://ork1.tideprotocol.com         # Production ORK
-# SYSTEM_HOME_ORK=https://sork1.tideprotocol.com        # Staging ORK (default)
-# USER_HOME_ORK=https://ork1.tideprotocol.com           # Production ORK
-# USER_HOME_ORK=https://sork1.tideprotocol.com          # Staging ORK (default)
-# PAYER_PUBLIC=...                                       # Payer public key
-# THRESHOLD_T=3                                          # Staging threshold T
-# THRESHOLD_N=5                                          # Staging threshold N
+# The test-app the suite builds and starts.
+BASE_URL=http://localhost:3000
+# PW_SKIP_BUILD=1
 
-# Playground app configuration (optional)
-LOCAL_APP_DIR=""                 # Path to local playground app directory (if not cloning)
-APP_START_SCRIPT="dev"           # npm script to start the app (default: dev)
+# Sibling suites used for provisioning.
+# IGA_ENGINE_DIR=~/tidecloak-iga-engine-tests
+# TIDE_ADMIN_CLI_DIR=~/project/tidecloak-idp-extensions/tidecloak-key-provider/frontend/e2e
 
-# File watching for WSL environments (optional)
-WATCHPACK_POLLING=true
-CHOKIDAR_USEPOLLING=1
+# Reusing a realm while debugging.
+# RECIPE_REALM=
+# TIDE_USER_PASSWORD=
+# PW_REALM_CACHE_DIR=
 
-# EMAIL/SMTP CONFIG
-# Used for email verification and user invite tests
-CONFIGURED=false                 # Set to 'true' once SMTP is configured
-TEMP_EMAIL_DEBUG_MAIL=""         # SMTP auth user or email
-TEMP_EMAIL_FROM=""               # From email address
-TEST_USER_EMAIL=""               # Test user email address
-TEMP_EMAIL_PASSWORD=""           # SMTP password
-SMTP_PORT=587                    # SMTP port (587, 2525, or 25)
-SMTP_HOST=""                     # SMTP host
+# Spec 12 overrides.
+# DPOP_USER=
+# DPOP_PASSWORD=
+# DPOP_CLIENT_A=
+# DPOP_CLIENT_B=
 
-# MailSlurp configuration (for email verification tests)
-MAILSLURP_API=""                 # MailSlurp API key
-MAILSLURP_INBOX_ID=""            # MailSlurp inbox ID
-MAILSLURP_TIMEOUT_MS=60000       # Timeout for waiting for emails
-
-# Optional: Override email used during Tide sign-up
-TIDE_SIGNUP_EMAIL=""
-
-# Optional: Override username/email for password recovery tests
-TIDE_RECOVERY_USERNAME=""
+# Where the CI scripts (ci/) look for sibling checkouts when you run them locally.
+# TIDE_WORKSPACE=~/project
