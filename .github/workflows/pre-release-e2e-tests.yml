@@ -166,9 +166,10 @@ env:
   # Sharding.
   TEST_CASES_SHARDS: '4'
   ADMIN_RUNTIME_SHARDS: '3'
-  ADMIN_RUNTIME_SERIAL_GREP: 'quorum-dynamics|social-login'
-  # The admin runtime lane has no smoke set yet; set e.g. "@smoke" once it does.
-  ADMIN_RUNTIME_SMOKE_GREP: ''
+  # Runtime projects kept out of the partitions and run together in one shard.
+  ADMIN_RUNTIME_SERIAL_PROJECTS: runtime-serial runtime-social
+  # Smoke runs of the admin runtime lane (the suite's own test:smoke selection).
+  ADMIN_RUNTIME_SMOKE_GREP: '@smoke'
   CI_REPO: tide-foundation/tidecloak-test-cases
   # No caching anywhere: images come from the private registry, npm and browser
   # downloads are fetched fresh. Caching public npm/Playwright downloads is a
@@ -353,6 +354,7 @@ jobs:
       SUITE_GREP_INVERT: ${{ matrix.grep_invert }}
       SUITE_SHARD: ${{ matrix.shard }}
       SUITE_PARTITION: ${{ matrix.partition }}
+      SUITE_PROJECTS: ${{ matrix.projects }}
       CI_SHAS: ${{ needs.plan.outputs.shas }}
       TC_NPM_VERSION: ${{ needs.plan.outputs.tc_npm_version }}
       CI_KEY_SALT: ${{ needs.plan.outputs.key_salt }}

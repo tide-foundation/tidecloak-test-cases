@@ -71,8 +71,12 @@ test('schedule runs everything but docs, and builds only missing images', () => 
     ]);
     const rt = p.shards.find((s) => s.id === 'admin-runtime-2');
     assert.strictEqual(rt.partition, '2/3');
-    assert.strictEqual(rt.grep_invert, 'quorum-dynamics|social-login');
-    assert.strictEqual(p.shards.find((s) => s.id === 'admin-runtime-serial').grep, 'quorum-dynamics|social-login');
+    assert.strictEqual(rt.projects, 'runtime');
+    assert.strictEqual(rt.grep, '');
+    const serial = p.shards.find((s) => s.id === 'admin-runtime-serial');
+    assert.strictEqual(serial.projects, 'runtime-serial runtime-social');
+    assert.strictEqual(serial.partition, '');
+    assert.strictEqual(serial.grep, '');
     assert.strictEqual(p.shards.find((s) => s.id === 'test-cases-3').partition, '3/4');
     assert.match(p.image_refs.master, /^ghcr\.io\/tide-foundation\/tide-ci-master:[0-9a-f]{40}$/);
 });
@@ -120,12 +124,15 @@ test('without a registry token one local job does everything', () => {
     assert.deepStrictEqual(Object.values(p.build), [false, false, false, false]);
 });
 
-test('smoke keeps one shard per suite and drops the runtime lane without a grep', () => {
+test('smoke keeps one shard per suite, runtime lane on its @smoke recipes', () => {
     const p = run({ IN_SELECTION: 'smoke' });
-    assert.deepStrictEqual(p.shards.map((s) => s.id), ['iga-engine', 'test-cases', 'admin-bootstrap']);
+    assert.deepStrictEqual(p.shards.map((s) => s.id), ['iga-engine', 'test-cases', 'admin-bootstrap', 'admin-runtime']);
     assert.ok(p.shards.every((s) => s.mode === 'smoke'));
-    const q = run({ IN_SELECTION: 'smoke', ADMIN_RUNTIME_SMOKE_GREP: '@smoke' });
-    assert.strictEqual(q.shards.find((s) => s.id === 'admin-runtime').grep, '@smoke');
+    const rt = p.shards.find((s) => s.id === 'admin-runtime');
+    assert.strictEqual(rt.grep, '@smoke');
+    assert.strictEqual(rt.projects, 'runtime');
+    const q = run({ IN_SELECTION: 'smoke', ADMIN_RUNTIME_SMOKE_GREP: '' });
+    assert.ok(!q.shards.some((s) => s.id === 'admin-runtime'));
 });
 
 test('docs only runs when asked', () => {

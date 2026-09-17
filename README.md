@@ -297,16 +297,17 @@ The workflow YAML mostly calls scripts in `ci/`, so a shard can be reproduced on
 | `summary` | Combines every shard's status into one table. Fails if a shard failed or a planned suite never reported. |
 
 Shards (full run): `iga-engine`; `test-cases-1..4` (spec files split round robin);
-`admin-bootstrap`; `admin-runtime-1..3` (recipes split by title with `ci/lib/partition-tests.js`,
-because the lane is one non-parallel file that Playwright's `--shard` cannot split);
-`admin-runtime-serial` (`quorum-dynamics|social-login`); `docs` (off unless `run_docs`).
+`admin-bootstrap`; `admin-runtime-1..3` (the `runtime` project, split by recipe title with
+`ci/lib/partition-tests.js`, because it is one non-parallel file that Playwright's `--shard`
+cannot split); `admin-runtime-serial` (the `runtime-serial` and `runtime-social` projects);
+`docs` (off unless `run_docs`).
 The counts and greps are env values at the top of the workflow.
 
 **Selection.**
 - `full` runs everything. It is the default for nightly and release runs.
 - `affected` runs what `ci/affected.tsv` maps the change to. It is the default for dispatches.
 - `smoke` takes the affected suites, one shard each: iga-engine `ci:smoke`, only `00-smoke`
-  here, and the bootstrap lane. The runtime lane joins only once `ADMIN_RUNTIME_SMOKE_GREP` is set.
+  here, the bootstrap lane, and the runtime lane's `@smoke` recipes (`ADMIN_RUNTIME_SMOKE_GREP`).
 
 A change that only touches `*.md` plans nothing.
 
@@ -380,14 +381,16 @@ ci/stack-wait.sh
 SUITE_MODE=smoke ci/run-iga-engine.sh
 SUITE_PARTITION=1/4 ci/run-test-cases.sh
 ci/run-admin-e2e.sh bootstrap
-SUITE_PARTITION=2/3 SUITE_GREP_INVERT='quorum-dynamics|social-login' ci/run-admin-e2e.sh runtime
+SUITE_PROJECTS=runtime SUITE_PARTITION=2/3 ci/run-admin-e2e.sh runtime
+SUITE_PROJECTS='runtime-serial runtime-social' ci/run-admin-e2e.sh runtime
 ci/summarize.sh
 ci/stack-down.sh
 ```
 
 Every `run-*.sh` takes `SUITE_MODE` (`smoke`/`full`), `SUITE_GREP`, `SUITE_GREP_INVERT` and
 `SUITE_SHARD` (`k/N`, Playwright `--shard`). The test-cases and runtime-lane scripts also take
-`SUITE_PARTITION`. Reports land in `$RUNNER_TEMP/tide-reports` (or `$TMPDIR`), one folder per suite.
+`SUITE_PARTITION`, and the runtime lane takes `SUITE_PROJECTS`. The admin scripts set
+`REQUIRE_NO_UNEXPECTED_SKIPS=1` and add the suite's own `ci:summary` table to the step summary. Reports land in `$RUNNER_TEMP/tide-reports` (or `$TMPDIR`), one folder per suite.
 
 `ci/build-sdk.sh` and `ci/rewrite-file-deps.js` change `package.json` in the checkouts they build.
 In particular, `test-app/package.json` is repointed from `file:~/...` to `file:$TIDE_WORKSPACE/...`.

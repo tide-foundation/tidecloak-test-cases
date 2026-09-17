@@ -72,10 +72,10 @@ function readInputs(env = process.env) {
         registryMode: env.HAS_REGISTRY_TOKEN === 'true' ? 'ghcr' : 'local',
         testCasesShards: Number(env.TEST_CASES_SHARDS || 4),
         adminRuntimeShards: Number(env.ADMIN_RUNTIME_SHARDS || 3),
-        adminSerialGrep: env.ADMIN_RUNTIME_SERIAL_GREP ?? 'quorum-dynamics|social-login',
-        // The runtime lane has no smoke selection yet. Until it does, smoke runs skip it
-        // unless this grep is set (for example "@smoke" once recipes carry that tag).
-        adminRuntimeSmokeGrep: env.ADMIN_RUNTIME_SMOKE_GREP || '',
+        // Runtime projects that must not share a worker with the partitioned recipes.
+        adminSerialProjects: env.ADMIN_RUNTIME_SERIAL_PROJECTS ?? 'runtime-serial runtime-social',
+        // Smoke runs of the runtime lane use this grep on the `runtime` project.
+        adminRuntimeSmokeGrep: env.ADMIN_RUNTIME_SMOKE_GREP ?? '@smoke',
     };
 }
 
@@ -248,20 +248,19 @@ function pickSuites(inputs, overridden) {
 
 function shardsFor(inputs, suites) {
     const mode = inputs.selection === 'smoke' ? 'smoke' : 'full';
-    const base = { mode, shard: '', partition: '', grep: '', grep_invert: '' };
+    const base = { mode, shard: '', partition: '', grep: '', grep_invert: '', projects: '' };
     const shards = [];
     for (const suite of suites) {
         const one = (extra) => shards.push({ ...base, suites: suite, timeout: TIMEOUTS[suite], ...extra });
         if (suite === 'test-cases' && mode === 'full' && inputs.testCasesShards > 1) {
             for (let k = 1; k <= inputs.testCasesShards; k++) one({ id: `test-cases-${k}`, partition: `${k}/${inputs.testCasesShards}` });
         } else if (suite === 'admin-runtime' && mode === 'smoke') {
-            one({ id: suite, grep: inputs.adminRuntimeSmokeGrep });
+            one({ id: suite, projects: 'runtime', grep: inputs.adminRuntimeSmokeGrep });
         } else if (suite === 'admin-runtime') {
             const n = inputs.adminRuntimeShards;
-            for (let k = 1; k <= n; k++) {
-                one({ id: `admin-runtime-${k}`, partition: `${k}/${n}`, grep_invert: inputs.adminSerialGrep });
-            }
-            if (inputs.adminSerialGrep) one({ id: 'admin-runtime-serial', grep: inputs.adminSerialGrep });
+            // The `runtime` project already leaves out @serial recipes.
+            for (let k = 1; k <= n; k++) one({ id: `admin-runtime-${k}`, projects: 'runtime', partition: `${k}/${n}` });
+            if (inputs.adminSerialProjects) one({ id: 'admin-runtime-serial', projects: inputs.adminSerialProjects });
         } else {
             one({ id: suite });
         }
@@ -356,6 +355,7 @@ function plan(env = process.env, deps = {}) {
             partition: '',
             grep: '',
             grep_invert: '',
+            projects: '',
             timeout: 340,
             build_local: true,
             components: componentsFor(suites, allRepos).join(' '),

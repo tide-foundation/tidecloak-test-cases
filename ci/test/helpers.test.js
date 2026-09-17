@@ -57,6 +57,36 @@ test('partition regex does not match a longer or suffixed title', () => {
     assert.ok(!re.test(line('edit-more')));
 });
 
+test('without an exclude, N groups cover every test exactly once', () => {
+    const tests = listTests(LIST, 'runtime');
+    for (let n = 1; n <= 4; n++) {
+        const hits = [];
+        for (let k = 1; k <= n; k++) {
+            const re = new RegExp(toGrep(partition(tests, k, n).mine));
+            for (const t of tests) if (re.test(grepText(t.parts))) hits.push(t.title);
+        }
+        assert.deepStrictEqual(hits.sort(), tests.map((t) => t.title).sort(), `n=${n}`);
+    }
+});
+
+test('only the named project is listed', () => {
+    assert.deepStrictEqual(listTests(LIST, 'runtime-setup').map((t) => t.title), ['setup wizard']);
+    assert.deepStrictEqual(listTests(LIST, 'runtime-serial'), []);
+});
+
+test('run-admin-e2e.sh refuses to partition anything but the runtime project', () => {
+    const ws = tmp();
+    const res = spawnSync('bash', [path.join(__dirname, '..', 'run-admin-e2e.sh'), 'runtime'], {
+        encoding: 'utf8',
+        env: {
+            ...process.env, TIDE_WORKSPACE: ws, KC_ADMIN_USER: 'a', KC_ADMIN_PASSWORD: 'b', TIDECLOAK_URL: 'http://127.0.0.1:9',
+            SUITE_PARTITION: '1/3', SUITE_PROJECTS: 'runtime-serial runtime-social', SUITE_MODE: 'full',
+        },
+    });
+    assert.strictEqual(res.status, 1);
+    assert.match(res.stderr, /only splits the runtime project/);
+});
+
 test('an empty group gets a never-matching grep', () => {
     assert.strictEqual(toGrep([]), NO_TESTS);
     assert.throws(() => partition([], 4, 3), /bad shard/);
