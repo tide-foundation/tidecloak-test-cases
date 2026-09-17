@@ -1,0 +1,31 @@
+# Which suites a changed path should run, and which images it touches.
+# Rows are checked top to bottom and the first match wins for each path.
+# component "*" matches any component. Globs are bash patterns, where "*"
+# also matches "/". "-" means none, "all" means every suite.
+# Suites: iga-engine test-cases admin-bootstrap admin-runtime docs
+#
+# component                   glob                                      images                  suites
+dauthdocs                     *                                         -                       docs
+tide-test-cases               *                                         -                       docs
+*                             *.md                                      -                       -
+*                             LICENSE                                   -                       -
+tidecloak-test-cases          tests/*                                   -                       test-cases
+tidecloak-test-cases          test-app/*                                -                       test-cases
+tidecloak-test-cases          *                                         -                       all
+tidecloak-iga-engine-tests    *                                         -                       iga-engine,test-cases
+tidecloak-idp-extensions      tidecloak-key-provider/frontend/e2e/*     -                       admin-bootstrap,admin-runtime,test-cases
+tidecloak-idp-extensions      *                                         tidecloak               all
+tidecloak-iga-extensions      *                                         tidecloak               all
+keycloak-IGA                  *                                         tidecloak               all
+tidecloak                     *                                         tidecloak               all
+ragnarok                      *                                         tidecloak               all
+tidecloak-override            Tidified/ci/*                             all                     all
+tidecloak-override            Tidified/build-tide.sh                    master,ork              all
+tidecloak-override            *                                         tidecloak               all
+Midgard                       *                                         tidecloak,keygen        all
+ork                           *                                         all                     all
+master-libs                   *                                         master                  all
+tide-js                       *                                         master,ork              all
+heimdall                      *                                         -                       test-cases,docs
+tidecloak-js                  packages/tidecloak-js/*                   -                       test-cases,docs
+tidecloak-js                  *                                         -                       docs
