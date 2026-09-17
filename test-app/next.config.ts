@@ -5,7 +5,10 @@ import path from "path";
 // `file:` and resolve to real paths OUTSIDE the test-harness repo
 // (/home/sasha/tidecloak-js, /home/sasha/heimdall, /home/sasha/project/tide-js).
 // Root must be their common ancestor (/home/sasha) so Next resolves/traces them.
-const workspaceRoot = path.resolve(__dirname, "../../../..");
+// In CI the deps are rewritten to $TIDE_WORKSPACE (ci/rewrite-file-deps.js), so that is the root.
+const workspaceRoot = process.env.TIDE_WORKSPACE
+  ? path.resolve(process.env.TIDE_WORKSPACE)
+  : path.resolve(__dirname, "../../../..");
 
 const nextConfig: NextConfig = {
   turbopack: {

@@ -27,7 +27,9 @@ module.exports = defineConfig({
   },
   reporter: [
     ['html', { outputFolder: 'reports' }],
-    ['list']
+    ['list'],
+    // CI sets PW_JSON_OUTPUT to collect counts for the run summary.
+    ...(process.env.PW_JSON_OUTPUT ? [['json', { outputFile: process.env.PW_JSON_OUTPUT }]] : []),
   ],
   use: {
     baseURL: BASE_URL,

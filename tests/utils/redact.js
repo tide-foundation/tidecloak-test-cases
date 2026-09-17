@@ -40,6 +40,12 @@ function maskCred(value) {
     return `${quote}${masked}${quote}`;
 }
 
+// Secret-looking values in free text. Group 2 is the value in each.
+const JSON_SECRET_RE =
+    /("(?:password|client_secret|secret|access_token|refresh_token|id_token)"\s*:\s*)"((?:[^"\\]|\\.)*)"/gi;
+const KV_SECRET_RE = /\b(client_secret|password|secret)=([^&\s"']+)/gi;
+const BEARER_RE = /\b(Bearer)\s+([A-Za-z0-9\-._~+/]+=*)/gi;
+
 /**
  * Mask secret values in an argument list. Returns a new array; the input is untouched.
  * @param {string[]} args
@@ -84,12 +90,17 @@ function redactText(text) {
     return String(text)
         .replace(SECRET_FLAG_RE, (_, flag, sep) => `${flag}${sep}${MASK}`)
         .replace(CRED_FLAG_RE, (_, flag, sep, value) => `${flag}${sep}${maskCred(value)}`)
-        .replace(
-            /("(?:password|client_secret|secret|access_token|refresh_token|id_token)"\s*:\s*)"(?:[^"\\]|\\.)*"/gi,
-            `$1"${MASK}"`,
-        )
-        .replace(/\b(client_secret|password|secret)=[^&\s"']+/gi, `$1=${MASK}`)
-        .replace(/\b(Bearer)\s+[A-Za-z0-9\-._~+/]+=*/gi, `$1 ${MASK}`);
+        .replace(JSON_SECRET_RE, `$1"${MASK}"`)
+        .replace(KV_SECRET_RE, `$1=${MASK}`)
+        .replace(BEARER_RE, `$1 ${MASK}`);
 }
 
-module.exports = { redactArgs, redactText, SECRET_FLAGS, CRED_FLAGS };
+module.exports = {
+    redactArgs,
+    redactText,
+    SECRET_FLAGS,
+    CRED_FLAGS,
+    MASK,
+    // For scanners that need to find, not mask. Clone before use: these are /g.
+    patterns: { SECRET_FLAG_RE, CRED_FLAG_RE, JSON_SECRET_RE, KV_SECRET_RE, BEARER_RE },
+};
