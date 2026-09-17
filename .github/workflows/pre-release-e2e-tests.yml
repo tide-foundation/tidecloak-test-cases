@@ -1,0 +1,609 @@
+# Tide e2e: builds the stack from source (only what changed), then runs the
+# suites in parallel shards, each against its own throwaway stack.
+#
+#   plan     resolve refs to SHAs, work out image keys, find which images are
+#            missing from the registry, pick suites, emit the shard matrix
+#   build    one job per missing image, pushed to a PRIVATE GHCR package
+#   e2e      one job per shard: pull images, start the stack, run its suites
+#   summary  one table for the whole run; fails if any shard failed or never reported
+#
+# Entry points:
+#   workflow_dispatch     by hand, from the Actions tab or `gh workflow run`
+#   repository_dispatch   type "tide-e2e", sent by component repos (ci/caller-template.yml)
+#   schedule              nightly, full selection
+#   workflow_call         the existing release hook in tidecloak-override. It runs on
+#                         the CALLER's runners and billing; a private caller gets
+#                         the smaller private runners, which this stack does not fit
+#                         well. For the hook to run everything it must also pass
+#                         STRIPE_TEST_SK and CI_REGISTRY_TOKEN (or `secrets: inherit`).
+#
+# This repo is public, so its job logs and artifacts are public:
+#   - build output from private repos stays in files on the runner
+#   - nothing built from private source goes to the Actions cache or artifacts;
+#     the private GHCR packages are the only place images live
+#   - uploads are test reports and scrubbed logs only, and pass a secret scan first
+#
+# Secrets (names): CHECKOUT_TOKEN, CI_REGISTRY_TOKEN, STRIPE_TEST_SK
+# Variables (names): STRIPE_FREE_PRICE_ID, STRIPE_FREE_PRODUCT_ID,
+#   STRIPE_BUSINESS_PRODUCT_ID, CI_REGISTRY_USER
+# Details: README.md, "Continuous integration".
+name: Tide e2e
+# Callers find their run by the request id in this title (ci/caller-template.yml).
+run-name: >-
+  Tide e2e ${{ github.event.client_payload.request_id || inputs.component || github.event_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: Repo under test (a name from ci/components.tsv), empty for none
+        required: false
+        type: string
+      component_ref:
+        description: Branch or tag of that repo
+        required: false
+        type: string
+      changed_paths:
+        description: Changed paths in that repo, space separated (empty means all of it)
+        required: false
+        type: string
+      base_ref:
+        description: Base branch to diff against when changed_paths is empty
+        required: false
+        type: string
+      selection:
+        description: affected runs what the change touches; smoke runs a quick subset of that; full runs everything
+        required: false
+        default: affected
+        type: choice
+        options: [affected, smoke, full]
+      refs:
+        description: Other repos at non-default refs, e.g. "ork=my-branch tide-js=v1.2.3"
+        required: false
+        type: string
+      run_docs:
+        description: Also run the SDK docs suite (needs tide-test-cases published)
+        required: false
+        default: false
+        type: boolean
+      key_salt:
+        description: Change to force a rebuild of every image
+        required: false
+        type: string
+  repository_dispatch:
+    types: [tide-e2e]
+  schedule:
+    # 15:30 UTC, early morning in Australia.
+    - cron: '30 15 * * *'
+  workflow_call:
+    inputs:
+      # Accepted for the existing release hook. The current suites do not use email.
+      mailslurp_inbox_id:
+        required: false
+        type: string
+      smtp_host:
+        required: false
+        type: string
+      smtp_port:
+        required: false
+        type: string
+      temp_email_debug_mail:
+        required: false
+        type: string
+      temp_email_from:
+        required: false
+        type: string
+      test_user_email:
+        required: false
+        type: string
+      component:
+        required: false
+        type: string
+      component_ref:
+        required: false
+        type: string
+      changed_paths:
+        required: false
+        type: string
+      base_ref:
+        required: false
+        type: string
+      selection:
+        description: affected, smoke or full (default full)
+        required: false
+        type: string
+      refs:
+        required: false
+        type: string
+      run_docs:
+        required: false
+        default: false
+        type: boolean
+      key_salt:
+        required: false
+        type: string
+      stripe_free_price_id:
+        required: false
+        type: string
+      stripe_free_product_id:
+        required: false
+        type: string
+      stripe_business_product_id:
+        required: false
+        type: string
+    secrets:
+      CHECKOUT_TOKEN:
+        required: false
+        description: Read access to the private Tide repos
+      MAILSLURP_API:
+        required: false
+      TEMP_EMAIL_PASSWORD:
+        required: false
+      STRIPE_TEST_SK:
+        required: false
+        description: Stripe test-mode key for the stack; without it licensing flows fail
+      CI_REGISTRY_TOKEN:
+        required: false
+        description: read/write:packages for the private tide-ci images; without it one job builds everything
+
+permissions:
+  contents: read
+
+concurrency:
+  group: >-
+    tide-e2e-${{ github.repository }}-${{ github.event_name }}-${{ inputs.component || github.event.client_payload.component }}-${{ inputs.component_ref || github.event.client_payload.component_ref || github.ref }}
+  # Supersede our own dispatch and scheduled runs; never cancel a caller's run.
+  cancel-in-progress: ${{ github.repository == 'tide-foundation/tidecloak-test-cases' }}
+
+env:
+  # Toolchains. Keep these in step with tidecloak-override/Tidified/ci/README.md.
+  NODE_VERSION: '24'
+  JAVA_VERSION: '25'
+  JAVA_DISTRIBUTION: temurin
+  DOTNET_VERSION: '8.0.x'
+  # Images live at <prefix>-<image>:<key>. The packages must stay private.
+  REGISTRY_PREFIX: ghcr.io/tide-foundation/tide-ci
+  # Sharding.
+  TEST_CASES_SHARDS: '4'
+  ADMIN_RUNTIME_SHARDS: '3'
+  ADMIN_RUNTIME_SERIAL_GREP: 'quorum-dynamics|social-login'
+  # The admin runtime lane has no smoke set yet; set e.g. "@smoke" once it does.
+  ADMIN_RUNTIME_SMOKE_GREP: ''
+  CI_REPO: tide-foundation/tidecloak-test-cases
+  # No caching anywhere: images come from the private registry, npm and browser
+  # downloads are fetched fresh. Caching public npm/Playwright downloads is a
+  # possible later speed-up; anything built from private source never is.
+
+jobs:
+  plan:
+    name: plan
+    # Never for forks: not scheduled runs in a fork, not fork pull requests of a caller.
+    if: >-
+      github.repository_owner == 'tide-foundation' &&
+      ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has_shards: ${{ steps.plan.outputs.has_shards }}
+      suites: ${{ steps.plan.outputs.suites }}
+      selection: ${{ steps.plan.outputs.selection }}
+      registry_mode: ${{ steps.plan.outputs.registry_mode }}
+      registry_prefix: ${{ steps.plan.outputs.registry_prefix }}
+      shas: ${{ steps.plan.outputs.shas }}
+      image_refs: ${{ steps.plan.outputs.image_refs }}
+      image_keys: ${{ steps.plan.outputs.image_keys }}
+      build_images: ${{ steps.plan.outputs.build_images }}
+      tc_npm_version: ${{ steps.plan.outputs.tc_npm_version }}
+      key_salt: ${{ steps.plan.outputs.key_salt }}
+    steps:
+      - name: Check out the CI scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.CI_REPO }}
+          ref: ${{ github.repository == 'tide-foundation/tidecloak-test-cases' && github.sha || 'main' }}
+          path: self
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Log in to GHCR to look up existing images
+        env:
+          REGISTRY_TOKEN: ${{ secrets.CI_REGISTRY_TOKEN }}
+          REGISTRY_USER: ${{ vars.CI_REGISTRY_USER || 'tide-ci' }}
+        run: |
+          if [ -n "$REGISTRY_TOKEN" ]; then
+            echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+          else
+            echo "::warning::CI_REGISTRY_TOKEN is not available: one job will build every image and run all suites"
+          fi
+
+      - name: Plan the run
+        id: plan
+        env:
+          GH_TOKEN: ${{ secrets.CHECKOUT_TOKEN }}
+          # A called run reports the caller's event; treat it as the release hook.
+          EVENT_NAME: ${{ github.repository == 'tide-foundation/tidecloak-test-cases' && github.event_name || 'workflow_call' }}
+          IN_COMPONENT: ${{ inputs.component || github.event.client_payload.component }}
+          IN_COMPONENT_REF: ${{ inputs.component_ref || github.event.client_payload.component_ref }}
+          IN_CHANGED_PATHS: ${{ inputs.changed_paths || join(github.event.client_payload.changed_paths, ' ') }}
+          IN_BASE_REF: ${{ inputs.base_ref || github.event.client_payload.base_ref }}
+          IN_SELECTION: ${{ inputs.selection || github.event.client_payload.selection || (github.event_name == 'schedule' && 'full') || '' }}
+          IN_REFS: ${{ inputs.refs || github.event.client_payload.refs }}
+          IN_RUN_DOCS: ${{ inputs.run_docs || github.event.client_payload.run_docs || false }}
+          IN_KEY_SALT: ${{ inputs.key_salt || github.event.client_payload.key_salt }}
+          HAS_REGISTRY_TOKEN: ${{ secrets.CI_REGISTRY_TOKEN != '' }}
+          PLAN_FILE: ${{ runner.temp }}/plan.json
+          PLAN_WORKSPACE: ${{ runner.temp }}/plan-ws
+        run: self/ci/plan.sh
+
+      - name: Log out of GHCR
+        if: always()
+        run: docker logout ghcr.io || true
+
+  build:
+    name: build (${{ matrix.image }})
+    needs: plan
+    if: needs.plan.result == 'success' && needs.plan.outputs.build_images != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.image == 'tidecloak' && 90 || 40 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.plan.outputs.build_images) }}
+    env:
+      TIDE_WORKSPACE: ${{ github.workspace }}/ws
+      CI_SHAS: ${{ needs.plan.outputs.shas }}
+      IMAGE: ${{ matrix.image }}
+      TC_NPM_VERSION: ${{ needs.plan.outputs.tc_npm_version }}
+      CI_KEY_SALT: ${{ needs.plan.outputs.key_salt }}
+    steps:
+      - name: Check out the CI scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.CI_REPO }}
+          ref: ${{ github.repository == 'tide-foundation/tidecloak-test-cases' && github.sha || 'main' }}
+          path: self
+          persist-credentials: false
+
+      - name: Free disk space
+        env:
+          LEVEL: ${{ matrix.image == 'tidecloak' && 'full' || 'light' }}
+        run: self/ci/free-disk.sh "$LEVEL"
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      # No `cache:` on purpose: the Maven cache would store artifacts built from private forks.
+      - name: Set up Java
+        if: matrix.image == 'tidecloak'
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache-jdk: false
+
+      - name: Set up .NET
+        if: matrix.image == 'tidecloak'
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: false
+
+      - name: Install native build tools
+        if: matrix.image == 'tidecloak'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq clang zlib1g-dev jq
+
+      - name: Check out the sources for this image
+        env:
+          GH_TOKEN: ${{ secrets.CHECKOUT_TOKEN }}
+        run: |
+          mkdir -p "$TIDE_WORKSPACE"
+          self/ci/checkout.sh tidecloak-override
+          # shellcheck disable=SC2046
+          self/ci/checkout.sh $(self/ci/image-repos.sh "$IMAGE")
+
+      - name: Log in to GHCR
+        env:
+          REGISTRY_TOKEN: ${{ secrets.CI_REGISTRY_TOKEN }}
+          REGISTRY_USER: ${{ vars.CI_REGISTRY_USER || 'tide-ci' }}
+        run: echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+
+      - name: Build and push ${{ matrix.image }}
+        env:
+          GH_TOKEN: ${{ secrets.CI_REGISTRY_TOKEN }}
+          IMAGE_KEYS: ${{ needs.plan.outputs.image_keys }}
+          PREFIX: ${{ needs.plan.outputs.registry_prefix }}
+        run: |
+          EXPECTED_KEY="$(node -e 'process.stdout.write(JSON.parse(process.env.IMAGE_KEYS)[process.env.IMAGE])')"
+          export EXPECTED_KEY
+          self/ci/build-image.sh "$IMAGE" --push "$PREFIX"
+
+      - name: Log out of GHCR
+        if: always()
+        run: docker logout ghcr.io || true
+
+  e2e:
+    name: e2e (${{ matrix.id }})
+    needs: [plan, build]
+    if: >-
+      always() &&
+      needs.plan.result == 'success' &&
+      needs.plan.outputs.has_shards == 'true' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      TIDE_WORKSPACE: ${{ github.workspace }}/ws
+      CI_SHARD_ID: ${{ matrix.id }}
+      SUITES: ${{ matrix.suites }}
+      SUITE_MODE: ${{ matrix.mode }}
+      SUITE_GREP: ${{ matrix.grep }}
+      SUITE_GREP_INVERT: ${{ matrix.grep_invert }}
+      SUITE_SHARD: ${{ matrix.shard }}
+      SUITE_PARTITION: ${{ matrix.partition }}
+      CI_SHAS: ${{ needs.plan.outputs.shas }}
+      TC_NPM_VERSION: ${{ needs.plan.outputs.tc_npm_version }}
+      CI_KEY_SALT: ${{ needs.plan.outputs.key_salt }}
+    steps:
+      - name: Check out the CI scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.CI_REPO }}
+          ref: ${{ github.repository == 'tide-foundation/tidecloak-test-cases' && github.sha || 'main' }}
+          path: self
+          persist-credentials: false
+
+      - name: Free disk space
+        env:
+          LEVEL: ${{ matrix.build_local && 'full' || 'light' }}
+        run: self/ci/free-disk.sh "$LEVEL"
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Set up Java
+        if: matrix.build_local
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache-jdk: false
+
+      - name: Set up .NET
+        if: matrix.build_local
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: false
+
+      - name: Install native build tools
+        if: matrix.build_local
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq clang zlib1g-dev jq
+
+      - name: Point hostgateway at this runner
+        run: self/ci/add-hostgateway.sh
+
+      - name: Check out the repos this shard needs
+        env:
+          GH_TOKEN: ${{ secrets.CHECKOUT_TOKEN }}
+          COMPONENTS: ${{ matrix.components }}
+        run: |
+          mkdir -p "$TIDE_WORKSPACE"
+          # shellcheck disable=SC2086
+          self/ci/checkout.sh $COMPONENTS
+
+      - name: Log in to GHCR
+        if: ${{ !matrix.build_local }}
+        env:
+          REGISTRY_TOKEN: ${{ secrets.CI_REGISTRY_TOKEN }}
+          REGISTRY_USER: ${{ vars.CI_REGISTRY_USER || 'tide-ci' }}
+        run: echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+
+      - name: Get the stack images
+        id: images
+        env:
+          IMAGE_REFS: ${{ needs.plan.outputs.image_refs }}
+          MODE: ${{ matrix.build_local && 'build-local' || 'pull' }}
+        run: self/ci/images.sh "$MODE"
+
+      - name: Start the stack
+        id: stack
+        env:
+          STRIPE_TEST_SK: ${{ secrets.STRIPE_TEST_SK }}
+          STRIPE_FREE_PRICE_ID: ${{ inputs.stripe_free_price_id || vars.STRIPE_FREE_PRICE_ID }}
+          STRIPE_FREE_PRODUCT_ID: ${{ inputs.stripe_free_product_id || vars.STRIPE_FREE_PRODUCT_ID }}
+          STRIPE_BUSINESS_PRODUCT_ID: ${{ inputs.stripe_business_product_id || vars.STRIPE_BUSINESS_PRODUCT_ID }}
+        run: self/ci/stack-up.sh
+
+      - name: Install suite dependencies
+        id: prepare
+        run: self/ci/prepare-suites.sh
+
+      - name: Build the SDK packages and the test-app
+        id: sdk
+        if: contains(format(' {0} ', matrix.suites), ' test-cases ')
+        run: self/ci/build-sdk.sh
+
+      - name: Wait for the stack
+        id: ready
+        run: self/ci/stack-wait.sh
+
+      - name: 'Suite: iga-engine'
+        id: iga_engine
+        if: always() && steps.ready.outcome == 'success' && contains(format(' {0} ', matrix.suites), ' iga-engine ')
+        timeout-minutes: 30
+        run: self/ci/run-iga-engine.sh
+
+      - name: 'Suite: tidecloak-test-cases'
+        id: test_cases
+        if: always() && steps.ready.outcome == 'success' && contains(format(' {0} ', matrix.suites), ' test-cases ')
+        timeout-minutes: 90
+        run: self/ci/run-test-cases.sh
+
+      - name: 'Suite: tide-admin-ui bootstrap'
+        id: admin_bootstrap
+        if: always() && steps.ready.outcome == 'success' && contains(format(' {0} ', matrix.suites), ' admin-bootstrap ')
+        timeout-minutes: 30
+        run: self/ci/run-admin-e2e.sh bootstrap
+
+      - name: 'Suite: tide-admin-ui runtime'
+        id: admin_runtime
+        if: always() && steps.ready.outcome == 'success' && contains(format(' {0} ', matrix.suites), ' admin-runtime ')
+        timeout-minutes: 90
+        run: self/ci/run-admin-e2e.sh runtime
+
+      - name: 'Suite: SDK docs'
+        id: docs
+        if: always() && steps.ready.outcome == 'success' && contains(format(' {0} ', matrix.suites), ' docs ')
+        timeout-minutes: 120
+        run: self/ci/run-docs.sh
+
+      - name: Collect scrubbed stack logs
+        if: always() && steps.stack.outcome != 'skipped'
+        run: self/ci/collect-logs.sh
+
+      - name: Stage reports for upload
+        if: always()
+        run: self/ci/stage-uploads.sh
+
+      - name: Scan staged files for secrets
+        id: scan
+        if: always()
+        env:
+          SCAN_SECRET_ENVS: KC_ADMIN_PASSWORD STRIPE_TEST_SK CHECKOUT_TOKEN CI_REGISTRY_TOKEN MAILSLURP_API TEMP_EMAIL_PASSWORD
+          STRIPE_TEST_SK: ${{ secrets.STRIPE_TEST_SK }}
+          CHECKOUT_TOKEN: ${{ secrets.CHECKOUT_TOKEN }}
+          CI_REGISTRY_TOKEN: ${{ secrets.CI_REGISTRY_TOKEN }}
+          MAILSLURP_API: ${{ secrets.MAILSLURP_API }}
+          TEMP_EMAIL_PASSWORD: ${{ secrets.TEMP_EMAIL_PASSWORD }}
+        run: self/ci/scan-uploads.sh "$RUNNER_TEMP/tide-upload"
+
+      - name: Upload reports
+        if: always() && steps.scan.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-reports-${{ matrix.id }}
+          path: ${{ runner.temp }}/tide-upload/reports
+          retention-days: 7
+          if-no-files-found: ignore
+          include-hidden-files: false
+
+      - name: Upload suite status
+        if: always() && steps.scan.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-status-${{ matrix.id }}
+          path: ${{ runner.temp }}/tide-upload/status
+          retention-days: 7
+          if-no-files-found: ignore
+          include-hidden-files: false
+
+      - name: Show this shard's results
+        if: always()
+        run: self/ci/summarize.sh || true
+
+      - name: Stop the stack
+        if: always()
+        run: self/ci/stack-down.sh
+
+      - name: Log out of GHCR
+        if: always()
+        run: docker logout ghcr.io || true
+
+      - name: Fail if a suite failed
+        if: always()
+        env:
+          OUTCOMES: >-
+            images=${{ steps.images.outcome }}
+            stack=${{ steps.stack.outcome }}
+            prepare=${{ steps.prepare.outcome }}
+            sdk=${{ steps.sdk.outcome }}
+            ready=${{ steps.ready.outcome }}
+            iga-engine=${{ steps.iga_engine.outcome }}
+            test-cases=${{ steps.test_cases.outcome }}
+            admin-bootstrap=${{ steps.admin_bootstrap.outcome }}
+            admin-runtime=${{ steps.admin_runtime.outcome }}
+            docs=${{ steps.docs.outcome }}
+            scan=${{ steps.scan.outcome }}
+        run: |
+          echo "$OUTCOMES" | tr ' ' '\n'
+          if echo "$OUTCOMES" | grep -Eq '=(failure|cancelled)'; then
+            exit 1
+          fi
+
+  summary:
+    name: summary
+    needs: [plan, build, e2e]
+    if: always() && needs.plan.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Stop if planning failed
+        if: needs.plan.result != 'success'
+        run: |
+          echo "::error::the plan job did not succeed, so nothing was tested"
+          exit 1
+
+      - name: Check out the CI scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.CI_REPO }}
+          ref: ${{ github.repository == 'tide-foundation/tidecloak-test-cases' && github.sha || 'main' }}
+          path: self
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Download suite status
+        if: needs.plan.outputs.has_shards == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: e2e-status-*
+          path: ${{ runner.temp }}/status
+
+      - name: Write the summary
+        env:
+          MATRIX: ${{ needs.plan.outputs.matrix }}
+          HAS_SHARDS: ${{ needs.plan.outputs.has_shards }}
+          BUILD_IMAGES: ${{ needs.plan.outputs.build_images }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          BUILDS="$(node -e '
+            const images = JSON.parse(process.env.BUILD_IMAGES || "[]");
+            const out = {};
+            for (const i of images) out[i] = process.env.BUILD_RESULT;
+            process.stdout.write(JSON.stringify(out));
+          ')"
+          if [ "$HAS_SHARDS" != true ]; then
+            echo "Nothing to test for this change." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          printf '%s' "$MATRIX" > "$RUNNER_TEMP/matrix.json"
+          # Each artifact downloads to status/<artifact>/<suite>.json; summarize.js
+          # looks for files in folders named "status", so give it that shape.
+          mkdir -p "$RUNNER_TEMP/combined"
+          for d in "$RUNNER_TEMP"/status/e2e-status-*; do
+            [ -d "$d" ] || continue
+            mkdir -p "$RUNNER_TEMP/combined/$(basename "$d")/status"
+            cp "$d"/*.json "$RUNNER_TEMP/combined/$(basename "$d")/status/" 2>/dev/null || true
+          done
+          self/ci/summarize.sh "$RUNNER_TEMP/combined" --expect "$RUNNER_TEMP/matrix.json" --builds "$BUILDS"
