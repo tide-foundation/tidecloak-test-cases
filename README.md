@@ -170,9 +170,9 @@ prints a `RealmContext`, provisioning is fine and the issue is in the browser st
 | `tide-admin-cli … failed (stage=quorum/rest)` | 3/4 | a governed change-request couldn't commit — check the stack / admin creds |
 | `get-installations-provider failed` or `adapter config … looks incomplete` | 5 | the `testapp` client origin wasn't signed (Stage 2) or the client is missing |
 | login test stalls on the Tide widget / never reaches "Admin Dashboard" | login | the user isn't Tide-linked (Stage 3 didn't run) **or** the wrong realm was bound — run smoke, run headed |
-| `connect ECONNREFUSED 127.0.0.1:3000` | — | the **webServer didn't bring the test-app up**. Read the `[WebServer]` build/start output above (a build error or a TS failure), or a stray process is holding the port (free it, since the run owns it, or set `TEST_APP_PORT`) |
-| `Timed out waiting … from config.webServer` / `EADDRINUSE` | — | something is already on the test-app's port (`reuseExistingServer: false` means the run must own it). Kill the stray app, or set `TEST_APP_PORT` to a free port, then re-run |
-| `connect ECONNREFUSED 127.0.0.1:8080` | — | **TideCloak isn't up** |
+| `connect ECONNREFUSED 127.0.0.1:3000` | - | the **webServer didn't bring the test-app up**. Read the `[WebServer]` build/start output above (a build error or a TS failure), or a stray process is holding the port (free it, since the run owns it, or set `TEST_APP_PORT`) |
+| `Timed out waiting … from config.webServer` / `EADDRINUSE` | - | something is already on the test-app's port (`reuseExistingServer: false` means the run must own it). Kill the stray app, or set `TEST_APP_PORT` to a free port, then re-run |
+| `connect ECONNREFUSED 127.0.0.1:8080` | - | **TideCloak isn't up** |
 
 ### Step 4: use the artifacts
 - **Watch it live:** `--headed` (or `HEADLESS=false`). The enclave approval popups are the most
@@ -236,10 +236,10 @@ Defaults assume an all-localhost stack.
 | `HOME_ORK_ORIGIN` | `http://localhost:1001` | the enclave / approval-popup origin |
 | `KC_ADMIN_USER` / `KC_ADMIN_PASSWORD` | `admin` / `password` | master-realm admin for the admin REST API (not a tide-realm-admin) |
 | `HEADLESS` | unset (browser visible) | `true` for a headless run (`CI=true` does the same) |
-| `PW_SKIP_BUILD` | — | set to `1` to skip the per-run test-app rebuild (the `webServer` runs `npm run start` only) when iterating on test code |
+| `PW_SKIP_BUILD` | - | set to `1` to skip the per-run test-app rebuild (the `webServer` runs `npm run start` only) when iterating on test code |
 | `IGA_ENGINE_DIR` | `~/tidecloak-iga-engine-tests` | the recipe runner suite |
 | `TIDE_ADMIN_CLI_DIR` | `~/project/…/frontend/e2e` | the link-user / add-tide-realm-admin suite |
-| `RECIPE_REALM` | — | pin the realm name (skip Stage-1 discovery) |
+| `RECIPE_REALM` | - | pin the realm name (skip Stage-1 discovery) |
 | `TIDE_USER_PASSWORD` | (unset) | pin the password given to every Tide identity the suite provisions. Unset means a random one per user per run; set it when you pin a realm with `RECIPE_REALM` |
 | `PW_REALM_CACHE_DIR` | per-user temp dir | where the realm cache lives (see above) |
 | `DPOP_USER` / `DPOP_PASSWORD` / `DPOP_CLIENT_A` / `DPOP_CLIENT_B` | recipe values | spec 12 overrides (e.g. a login-capable account) |
