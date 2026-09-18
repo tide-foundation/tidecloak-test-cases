@@ -84,7 +84,12 @@ module.exports = defineConfig({
     command: process.env.PW_SKIP_BUILD ? 'npm run start' : 'npm run build && npm run start',
     url: `${BASE_URL}/api/health`,
     cwd: path.resolve(__dirname, '../test-app'),
-    env: { ...process.env, PORT: String(TEST_APP_PORT) },
+    // ONLY the port. Playwright already merges process.env into the child's
+    // environment (webServerPlugin), so spreading it here changed nothing at
+    // runtime, but the reporters serialise config.webServer verbatim into
+    // results.json and the HTML report's data. That is how KC_ADMIN_PASSWORD,
+    // and every other variable, reached an artifact. Never put secrets here.
+    env: { PORT: String(TEST_APP_PORT) },
     reuseExistingServer: false,
     timeout: 180_000,
     stdout: 'pipe',
