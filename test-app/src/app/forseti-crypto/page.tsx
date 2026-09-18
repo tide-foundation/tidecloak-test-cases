@@ -362,7 +362,7 @@ export default function ForsetiCryptoPage() {
             <p data-testid="forseti-policy-status">
                 <strong>Forseti Policy:</strong> {policyLoaded ? "Loaded" : "Not found"}
                 {!policyLoaded && (
-                    <span> — <a href="/admin">Create and commit a Forseti policy on the Admin page</a></span>
+                    <span>. <a href="/admin">Create and commit a Forseti policy on the Admin page</a></span>
                 )}
                 <button onClick={fetchForsetiPolicy} style={{ marginLeft: "10px" }}>Reload Policy</button>
             </p>

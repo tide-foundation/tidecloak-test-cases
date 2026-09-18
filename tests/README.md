@@ -143,7 +143,7 @@ Then: `npm test` (or `npm run test:headed`).
 | `KC_ADMIN_USER` / `KC_ADMIN_PASSWORD` | `admin` / `password` | master-realm admin for the admin REST API |
 | `IGA_ENGINE_DIR` | `~/tidecloak-iga-engine-tests` | the recipe runner suite |
 | `TIDE_ADMIN_CLI_DIR` | `~/project/.../frontend/e2e` | the link-user / add-tide-realm-admin suite |
-| `RECIPE_REALM` | — | pin the realm name (skip discovery) |
+| `RECIPE_REALM` | - | pin the realm name (skip discovery) |
 | `TIDE_USER_PASSWORD` | (unset) | pin the password of every provisioned Tide identity (default: random per user per run) |
 | `PW_REALM_CACHE_DIR` | per-user temp dir | where the retry realm cache lives |
 
