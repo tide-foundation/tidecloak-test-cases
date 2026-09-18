@@ -15,7 +15,13 @@ dir="$TIDE_WORKSPACE/tidecloak-test-cases/tests"
 [ -d "$TIDE_WORKSPACE/tidecloak-test-cases/test-app/.next" ] || die "test-app is not built; run ci/build-sdk.sh first"
 
 export CI=true HEADLESS=true PW_SKIP_BUILD=1
-export BASE_URL="${BASE_URL:-http://localhost:3000}"
+# One port for the test-app: the app itself (next start reads PORT), the
+# Playwright baseURL, the check below, and the client origins in the recipes.
+# A runner with something already on 3000 sets TEST_APP_PORT.
+export TEST_APP_PORT="${TEST_APP_PORT:-3000}"
+[[ "$TEST_APP_PORT" =~ ^[1-9][0-9]*$ ]] || die "TEST_APP_PORT must be a port number, got: $TEST_APP_PORT"
+export PORT="$TEST_APP_PORT"
+export BASE_URL="${BASE_URL:-http://localhost:$TEST_APP_PORT}"
 export IGA_ENGINE_DIR="$TIDE_WORKSPACE/tidecloak-iga-engine-tests"
 export TIDE_ADMIN_CLI_DIR="$TIDE_WORKSPACE/tidecloak-idp-extensions/tidecloak-key-provider/frontend/e2e"
 export PW_REALM_CACHE_DIR="${PW_REALM_CACHE_DIR:-${RUNNER_TEMP:-/tmp}/pw-realm-cache}"
@@ -24,7 +30,7 @@ export PW_REALM_CACHE_DIR="${PW_REALM_CACHE_DIR:-${RUNNER_TEMP:-/tmp}/pw-realm-c
 port="${BASE_URL##*:}"
 port="${port%%/*}"
 if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
-    die "something is already listening on :$port; the suite needs it free"
+    die "the test-app needs port $port ($BASE_URL) and something is already listening on it; free it or set TEST_APP_PORT to a free port"
 fi
 
 pw_selection_args

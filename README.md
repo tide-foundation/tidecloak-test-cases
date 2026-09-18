@@ -41,7 +41,7 @@ Three programs must be running / installed for this to work:
 | Piece | What it is | Default location |
 |---|---|---|
 | **TideCloak + ORK** | the server + enclave network under test | TideCloak `http://localhost:8080`, ORK/enclave `http://localhost:1001` |
-| **test-app** | the Next.js app the browser drives | `http://localhost:3000` (this repo, `test-app/`) |
+| **test-app** | the Next.js app the browser drives | `http://localhost:3000` by default, `TEST_APP_PORT` to move it (this repo, `test-app/`) |
 | **tidecloak-iga-engine-tests** | provisions realms from recipes (Stage 1) | `~/tidecloak-iga-engine-tests` |
 | **tide-admin-cli** | the link-user / add-tide-realm-admin ceremonies (Stages 3–4) | `~/project/tidecloak-idp-extensions/tidecloak-key-provider/frontend/e2e` |
 
@@ -103,7 +103,7 @@ npm run report                                        # open the HTML report aft
 Notes that will save you confusion:
 - The suite runs **serially** (`workers: 1`), retries a failed test once (`retries: 1`), and
   runs to the end even after a failure (`maxFailures: 0`), so one flaky test does not hide the rest.
-- **The test-app is built + started for you every run, and the run owns `:3000`**
+- **The test-app is built + started for you every run, and the run owns its port** (`:3000` by default, `TEST_APP_PORT` to move it)
   (`reuseExistingServer: false`). Free that port before starting — if you keep an app up for
   manual browser/MCP testing, kill it first. The app is only up for the run's duration; for
   ad-hoc testing, start it yourself with `cd test-app && npm run start`.
@@ -170,8 +170,8 @@ prints a `RealmContext`, provisioning is fine and the issue is in the browser st
 | `tide-admin-cli … failed (stage=quorum/rest)` | 3/4 | a governed change-request couldn't commit — check the stack / admin creds |
 | `get-installations-provider failed` or `adapter config … looks incomplete` | 5 | the `testapp` client origin wasn't signed (Stage 2) or the client is missing |
 | login test stalls on the Tide widget / never reaches "Admin Dashboard" | login | the user isn't Tide-linked (Stage 3 didn't run) **or** the wrong realm was bound — run smoke, run headed |
-| `connect ECONNREFUSED 127.0.0.1:3000` | — | the **webServer didn't bring the test-app up** — read the `[WebServer]` build/start output above (a build error or a TS failure); or a stray process is holding `:3000` (free it, since the run owns the port) |
-| `Timed out waiting … from config.webServer` / `EADDRINUSE :3000` | — | something is already on `:3000` (`reuseExistingServer: false` means the run must own it) — kill the stray app, then re-run |
+| `connect ECONNREFUSED 127.0.0.1:3000` | — | the **webServer didn't bring the test-app up**. Read the `[WebServer]` build/start output above (a build error or a TS failure), or a stray process is holding the port (free it, since the run owns it, or set `TEST_APP_PORT`) |
+| `Timed out waiting … from config.webServer` / `EADDRINUSE` | — | something is already on the test-app's port (`reuseExistingServer: false` means the run must own it). Kill the stray app, or set `TEST_APP_PORT` to a free port, then re-run |
 | `connect ECONNREFUSED 127.0.0.1:8080` | — | **TideCloak isn't up** |
 
 ### Step 4: use the artifacts
@@ -230,7 +230,8 @@ Defaults assume an all-localhost stack.
 
 | Var | Default | Meaning |
 |---|---|---|
-| `BASE_URL` | `http://localhost:3000` | the test-app |
+| `TEST_APP_PORT` | `3000` | the port the test-app listens on. One knob: it drives the app, the `baseURL`, the port-free check and the client origins the recipes provision. Set it when something else holds 3000 |
+| `BASE_URL` | `http://localhost:$TEST_APP_PORT` | the test-app. Overrides the whole origin, host included |
 | `TIDECLOAK_URL` | `http://localhost:8080` | TideCloak |
 | `HOME_ORK_ORIGIN` | `http://localhost:1001` | the enclave / approval-popup origin |
 | `KC_ADMIN_USER` / `KC_ADMIN_PASSWORD` | `admin` / `password` | master-realm admin for the admin REST API (not a tide-realm-admin) |
@@ -256,7 +257,7 @@ tidecloak-test-cases/
 ├── .github/workflows/        # pre-release-e2e-tests.yml (the Tide e2e) and checks.yml (PR checks)
 ├── ci/                       # the scripts those workflows call, and the pre-release gate (section 8)
 │   └── run-all.sh            # the single entry point: every suite, in series, against a running stack
-├── test-app/                 # the Next.js app the browser drives (auto-built + started by the suite's webServer → :3000)
+├── test-app/                 # the Next.js app the browser drives (auto-built + started by the suite's webServer → :3000, or TEST_APP_PORT)
 └── tests/
     ├── README.md             # architecture + how to add a new test
     ├── specs/                # the Playwright specs (00-smoke, 04, 06, 07, 09, 10, 11, 12)
@@ -334,7 +335,7 @@ writes `$CI_REPORTS_DIR/<suite>/` and `$CI_REPORTS_DIR/status/<suite>.json`. All
 | Script | Suite name | Also takes |
 |---|---|---|
 | `ci/run-iga-engine.sh` | `iga-engine` | |
-| `ci/run-test-cases.sh` | `test-cases` | `SUITE_PARTITION=k/N` (by spec file), `BASE_URL`, `PW_REALM_CACHE_DIR`. Needs `ci/build-sdk.sh` to have built the test-app |
+| `ci/run-test-cases.sh` | `test-cases` | `TEST_APP_PORT` (default 3000), `SUITE_PARTITION=k/N` (by spec file), `BASE_URL`, `PW_REALM_CACHE_DIR`. Needs `ci/build-sdk.sh` to have built the test-app, and needs the test-app's port free |
 | `ci/run-admin-e2e.sh bootstrap` | `admin-bootstrap` | |
 | `ci/run-admin-e2e.sh runtime` | `admin-runtime` | `SUITE_PROJECTS`, `SUITE_PARTITION=k/N` (only with `SUITE_PROJECTS=runtime`), `ADMIN_RUNTIME_SMOKE_GREP` |
 | `ci/run-docs.sh` | `docs` | `CI_SUITES`, `CI_CHANNELS`, `DOCS_DIR`. Ignores the grep and shard knobs |

@@ -11,6 +11,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { redactText } = require('./redact');
 const { fillSecret } = require('./secretInput');
+const { recipeForOrigin } = require('./recipeOrigin');
 const { expect } = require('@playwright/test');
 const config = require('./config');
 
@@ -388,9 +389,15 @@ function provisionRealmFromRecipe(recipePath, opts = {}) {
     if (!fs.existsSync(recipePath)) {
         throw new Error(`Realm-setup recipe not found: ${recipePath}`);
     }
+    // The client's redirectUris and webOrigins have to match wherever the
+    // test-app actually is, or the spec fails at the login redirect instead.
+    const effectivePath = recipeForOrigin(recipePath, config.BASE_URL);
+    if (effectivePath !== recipePath) {
+        console.log(`Rewrote the recipe's test-app origin to ${config.BASE_URL}: ${effectivePath}`);
+    }
     const keepRealm = opts.keepRealm !== false;
-    console.log(`Provisioning realm via iga-engine recipe: ${recipePath}`);
-    execSync(`npm run recipe -- "${recipePath}"`, {
+    console.log(`Provisioning realm via iga-engine recipe: ${effectivePath}`);
+    execSync(`npm run recipe -- "${effectivePath}"`, {
         cwd: igaDir,
         stdio: 'inherit',
         env: { ...process.env, ...(keepRealm ? { KEEP_REALM: '1' } : {}), ...(opts.env || {}) },

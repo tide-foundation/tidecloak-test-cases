@@ -2,9 +2,7 @@
 const path = require('path');
 const { defineConfig, devices } = require('@playwright/test');
 // Also loads tests/.env, so BASE_URL here matches what the specs read.
-const { budget, ORK_COUNT, TIMEOUT_SCALE } = require('./utils/config');
-
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+const { budget, ORK_COUNT, TIMEOUT_SCALE, BASE_URL, TEST_APP_PORT } = require('./utils/config');
 
 // The budgets below are written for a 5-ORK stack and scaled up for bigger ones
 // (see utils/config.js). Creating a key needs every ORK up, so a 20-ORK stack is
@@ -77,14 +75,16 @@ module.exports = defineConfig({
    * any spec. Playwright waits for /api/health, then tears the server down when the run ends.
    *
    * reuseExistingServer:false => always build + start fresh, so a stale running build can never
-   * mask a code change. Consequence: nothing else may be listening on :3000 when you start a run,
-   * and the app is only up for the duration of the run. Set PW_SKIP_BUILD=1 to skip the rebuild
-   * (start-only) when you're iterating on test code and the app code hasn't changed.
+   * mask a code change. Consequence: nothing else may be listening on the test-app's port when
+   * you start a run, and the app is only up for the duration of the run. Set PW_SKIP_BUILD=1 to
+   * skip the rebuild (start-only) when you're iterating on test code and the app code hasn't
+   * changed. `next start` takes the port from PORT, which is why it is passed through here.
    */
   webServer: {
     command: process.env.PW_SKIP_BUILD ? 'npm run start' : 'npm run build && npm run start',
     url: `${BASE_URL}/api/health`,
     cwd: path.resolve(__dirname, '../test-app'),
+    env: { ...process.env, PORT: String(TEST_APP_PORT) },
     reuseExistingServer: false,
     timeout: 180_000,
     stdout: 'pipe',

@@ -9,12 +9,16 @@ const path = require('path');
 // Load .env from the tests/ directory.
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
-const PORT = process.env.PORT || '3000';
+// The port the Next.js test-app is served on. One variable feeds the app itself
+// (next start reads PORT), the Playwright baseURL, the port-free check in
+// ci/run-test-cases.sh, and the client origins in the realm recipes. A CI host
+// with something already on 3000 sets TEST_APP_PORT and everything follows.
+const TEST_APP_PORT = process.env.TEST_APP_PORT || process.env.PORT || '3000';
 const TIDECLOAK_PORT = process.env.TIDECLOAK_PORT || '8080';
 const TIDECLOAK_LOCAL_URL = `http://localhost:${TIDECLOAK_PORT}`;
 
 // The Next.js test-app (hosts /admin, /crypto, /signing, /forseti-crypto, /dpop-harness, /api).
-const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const BASE_URL = process.env.BASE_URL || `http://localhost:${TEST_APP_PORT}`;
 
 // TideCloak.
 const TIDECLOAK_URL = process.env.TIDECLOAK_URL || process.env.TIDECLOAK_LOCAL_URL || TIDECLOAK_LOCAL_URL;
@@ -53,6 +57,7 @@ const TIMEOUT_SCALE = Number(process.env.PW_TIMEOUT_SCALE) ||
 const budget = (ms) => Math.round(ms * TIMEOUT_SCALE);
 
 module.exports = {
+    TEST_APP_PORT,
     ORK_COUNT,
     TIMEOUT_SCALE,
     budget,

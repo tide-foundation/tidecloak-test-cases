@@ -11,8 +11,12 @@ HOME_ORK_ORIGIN=http://localhost:1001
 KC_ADMIN_USER=admin
 KC_ADMIN_PASSWORD=password
 
-# The test-app the suite builds and starts.
-BASE_URL=http://localhost:3000
+# The test-app the suite builds and starts. TEST_APP_PORT is the one knob: it
+# sets the port the app listens on, the baseURL, and the client origins the
+# realm recipes provision. Set it when something else already holds 3000.
+# TEST_APP_PORT=3000
+# BASE_URL overrides the lot, host included.
+# BASE_URL=http://localhost:3000
 # PW_SKIP_BUILD=1
 
 # Sibling suites used for provisioning.
