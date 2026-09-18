@@ -49,13 +49,28 @@ function isPlaceholder(value) {
     return PLACEHOLDERS.has(v.toLowerCase()) || /^\*+$/.test(v) || /^\$\{?[A-Z_]+\}?$/.test(v) || /^<[^>]*>$/.test(v);
 }
 
+// Minified JavaScript writes `o.password=null;const x=...`, and with the spaces
+// gone the key/value pattern captures `null;const` as the value. That is a
+// property assignment, not a credential, and it fires on every Playwright HTML
+// report because the bundled zip.js does exactly that. Take the value up to the
+// first piece of JavaScript punctuation, so the length and placeholder checks
+// below see what was really assigned.
+//
+// This cannot hide a credential. A real `password=hunter2hunter2` has no such
+// punctuation in it and is kept whole; a value in a query string or form body
+// ends at `&`, whitespace or a quote, which the pattern already stops at. It
+// also has no bearing on the two rules that catch a secret we can name: known
+// values are matched by substring in scanText, and token shapes by TOKEN_RULES.
+// Only the scanner narrows. Redaction keeps the wider pattern on purpose.
+const firstToken = (value) => String(value).split(/[;,)}\]]/)[0];
+
 // The redaction helpers' patterns, turned into finders. Each returns the
 // captured secret value for a match.
 const REDACT_RULES = [
     ['secret-flag', patterns.SECRET_FLAG_RE, (m) => m[3], MIN_SECRET_LENGTH],
     ['cred-flag', patterns.CRED_FLAG_RE, (m) => m[3].replace(/^["']|["']$/g, '').split(':').slice(1).join(':'), MIN_SECRET_LENGTH],
     ['json-secret', patterns.JSON_SECRET_RE, (m) => m[2], MIN_SECRET_LENGTH],
-    ['key-value-secret', patterns.KV_SECRET_RE, (m) => m[2], MIN_SECRET_LENGTH],
+    ['key-value-secret', patterns.KV_SECRET_RE, (m) => firstToken(m[2]), MIN_SECRET_LENGTH],
     ['bearer', patterns.BEARER_RE, (m) => m[2], 16],
 ];
 
@@ -220,4 +235,4 @@ if (require.main === module) {
     }
 }
 
-module.exports = { scan, scanText, secretValues, isPlaceholder, TOKEN_RULES };
+module.exports = { scan, scanText, secretValues, isPlaceholder, firstToken, TOKEN_RULES };

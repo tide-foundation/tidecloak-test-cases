@@ -7,7 +7,7 @@ const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
 const { listTests, partition, toGrep, NO_TESTS } = require('../lib/partition-tests');
-const { scan, isPlaceholder } = require('../lib/scan-uploads');
+const { scan, isPlaceholder, firstToken } = require('../lib/scan-uploads');
 const { summarize, collectStatuses } = require('../lib/summarize');
 const { buildStatus, findReports } = require('../lib/suite-status');
 const { rewrite } = require('../rewrite-file-deps');
@@ -128,6 +128,38 @@ test('the upload scan passes masked output and prose', () => {
     assert.deepStrictEqual(scan({ dir, envNames: [] }).hits, []);
     assert.ok(isPlaceholder('${KC_ADMIN_PASSWORD}'));
     assert.ok(!isPlaceholder('hunter2hunter2'));
+});
+
+test('minified JS is not a credential, but a credential next to punctuation still is', () => {
+    const dir = tmp();
+    // What every Playwright HTML report contains: bundled zip.js nulling a field.
+    // Minification removed the spaces, so the value capture ran into the next token.
+    fs.writeFileSync(path.join(dir, 'report.html'), [
+        'function Z2(i,u,c,f){i.password=null;const r=await N5(E5,c,b5,!1,S5)}',
+        'if(h.password=null,v.at(-1)!=h.passwordVerification)throw new Error(1)',
+        'const o=this;if(o.secret=null;)',
+    ].join('\n'));
+    assert.deepStrictEqual(scan({ dir, envNames: [] }).hits, [], 'a property assignment is not a credential');
+
+    // A real one is still caught, whether or not code follows it.
+    const real = tmp();
+    fs.writeFileSync(path.join(real, 'plain.log'), 'password=hunter2hunter2\n');
+    fs.writeFileSync(path.join(real, 'beside-code.js'), 'password=hunter2hunter2;const x=1\n');
+    fs.writeFileSync(path.join(real, 'query.txt'), 'GET /t?client_secret=s3cr3tvalue&next=1\n');
+    const rules = scan({ dir: real, envNames: [] }).hits.map((h) => `${path.basename(h.where)} ${h.rule}`);
+    assert.ok(rules.includes('plain.log:1 key-value-secret'));
+    assert.ok(rules.includes('beside-code.js:1 key-value-secret'), 'a semicolon after the value must not hide it');
+    assert.ok(rules.includes('query.txt:1 key-value-secret'));
+
+    // The value is kept whole, so a known secret sitting next to code is still
+    // matched by the independent known-value rule rather than truncated away.
+    assert.strictEqual(firstToken('hunter2hunter2;const x=1'), 'hunter2hunter2');
+    assert.strictEqual(firstToken('hunter2hunter2'), 'hunter2hunter2');
+    assert.strictEqual(firstToken('null;const'), 'null');
+    process.env.SCAN_TEST_PW = 'hunter2hunter2';
+    const known = scan({ dir: real, envNames: ['SCAN_TEST_PW'] }).hits.map((h) => `${path.basename(h.where)} ${h.rule}`);
+    assert.ok(known.includes('beside-code.js:1 value of SCAN_TEST_PW'), 'a known value is found whatever follows it');
+    delete process.env.SCAN_TEST_PW;
 });
 
 test('the upload scan looks inside zips and HTML-embedded zips, and blocks files by name', () => {
