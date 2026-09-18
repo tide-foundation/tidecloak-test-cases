@@ -64,14 +64,37 @@ function isPlaceholder(value) {
 // Only the scanner narrows. Redaction keeps the wider pattern on purpose.
 const firstToken = (value) => String(value).split(/[;,)}\]]/)[0];
 
+// A finding names the flag or key that matched, never what it matched, so a
+// hit can be triaged from the job log without fetching the artifact and
+// without publishing the secret. The name comes out of a scanned file, and
+// this log is public, so treat it as hostile input: printable ASCII only, a
+// conservative charset that cannot forge an Actions workflow command (no ':',
+// so nothing can start a '::' directive) and no newline to start a line with,
+// and a hard length cap. An empty result is simply not printed.
+const NAME_MAX = 40;
+function safeName(raw) {
+    return String(raw == null ? '' : raw)
+        .replace(/[^A-Za-z0-9_.-]/g, '')
+        .slice(0, NAME_MAX);
+}
+
+// The path is attacker-chosen too: entries unpacked from a report's zip are
+// named by whoever built the zip. A newline in one would end our line and start
+// a fresh one that could begin with '::'. Keep the path readable, drop anything
+// that can break out of the line.
+const safePath = (p) => String(p).replace(/[\x00-\x1F\x7F]/g, '');
+
 // The redaction helpers' patterns, turned into finders. Each returns the
 // captured secret value for a match.
+// rule, pattern, value picker, minimum length, name picker. The name picker
+// returns the flag or key that matched, which is a constant from our own
+// source, never anything from the value.
 const REDACT_RULES = [
-    ['secret-flag', patterns.SECRET_FLAG_RE, (m) => m[3], MIN_SECRET_LENGTH],
-    ['cred-flag', patterns.CRED_FLAG_RE, (m) => m[3].replace(/^["']|["']$/g, '').split(':').slice(1).join(':'), MIN_SECRET_LENGTH],
-    ['json-secret', patterns.JSON_SECRET_RE, (m) => m[2], MIN_SECRET_LENGTH],
-    ['key-value-secret', patterns.KV_SECRET_RE, (m) => firstToken(m[2]), MIN_SECRET_LENGTH],
-    ['bearer', patterns.BEARER_RE, (m) => m[2], 16],
+    ['secret-flag', patterns.SECRET_FLAG_RE, (m) => m[3], MIN_SECRET_LENGTH, (m) => m[1]],
+    ['cred-flag', patterns.CRED_FLAG_RE, (m) => m[3].replace(/^["']|["']$/g, '').split(':').slice(1).join(':'), MIN_SECRET_LENGTH, (m) => m[1]],
+    ['json-secret', patterns.JSON_SECRET_RE, (m) => m[2], MIN_SECRET_LENGTH, (m) => (/"([^"]*)"/.exec(m[1]) || [])[1]],
+    ['key-value-secret', patterns.KV_SECRET_RE, (m) => firstToken(m[2]), MIN_SECRET_LENGTH, (m) => m[1]],
+    ['bearer', patterns.BEARER_RE, (m) => m[2], 16, (m) => m[1]],
 ];
 
 function secretValues({ envNames = [], envFiles = [], env = process.env }) {
@@ -111,12 +134,12 @@ function scanText(text, file, secrets, skipRules) {
         for (const [rule, re] of TOKEN_RULES) {
             if (!skipRules.has(rule) && re.test(line)) hits.push({ where, rule });
         }
-        for (const [rule, re, pick, min] of REDACT_RULES) {
+        for (const [rule, re, pick, min, pickName] of REDACT_RULES) {
             if (skipRules.has(rule)) continue;
             for (const m of line.matchAll(new RegExp(re.source, re.flags))) {
                 const value = pick(m) || '';
                 if (value.replace(/^["']|["']$/g, '').length >= min && !isPlaceholder(value)) {
-                    hits.push({ where, rule });
+                    hits.push({ where, rule, name: safeName(pickName && pickName(m)) });
                     break;
                 }
             }
@@ -216,7 +239,7 @@ function main() {
     if (result.hits.length) {
         const seen = new Set();
         for (const h of result.hits) {
-            const line = `  ${h.where}: ${h.rule}`;
+            const line = `  ${safePath(h.where)}: ${h.rule}${h.name ? ` (${h.name})` : ''}`;
             if (!seen.has(line)) console.log(line);
             seen.add(line);
         }
@@ -235,4 +258,4 @@ if (require.main === module) {
     }
 }
 
-module.exports = { scan, scanText, secretValues, isPlaceholder, firstToken, TOKEN_RULES };
+module.exports = { scan, scanText, secretValues, isPlaceholder, firstToken, safeName, safePath, TOKEN_RULES };

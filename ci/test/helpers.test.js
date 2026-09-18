@@ -7,7 +7,7 @@ const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
 const { listTests, partition, toGrep, NO_TESTS } = require('../lib/partition-tests');
-const { scan, isPlaceholder, firstToken } = require('../lib/scan-uploads');
+const { scan, isPlaceholder, firstToken, safeName, safePath } = require('../lib/scan-uploads');
 const { summarize, collectStatuses } = require('../lib/summarize');
 const { buildStatus, findReports } = require('../lib/suite-status');
 const { rewrite } = require('../rewrite-file-deps');
@@ -160,6 +160,55 @@ test('minified JS is not a credential, but a credential next to punctuation stil
     const known = scan({ dir: real, envNames: ['SCAN_TEST_PW'] }).hits.map((h) => `${path.basename(h.where)} ${h.rule}`);
     assert.ok(known.includes('beside-code.js:1 value of SCAN_TEST_PW'), 'a known value is found whatever follows it');
     delete process.env.SCAN_TEST_PW;
+});
+
+test('a finding names the flag or key that matched, and never the value', () => {
+    // Without the name a hit cannot be triaged without fetching the artifact.
+    // With the value it would publish the secret it just caught.
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'a.log'), [
+        '--tide-password sup3rs3cretvalue',
+        '--admin-pass an0thers3cret',
+        'GET /t?client_secret=s3cr3tinurl&x=1',
+        '{"access_token": "tok3ninjson"}',
+        'Authorization: Bearer be4rertokenvalue',
+    ].join('\n'));
+    const res = spawnSync('node', [path.join(__dirname, '..', 'lib', 'scan-uploads.js'), '--dir', dir], { encoding: 'utf8' });
+    assert.strictEqual(res.status, 1);
+    const out = res.stdout + res.stderr;
+    assert.match(out, /secret-flag \(--tide-password\)/);
+    assert.match(out, /secret-flag \(--admin-pass\)/);
+    assert.match(out, /key-value-secret \(client_secret\)/);
+    assert.match(out, /json-secret \(access_token\)/);
+    assert.match(out, /bearer \(Bearer\)/);
+    for (const value of ['sup3rs3cretvalue', 'an0thers3cret', 's3cr3tinurl', 'tok3ninjson', 'be4rertokenvalue']) {
+        assert.ok(!out.includes(value), `the scan printed the value it caught: ${value}`);
+    }
+    // Nor its length, which is a disclosure of its own in a public log.
+    assert.ok(!/\b(16|13|11)\s*(chars|characters|len)/i.test(out));
+});
+
+test('a printed name cannot forge a log directive or run away', () => {
+    assert.strictEqual(safeName('--tide-password'), '--tide-password');
+    assert.strictEqual(safeName('client_secret'), 'client_secret');
+    // No colon survives, so nothing can build a '::' workflow command.
+    assert.ok(!safeName('::error::owned').includes(':'));
+    assert.ok(!safeName('%0A::set-output name=x').includes(':'));
+    // No newline or control character survives either.
+    assert.strictEqual(safeName('a\nb\r\u0000c'), 'abc');
+    assert.ok(!/[\x00-\x1F]/.test(safeName('\u001b[31mred')));
+    assert.strictEqual(safeName('x'.repeat(500)).length, 40);
+    assert.strictEqual(safeName(undefined), '');
+    assert.strictEqual(safeName(null), '');
+});
+
+test('a crafted path cannot break out of the finding line', () => {
+    // Entry names inside a report's zip are chosen by whoever built it.
+    assert.ok(!/[\r\n]/.test(safePath('reports/x\n::error::owned')));
+    assert.strictEqual(safePath('reports/x\n::error::owned'), 'reports/x::error::owned');
+    assert.strictEqual(safePath('a\u0000b'), 'ab');
+    // A colon in a path is harmless: the line already starts with spaces.
+    assert.strictEqual(safePath('reports/index.html!/0aaad041.json'), 'reports/index.html!/0aaad041.json');
 });
 
 test('the upload scan looks inside zips and HTML-embedded zips, and blocks files by name', () => {
