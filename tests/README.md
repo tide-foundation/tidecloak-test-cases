@@ -14,8 +14,8 @@ and walks these stages:
 
 | Stage | Tool | What it does |
 |---|---|---|
-| 1. Scaffold | **tidecloak-iga-engine-tests** (`npm run recipe`) | Creates a Tide realm (VVK/VRK, IGA on), realm roles, the `testapp` client (web origin `http://localhost:3000`), **plain** users, and role grants. |
-| 2. Sign origin | TideCloak `POST .../vendorResources/sign-idp-settings` | Signs the `testapp` client's `:3000` origin so the browser enclave trusts the test-app (IGA-exempt, manage-realm only). |
+| 1. Scaffold | **tidecloak-iga-engine-tests** (`npm run recipe`) | Creates a Tide realm (VVK/VRK, IGA on), realm roles, the `testapp` client (web origin `http://localhost:3000`, rewritten to match `BASE_URL` when the app is not on 3000), **plain** users, and role grants. |
+| 2. Sign origin | TideCloak `POST .../vendorResources/sign-idp-settings` | Signs the `testapp` client's origin so the browser enclave trusts the test-app (IGA-exempt, manage-realm only). |
 | 3. Tide-link | **tide-admin-cli** `link-user` | Gives each interactive user a Tide identity (enclave sign-up) so it can log in / drive approval popups. Non-admins are linked first (while there is no realm admin, their CRs commit over pure REST). |
 | 4. Elevate | **tide-admin-cli** `add-tide-realm-admin` / `link-user --grant-realm-admin` | Elevates **only** the users listed in `realmAdmins` to `tide-realm-admin`. Most users are *not* elevated. |
 | 5. Bind | TideCloak `get-installations-provider` | Fetches the per-realm Tide adapter config. The spec injects it into the test-app at runtime (`injectRealmAdapter`), so the app targets *this* realm without rebuilding `data/tidecloak.json`. |
@@ -36,8 +36,8 @@ and walks these stages:
   appLoginUser: 'admin',
   users: {
     // keyed by the Keycloak username; each user has BOTH names (see note below)
-    admin:  { kcUsername: 'admin',  tideUsername: 'admin-l8x2',  password: 'Passw0rd!' },
-    admin2: { kcUsername: 'admin2', tideUsername: 'admin2-l8x2', password: 'Passw0rd!' },
+    admin:  { kcUsername: 'admin',  tideUsername: 'admin-l8x2',  password: '<minted for this run>' },
+    admin2: { kcUsername: 'admin2', tideUsername: 'admin2-l8x2', password: '<minted for this run>' },
     ...
   },
   adapterConfig: { /* full Tide adapter config */ },
@@ -50,6 +50,18 @@ and walks these stages:
 > mints a unique `tideUsername` (`<kcUsername>-<realm-token>`) per user per run. Use
 > **`tideUsername` to LOG IN** (it's what the enclave widget authenticates) and **`kcUsername`
 > for REST lookups / role grants** (it's the stable, realm-scoped Keycloak username).
+
+> **Two passwords too.** `password` goes with `tideUsername`: Stage 3 creates the Tide identity
+> from scratch, so the suite picks its password and mints a random one per user per run
+> ([utils/enclavePassword.js](utils/enclavePassword.js)). The recipe's `user.create` password is
+> the Keycloak one and is only used by the recipe's own probe. Set `TIDE_USER_PASSWORD` to pin the
+> Tide one. `RECIPE_REALM` needs that, since the run that provisioned the realm did not
+> keep the generated value.
+
+> **Where the passwords sit between workers.** A retry reuses the realm through the cache in
+> [utils/realmCache.js](utils/realmCache.js), which means the entry holds each user's enclave
+> password. It is a per-user `0700` directory of `0600` files, holds no admin token, and
+> `npm run cache:purge` deletes it. See the root README, "The realm cache".
 
 ## A scenario = one recipe file with a `_tideSetup` overlay
 
@@ -64,6 +76,7 @@ iga-engine recipe (so it still runs standalone with `npm run recipe`) **plus** a
     { "kind": "role.create", "args": { "name": "executive" } },
     { "kind": "client.create", "args": { "clientId": "testapp", "publicClient": true, "standardFlowEnabled": true } },
     { "kind": "client.update", "args": { "clientId": "testapp", "patch": { "redirectUris": ["http://localhost:3000/*"], "webOrigins": ["http://localhost:3000"] } } },
+    // Write recipes against :3000. utils/recipeOrigin.js rewrites the origin when the app moves.
     { "kind": "user.create", "args": { "username": "admin", "password": "Passw0rd!" }, "as": "admin" },
     { "kind": "user.assignRealmRole", "args": { "user": "$admin", "role": "executive" } }
     // ... more users/roles ...
@@ -92,6 +105,8 @@ iga-engine recipe (so it still runs standalone with `npm run recipe`) **plus** a
    `signInToRealm(page, { adapterConfig: ctx.adapterConfig, baseUrl, username: u.tideUsername, password: u.password })`
    helper where `u = ctx.users[ctx.appLoginUser]` (or any approver from `ctx.users.<name>`). **Log
    in with `u.tideUsername`**, not `u.kcUsername`.
+   If a spec types a password or other secret itself, use `fillSecret(locator, value)` from
+   `utils/secretInput.js`, not `fill()`, which records the value in the report and trace.
 3. Specs are **self-contained**: create anything you consume (e.g. a committed policy, a
    ciphertext) inside the spec — there are no cross-spec fixture handoffs.
 
@@ -106,7 +121,8 @@ npm run provision -- 10-forseti-policy-encryption
 - The **Tide stack** up: TideCloak (`TIDECLOAK_URL`, default `:8080`) and the ORK/enclave origin
   (`HOME_ORK_ORIGIN`, default `:1001`).
 - The **test-app** is started for you: Playwright's `webServer` runs `npm run build && npm run
-  start` (cwd `../test-app`) once per run and tears it down after — keep `:3000` free, since the
+  start` (cwd `../test-app`) once per run and tears it down after. Keep the test-app's port free
+  (`:3000` unless `TEST_APP_PORT` says otherwise), since the
   run owns it (`reuseExistingServer: false`). Set `PW_SKIP_BUILD=1` to skip the rebuild when only
   test code changed. (The browserless `npm run provision` does **not** start the app.)
 - **tidecloak-iga-engine-tests** present (`IGA_ENGINE_DIR`, default `~/tidecloak-iga-engine-tests`).
@@ -120,13 +136,16 @@ Then: `npm test` (or `npm run test:headed`).
 
 | var | default | meaning |
 |---|---|---|
-| `BASE_URL` | `http://localhost:3000` | the test-app |
+| `TEST_APP_PORT` | `3000` | the port the test-app listens on, and the origin the recipes provision |
+| `BASE_URL` | `http://localhost:$TEST_APP_PORT` | the test-app |
 | `TIDECLOAK_URL` | `http://localhost:8080` | TideCloak |
 | `HOME_ORK_ORIGIN` | `http://localhost:1001` | enclave / approval popup origin |
 | `KC_ADMIN_USER` / `KC_ADMIN_PASSWORD` | `admin` / `password` | master-realm admin for the admin REST API |
 | `IGA_ENGINE_DIR` | `~/tidecloak-iga-engine-tests` | the recipe runner suite |
 | `TIDE_ADMIN_CLI_DIR` | `~/project/.../frontend/e2e` | the link-user / add-tide-realm-admin suite |
-| `RECIPE_REALM` | — | pin the realm name (skip discovery) |
+| `RECIPE_REALM` | - | pin the realm name (skip discovery) |
+| `TIDE_USER_PASSWORD` | (unset) | pin the password of every provisioned Tide identity (default: random per user per run) |
+| `PW_REALM_CACHE_DIR` | per-user temp dir | where the retry realm cache lives |
 
 ## Spec map
 

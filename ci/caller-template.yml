@@ -1,0 +1,96 @@
+# TEMPLATE: copy into a component repo as .github/workflows/tide-e2e.yml and
+# set COMPONENT to that repo's name in tidecloak-test-cases/ci/components.tsv.
+#
+# It asks tidecloak-test-cases to run the Tide e2e for this commit (on that
+# public repo's hosted runners), then waits for the result, so the check on
+# this PR goes red or green with it.
+#
+# Needs one secret here: TIDE_E2E_DISPATCH_TOKEN, a fine-grained token on
+# tide-foundation/tidecloak-test-cases with Contents: read and write (needed to
+# send repository_dispatch) and Actions: read (to watch the run).
+#
+# Only same-repo branches are sent: the e2e run resolves refs by branch name
+# and refuses commits that are not a branch tip, so fork PRs cannot be tested
+# this way (and must not be, since the run has access to private sources).
+name: Tide e2e
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tide-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  COMPONENT: tide-js # change me
+  E2E_REPO: tide-foundation/tidecloak-test-cases
+  E2E_WORKFLOW: pre-release-e2e-tests.yml
+  SELECTION: affected
+
+jobs:
+  e2e:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: Work out the changed paths
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          # The compare API lists at most 300 files; the e2e plan treats a
+          # full list as "anything changed" and runs everything.
+          if [ -z "$BASE" ] || [ "$BASE" = 0000000000000000000000000000000000000000 ]; then
+            : > "$RUNNER_TEMP/paths.txt"
+          else
+            gh api "repos/$GITHUB_REPOSITORY/compare/$BASE...$HEAD" --jq '.files[].filename' > "$RUNNER_TEMP/paths.txt"
+          fi
+          wc -l < "$RUNNER_TEMP/paths.txt"
+
+      - name: Ask for an e2e run
+        env:
+          GH_TOKEN: ${{ secrets.TIDE_E2E_DISPATCH_TOKEN }}
+          REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          request_id="${GITHUB_REPOSITORY#*/}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "REQUEST_ID=$request_id" >> "$GITHUB_ENV"
+          jq -n \
+            --arg component "$COMPONENT" \
+            --arg ref "$REF" \
+            --arg selection "$SELECTION" \
+            --arg request_id "$request_id" \
+            --rawfile paths "$RUNNER_TEMP/paths.txt" \
+            '{event_type: "tide-e2e", client_payload: {
+                component: $component,
+                component_ref: $ref,
+                changed_paths: ($paths | split("\n") | map(select(length > 0)) | join(" ")),
+                selection: $selection,
+                request_id: $request_id }}' \
+          | gh api "repos/$E2E_REPO/dispatches" --input -
+          echo "requested e2e run $request_id"
+
+      - name: Wait for the run to finish
+        env:
+          GH_TOKEN: ${{ secrets.TIDE_E2E_DISPATCH_TOKEN }}
+        run: |
+          run_id=""
+          for _ in $(seq 1 30); do
+            run_id="$(gh run list -R "$E2E_REPO" --workflow "$E2E_WORKFLOW" --event repository_dispatch \
+              --limit 50 --json databaseId,displayTitle \
+              --jq ".[] | select(.displayTitle | endswith(\" $REQUEST_ID\")) | .databaseId" | head -n 1)"
+            [ -n "$run_id" ] && break
+            sleep 10
+          done
+          if [ -z "$run_id" ]; then
+            echo "::error::no e2e run showed up for $REQUEST_ID"
+            exit 1
+          fi
+          echo "e2e run: https://github.com/$E2E_REPO/actions/runs/$run_id"
+          echo "[Tide e2e run](https://github.com/$E2E_REPO/actions/runs/$run_id)" >> "$GITHUB_STEP_SUMMARY"
+          gh run watch "$run_id" -R "$E2E_REPO" --exit-status --interval 60

@@ -19,8 +19,9 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const config = require('./config');
+const { redactArgs, redactText } = require('./redact');
 
 const DEFAULT_CLI_DIR = path.join(
     os.homedir(),
@@ -64,6 +65,17 @@ function globalFlags() {
 }
 
 /**
+ * Write the CLI's stderr on to ours, masked. This is the only place the child's
+ * output crosses into this process, so it is the only place that has to redact
+ * it. Playwright captures our stderr into the report, so anything unmasked here
+ * is published.
+ * @param {string|undefined} text
+ */
+function forwardChildStderr(text) {
+    if (text) process.stderr.write(redactText(text));
+}
+
+/**
  * Parse the single JSON result line the CLI prints on stdout (last `{...}` line wins;
  * everything else is noise). Throws if no JSON line is present.
  * @param {string} stdout
@@ -80,13 +92,19 @@ function parseResult(stdout) {
             }
         }
     }
-    throw new Error(`tide-admin-cli produced no JSON result line. Raw stdout:\n${stdout}`);
+    throw new Error(`tide-admin-cli produced no JSON result line. Raw stdout:\n${redactText(stdout)}`);
 }
 
 /**
- * Run one tide-admin-cli subcommand and return the parsed JSON result. stderr is inherited
- * so the enclave/progress logs stream live. Throws on a non-zero exit (a hard failure);
- * a short quorum (details.pending) is exit 0 and returned as-is for the caller to loop on.
+ * Run one tide-admin-cli subcommand and return the parsed JSON result. Throws on a
+ * non-zero exit (a hard failure); a short quorum (details.pending) is exit 0 and
+ * returned as-is for the caller to loop on.
+ *
+ * The CLI's stderr is piped and masked rather than inherited. It is handed the
+ * enclave password on its command line and logs its own progress there, and an
+ * inherited stream goes straight into Playwright's captured output and from
+ * there into the HTML report, with none of our redaction in the way. The cost
+ * is that its logs arrive when the command finishes instead of as it runs.
  * @param {string} subcommand  'link-user' | 'add-tide-realm-admin'
  * @param {string[]} args       subcommand-specific flags
  * @returns {{ ok: boolean, op: string, details?: any, stage?: string, error?: string }}
@@ -107,31 +125,39 @@ function runCli(subcommand, args) {
         ...args,
         ...globalFlags(),
     ];
-    console.log(`tide-admin-cli ${subcommand} ${args.join(' ')}`);
-    let stdout = '';
-    try {
-        stdout = execFileSync(cmd, argv, {
-            cwd: cliDir,
-            encoding: 'utf-8',
-            stdio: ['ignore', 'pipe', 'inherit'],
-            maxBuffer: 64 * 1024 * 1024,
-            env: { ...process.env },
-        });
-    } catch (err) {
+    // Log a masked copy. argv itself goes to the CLI unchanged.
+    console.log(`tide-admin-cli ${subcommand} ${redactArgs(args).join(' ')}`);
+    const res = spawnSync(cmd, argv, {
+        cwd: cliDir,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: 64 * 1024 * 1024,
+        env: { ...process.env },
+    });
+    forwardChildStderr(res.stderr);
+    if (res.error) {
+        throw new Error(`tide-admin-cli ${subcommand} could not start: ${redactText(res.error.code || res.error.message)}`);
+    }
+    const stdout = res.stdout || '';
+    if (res.status !== 0) {
         // Non-zero exit: still try to surface the CLI's JSON failure line for a precise error.
-        const out = (err && err.stdout && err.stdout.toString()) || '';
         let parsed;
         try {
-            parsed = parseResult(out);
+            parsed = parseResult(stdout);
         } catch (_) {
             /* no JSON — fall through to the raw error */
         }
         if (parsed && parsed.ok === false) {
             throw new Error(
-                `tide-admin-cli ${subcommand} failed (stage=${parsed.stage}): ${parsed.error}`,
+                `tide-admin-cli ${subcommand} failed (stage=${parsed.stage}): ${redactText(parsed.error)}`,
             );
         }
-        throw new Error(`tide-admin-cli ${subcommand} exited non-zero: ${err.message}`);
+        // A raw command line would carry the secrets, so rebuild it from a masked argv.
+        const reason = `status=${res.status}, signal=${res.signal}`;
+        throw new Error(
+            `tide-admin-cli ${subcommand} exited non-zero (${reason}): ` +
+            `Command failed: ${cmd} ${redactArgs(argv).join(' ')}`,
+        );
     }
     return parseResult(stdout);
 }
@@ -185,7 +211,7 @@ function linkUser(opts) {
     let last;
     for (let round = 1; round <= maxRounds; round++) {
         last = runCli('link-user', [...base, ...credFlags('--approver-admins', opts.approverAdmins)]);
-        if (!last.ok) throw new Error(`link-user(${opts.kcUser}) not ok: ${JSON.stringify(last)}`);
+        if (!last.ok) throw new Error(`link-user(${opts.kcUser}) not ok: ${redactText(JSON.stringify(last))}`);
         if (!last.details?.pending) return last.details;
         console.log(`link-user(${opts.kcUser}) quorum pending (round ${round}); re-invoking…`);
     }
@@ -210,7 +236,7 @@ function addTideRealmAdmin(opts) {
     let last;
     for (let round = 1; round <= maxRounds; round++) {
         last = runCli('add-tide-realm-admin', [...base, ...credFlags('--existing-admins', opts.existingAdmins)]);
-        if (!last.ok) throw new Error(`add-tide-realm-admin(${opts.kcUser}) not ok: ${JSON.stringify(last)}`);
+        if (!last.ok) throw new Error(`add-tide-realm-admin(${opts.kcUser}) not ok: ${redactText(JSON.stringify(last))}`);
         if (!last.details?.pending) return last.details;
         console.log(`add-tide-realm-admin(${opts.kcUser}) quorum pending (round ${round}); re-invoking…`);
     }
@@ -221,4 +247,5 @@ module.exports = {
     getTideAdminCliDir,
     linkUser,
     addTideRealmAdmin,
+    forwardChildStderr,
 };

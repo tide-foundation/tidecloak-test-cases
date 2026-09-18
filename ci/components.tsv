@@ -1,0 +1,26 @@
+# Every repo the e2e run can use. Edit here, not in the workflow.
+#
+# name: the folder name under $TIDE_WORKSPACE and the key used in refs ("ork=my-branch").
+# repo: GitHub owner/name.
+# ref: default branch or tag when no ref is given.
+# submodules: yes to init submodules on checkout.
+# Which repos feed which image is defined by tidecloak-override
+# (Tidified/ci/lib.sh, image_repos); the plan asks that script.
+#
+# name                        repo                                          ref               submodules
+tidecloak-override            tide-foundation/tidecloak-override            main              no
+tidecloak                     tide-foundation/tidecloak                     26.7.0            no
+keycloak-IGA                  tide-foundation/keycloak-IGA                  26.7.0-IGA-main   no
+tidecloak-idp-extensions      tide-foundation/tidecloak-idp-extensions      main              no 
+tidecloak-iga-extensions      tide-foundation/tidecloak-iga-extensions      main              no
+Midgard                       tide-foundation/Midgard                       main              no
+ork                           tide-foundation/ork                           main              no
+master-libs                   tide-foundation/master-libs                   main              no
+ragnarok                      tide-foundation/ragnarok                      main              no
+tide-js                       tide-foundation/tide-js                       main              no
+heimdall                      tide-foundation/heimdall                      main              no
+tidecloak-js                  tide-foundation/tidecloak-js                  main              no
+tidecloak-iga-engine-tests    tide-foundation/tidecloak-iga-engine-tests    main              no
+tidecloak-test-cases          tide-foundation/tidecloak-test-cases          main              no
+dauthdocs                     tide-foundation/dauthdocs                     master            no
+tide-test-cases               tide-foundation/tide-test-cases               main              no

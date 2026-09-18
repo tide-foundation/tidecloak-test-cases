@@ -107,7 +107,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const getToken = async (): Promise<string> => {
-        return await IAMService.getToken();
+        const token = await IAMService.getToken();
+        // The SDK resolves to null when there is no usable session: no stored
+        // tokens, or a refresh that failed and dropped it. Callers put this
+        // straight into an Authorization header, so returning it would send
+        // "Bearer null", which is the thing the SDK drops the session to avoid.
+        // Fail here instead, where the reason is still legible.
+        if (!token) throw new Error("not authenticated: no valid access token");
+        return token;
     };
 
     const updateTokenRoles = () => {

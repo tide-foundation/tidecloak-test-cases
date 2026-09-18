@@ -1,0 +1,78 @@
+# Stack-free checks for pull requests to this repo. No secrets, no stack.
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  ACTIONLINT_VERSION: '1.7.12'
+  ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No npm cache, same as the e2e workflow.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Install test dependencies
+        working-directory: tests
+        run: npm ci --no-audit --no-fund
+
+      - name: Syntax check the helpers and CI scripts
+        run: |
+          for f in tests/utils/*.js tests/scripts/*.js tests/*.js ci/*.js ci/lib/*.js ci/test/*.js; do
+            node --check "$f"
+          done
+          for f in ci/*.sh ci/lib/*.sh; do
+            bash -n "$f"
+          done
+
+      - name: Unit tests
+        working-directory: tests
+        run: npm run test:unit
+
+      - name: CI script tests
+        run: npm run test:ci
+
+      # The leak check drives real (offline) Firefox and Chromium pages.
+      - name: Install browsers for the leak check
+        working-directory: tests
+        run: npx playwright install --with-deps firefox chromium
+
+      - name: Secret leak check
+        working-directory: tests
+        run: npm run test:secret-leaks
+
+      - name: Lint workflows
+        run: |
+          # actionlint also runs shellcheck on run: blocks (shellcheck ships on the runner).
+          dir="$RUNNER_TEMP/actionlint"
+          mkdir -p "$dir"
+          curl -sSfL -o "$dir/actionlint.tgz" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "$ACTIONLINT_SHA256  $dir/actionlint.tgz" | sha256sum -c -
+          tar -xzf "$dir/actionlint.tgz" -C "$dir" actionlint
+          "$dir/actionlint" -color .github/workflows/*.yml ci/caller-template.yml
+
+      - name: Shellcheck the CI scripts
+        run: shellcheck -x ci/*.sh ci/lib/*.sh

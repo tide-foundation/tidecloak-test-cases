@@ -15,6 +15,7 @@ const path = require('path');
 const fs = require('fs');
 const config = require('../utils/config');
 const { provisionScenario } = require('../utils/provision');
+const { redactText } = require('../utils/redact');
 
 function resolveRecipe(arg) {
     if (!arg) {
@@ -41,10 +42,11 @@ function resolveRecipe(arg) {
     const ctx = await provisionScenario(recipePath, { baseUrl: config.TIDECLOAK_URL });
     const { adapterConfig, token, ...summary } = ctx;
     console.log('\n── RealmContext ───────────────────────────────────────────');
-    console.log(JSON.stringify(summary, null, 2));
+    // users carry plain passwords; mask them in the printout.
+    console.log(redactText(JSON.stringify(summary, null, 2)));
     console.log(`adapterConfig: <${Object.keys(adapterConfig || {}).length} keys for resource '${adapterConfig?.resource}'>`);
     console.log('───────────────────────────────────────────────────────────');
 })().catch((err) => {
-    console.error('\nProvisioning failed:', err.message);
+    console.error('\nProvisioning failed:', redactText(err && err.message));
     process.exit(1);
 });
