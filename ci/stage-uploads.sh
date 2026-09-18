@@ -8,6 +8,7 @@
 #   $CI_UPLOAD_DIR/status    the per-suite status files the summary reads
 # shellcheck source=lib/common.sh
 source "$(dirname "$0")/lib/common.sh"
+command -v rsync >/dev/null 2>&1 || die "rsync is not installed; the staging step needs it to leave traces and env files behind"
 upload="${CI_UPLOAD_DIR:-${RUNNER_TEMP:-/tmp}/tide-upload}"
 rm -rf "$upload"
 mkdir -p "$upload/reports" "$upload/status"

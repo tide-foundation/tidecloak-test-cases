@@ -2,6 +2,10 @@
 # Generates the stack config and starts it, without waiting for it to be ready
 # (ci/stack-wait.sh does that), so other setup can run while it boots.
 # Exports the non-secret stack.env values and the admin password (masked first).
+#
+# Stack size comes from the environment and is passed straight through to
+# gen-stack.sh: ORK_COUNT (default 5), TIDE_THRESHOLD_T/N (default 3/5). The
+# pre-release gate runs 20 ORKs at T=14/N=20.
 # shellcheck source=lib/common.sh
 source "$(dirname "$0")/lib/common.sh"
 need_workspace
@@ -13,8 +17,21 @@ chmod 700 "$CI_STACK_DIR"
 # gen-stack.sh needs the Stripe settings. Without a key the stack still comes
 # up, but licensing flows fail, so say so loudly instead of stopping.
 if [ -z "${STRIPE_TEST_SK:-}" ] && [ -z "${CI_ALLOW_NO_STRIPE:-}" ]; then
-    echo "::warning::STRIPE_TEST_SK is not set; starting the stack without Stripe (licensing flows will fail)"
+    annotate warning "STRIPE_TEST_SK is not set; starting the stack without Stripe (licensing flows will fail)"
     export CI_ALLOW_NO_STRIPE=true
+fi
+
+# Check the size before spending 10 minutes on a stack that cannot reach quorum.
+for v in ORK_COUNT TIDE_THRESHOLD_T TIDE_THRESHOLD_N; do
+    if [ -n "${!v:-}" ]; then
+        [[ "${!v}" =~ ^[1-9][0-9]*$ ]] || die "$v must be a positive whole number, got: ${!v}"
+    fi
+done
+if [ -n "${TIDE_THRESHOLD_T:-}" ] && [ -n "${TIDE_THRESHOLD_N:-}" ]; then
+    [ "$TIDE_THRESHOLD_T" -le "$TIDE_THRESHOLD_N" ] || die "TIDE_THRESHOLD_T ($TIDE_THRESHOLD_T) is above TIDE_THRESHOLD_N ($TIDE_THRESHOLD_N)"
+    if [ -n "${ORK_COUNT:-}" ] && [ "$TIDE_THRESHOLD_N" -gt "$ORK_COUNT" ]; then
+        die "TIDE_THRESHOLD_N ($TIDE_THRESHOLD_N) needs more ORKs than ORK_COUNT ($ORK_COUNT)"
+    fi
 fi
 
 (cd "$scripts" && ./gen-stack.sh)
@@ -33,29 +50,11 @@ pw="$(env_file_get "$env_ci" "$pw_var" || env_file_get "$env_ci" KC_BOOTSTRAP_AD
 mask "$pw"
 set_env KC_ADMIN_PASSWORD "$pw"
 
-# stack.env is non-secret by contract; export it as-is, one KEY=VALUE per line.
-while IFS= read -r line || [ -n "$line" ]; do
-    line="${line#export }"
-    case "$line" in ''|'#'*) continue ;; esac
-    key="${line%%=*}"
-    [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || die "unexpected line in stack.env: $key"
-    case "$key" in *PASSWORD*|*SECRET*|*TOKEN*) die "stack.env must not hold secrets, found $key" ;; esac
-    value="${line#*=}"
-    case "$value" in
-        \"*\") value="${value#\"}"; value="${value%\"}" ;;
-    esac
-    set_env "$key" "$value"
-done < "$stack_env"
-
-# The names the suites read, mapped from stack.env.
-set_env TIDECLOAK_URL "${TIDECLOAK_URL:-http://localhost:8080}"
-set_env KC_BASE_URL "${KC_BASE_URL:-$TIDECLOAK_URL}"
-set_env HOME_ORK_ORIGIN "${HOME_ORK_ORIGIN:-http://localhost:1001}"
-set_env KC_ADMIN_USER "${KC_ADMIN_USER:-admin}"
-set_env KC_CONTAINER "${TIDECLOAK_CONTAINER:-tidecloakP}"
-set_env PG_CONTAINER "${POSTGRES_CONTAINER:-postgresP}"
-set_env ORK_CONTAINERS "${ORK_CONTAINERS:-Ork-1,Ork-2,Ork-3,Ork-4,Ork-5}"
-set_env COMPOSE_PROJECT_NAME "${COMPOSE_PROJECT_NAME:-tide-ci}"
+# stack.env is non-secret by contract and describes the stack that was just
+# generated, so it wins over whatever the caller had set.
+load_stack_env "$stack_env" || die "gen-stack.sh did not write $stack_env"
+stack_defaults
+log "stack: $(ork_count) ORKs ($ORK_CONTAINERS), home ORK $HOME_ORK_ORIGIN, threshold ${TIDE_THRESHOLD_T:-?} of ${TIDE_THRESHOLD_N:-?}"
 
 # Never print `docker compose config`: it resolves the secrets.
 start=$(date +%s)

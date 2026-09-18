@@ -12,8 +12,33 @@ export CI_STACK_DIR="${CI_STACK_DIR:-$_tmp_root/tide-stack}"
 export CI_REPORTS_DIR="${CI_REPORTS_DIR:-$_tmp_root/tide-reports}"
 export CI_SHARD_ID="${CI_SHARD_ID:-local}"
 
+# Fallbacks used only when stack.env is missing and nothing else said otherwise.
+# They describe the smallest dev stack (5 ORKs on :1001-:1005), never the stack
+# under test. The pre-release gate runs 20 ORKs and supplies the real values.
+FALLBACK_ORK_CONTAINERS='Ork-1,Ork-2,Ork-3,Ork-4,Ork-5'
+FALLBACK_HOME_ORK_ORIGIN='http://localhost:1001'
+export FALLBACK_ORK_CONTAINERS FALLBACK_HOME_ORK_ORIGIN
+
 log() { printf '[ci] %s\n' "$*" >&2; }
 die() { printf '[ci] error: %s\n' "$*" >&2; exit 1; }
+
+# A GitHub Actions annotation when running there, an ordinary log line otherwise.
+annotate() {
+    local level=$1
+    shift
+    if [ -n "${GITHUB_ACTIONS:-}" ]; then
+        printf '::%s::%s\n' "$level" "$*"
+    else
+        log "$level: $*"
+    fi
+}
+
+# Append markdown to the Actions step summary when there is one. Never required.
+step_summary() {
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+        printf '%s\n' "$*" >> "$GITHUB_STEP_SUMMARY"
+    fi
+}
 
 need_workspace() {
     [ -n "${TIDE_WORKSPACE:-}" ] || die "set TIDE_WORKSPACE to the folder that holds the sibling checkouts"
@@ -51,6 +76,61 @@ env_file_get() {
         \'*\') line="${line#\'}"; line="${line%\'}" ;;
     esac
     printf '%s' "$line"
+}
+
+# Export the KEY=VALUE lines of stack.env, which gen-stack.sh writes next to the
+# running stack. It is the source of truth for how many ORKs there are, where
+# they listen and what the containers are called, so it wins over the
+# environment. Returns 1 when there is no such file, so callers can say so.
+# shellcheck disable=SC2120  # the argument is optional; most callers omit it
+load_stack_env() {
+    local file="${1:-$CI_STACK_DIR/stack.env}" line key value
+    [ -f "$file" ] || return 1
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line#export }"
+        case "$line" in ''|'#'*) continue ;; esac
+        key="${line%%=*}"
+        [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || die "unexpected line in stack.env: $key"
+        case "$key" in *PASSWORD*|*SECRET*|*TOKEN*) die "stack.env must not hold secrets, found $key" ;; esac
+        value="${line#*=}"
+        case "$value" in
+            \"*\") value="${value#\"}"; value="${value%\"}" ;;
+        esac
+        set_env "$key" "$value"
+    done < "$file"
+}
+
+# The names the suites read, filled in from what stack.env gave us. Only the
+# gaps get a value, so an explicit override still wins.
+stack_defaults() {
+    set_env TIDECLOAK_URL "${TIDECLOAK_URL:-http://localhost:8080}"
+    set_env KC_BASE_URL "${KC_BASE_URL:-$TIDECLOAK_URL}"
+    set_env HOME_ORK_ORIGIN "${HOME_ORK_ORIGIN:-${MASTER_ORK_URL:-$FALLBACK_HOME_ORK_ORIGIN}}"
+    set_env KC_ADMIN_USER "${KC_ADMIN_USER:-admin}"
+    set_env KC_CONTAINER "${KC_CONTAINER:-${TIDECLOAK_CONTAINER:-tidecloakP}}"
+    set_env PG_CONTAINER "${PG_CONTAINER:-${POSTGRES_CONTAINER:-postgresP}}"
+    set_env ORK_CONTAINERS "${ORK_CONTAINERS:-$FALLBACK_ORK_CONTAINERS}"
+    set_env COMPOSE_PROJECT_NAME "${COMPOSE_PROJECT_NAME:-tide-ci}"
+}
+
+# Load stack.env if it is there, then fill the gaps. Suite scripts call this so
+# they work both inside this repo's workflow and standalone, where another
+# repo's gate brought the stack up.
+use_stack_env() {
+    if ! load_stack_env; then
+        log "no stack.env at $CI_STACK_DIR/stack.env; using the fallbacks (a 5-ORK localhost stack)"
+    fi
+    stack_defaults
+    log "stack: $(ork_count) ORKs ($ORK_CONTAINERS), home ORK $HOME_ORK_ORIGIN, TideCloak $TIDECLOAK_URL"
+}
+
+# How many ORKs the stack has, counted from ORK_CONTAINERS.
+ork_count() {
+    local -a orks=()
+    if [ -n "${ORK_CONTAINERS:-}" ]; then
+        IFS=', ' read -r -a orks <<< "$ORK_CONTAINERS"
+    fi
+    printf '%s' "${#orks[@]}"
 }
 
 # Is $1 in the space or comma separated list $2?

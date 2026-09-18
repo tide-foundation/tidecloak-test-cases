@@ -4,9 +4,12 @@
 #   SUITE_MODE=smoke (00-smoke only) | full, SUITE_GREP, SUITE_GREP_INVERT, SUITE_SHARD=k/N
 #   SUITE_PARTITION=k/N  split by spec file, round robin. Each spec provisions its
 #                        own realm, so files are a better unit than test counts.
+#
+# The stack is expected to be up already; its shape comes from stack.env.
 # shellcheck source=lib/common.sh
 source "$(dirname "$0")/lib/common.sh"
 need_workspace
+use_stack_env
 dir="$TIDE_WORKSPACE/tidecloak-test-cases/tests"
 : "${TIDECLOAK_URL:?}" "${HOME_ORK_ORIGIN:?}" "${KC_ADMIN_USER:?}" "${KC_ADMIN_PASSWORD:?}"
 [ -d "$TIDE_WORKSPACE/tidecloak-test-cases/test-app/.next" ] || die "test-app is not built; run ci/build-sdk.sh first"

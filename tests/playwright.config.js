@@ -1,8 +1,17 @@
 // @ts-check
 const path = require('path');
 const { defineConfig, devices } = require('@playwright/test');
+// Also loads tests/.env, so BASE_URL here matches what the specs read.
+const { budget, ORK_COUNT, TIMEOUT_SCALE } = require('./utils/config');
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+
+// The budgets below are written for a 5-ORK stack and scaled up for bigger ones
+// (see utils/config.js). Creating a key needs every ORK up, so a 20-ORK stack is
+// a lot slower at the same step.
+if (TIMEOUT_SCALE !== 1) {
+  console.log(`[pw] ${ORK_COUNT} ORKs: timeouts scaled by ${TIMEOUT_SCALE}`);
+}
 
 /**
  * @see https://playwright.dev/docs/test-configuration
@@ -21,9 +30,9 @@ module.exports = defineConfig({
   retries: 1,
   workers: 1,
   maxFailures: 0, // Run the whole suite; don't let one (possibly flaky) failure hide the rest
-  timeout: 60000, // 1 minute max per test
+  timeout: budget(60000), // 1 minute per test on a 5-ORK stack
   expect: {
-    timeout: 15000, // 15 seconds for expect assertions
+    timeout: budget(15000),
   },
   reporter: [
     ['html', { outputFolder: 'reports' }],
@@ -39,8 +48,8 @@ module.exports = defineConfig({
     ignoreHTTPSErrors: true,
     permissions: ['geolocation'],
     bypassCSP: true,
-    actionTimeout: 15000, // 15 seconds for actions
-    navigationTimeout: 30000, // 30 seconds for navigation
+    actionTimeout: budget(15000),
+    navigationTimeout: budget(30000),
   },
 
   projects: [

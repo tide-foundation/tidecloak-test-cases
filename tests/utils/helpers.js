@@ -77,7 +77,8 @@ async function injectRealmAdapter(page, adapterConfig) {
  * @returns {Promise<'tide'|void>}
  */
 async function signInToAdmin(page, opts) {
-    const timeoutMs = opts.timeoutMs ?? 120000;
+    // The login round trip goes through every ORK, so it scales with the stack.
+    const timeoutMs = opts.timeoutMs ?? config.budget(120000);
 
     if (!opts.fillOnly) {
         if (!opts.baseUrl) throw new Error('signInToAdmin: opts.baseUrl is required unless fillOnly is set');
@@ -103,12 +104,12 @@ async function signInToAdmin(page, opts) {
     // Wait for the Tide login widget fields (DOM varies slightly between runs).
     let nameInput = page.locator('#sign_in-input_name').nth(1);
     const nameVisible = await nameInput
-        .waitFor({ state: 'visible', timeout: 60000 })
+        .waitFor({ state: 'visible', timeout: config.budget(60000) })
         .then(() => true)
         .catch(() => false);
     if (!nameVisible) {
         nameInput = page.locator('#sign_in-input_name').first();
-        await nameInput.waitFor({ state: 'visible', timeout: 60000 });
+        await nameInput.waitFor({ state: 'visible', timeout: config.budget(60000) });
     }
 
     let passInput = page.locator('#sign_in-input_password').nth(1);
@@ -187,7 +188,7 @@ async function signInToRealm(page, opts) {
  */
 async function waitForAdminAuthReady(page) {
     const vuidLine = page.locator('p').filter({ hasText: 'VUID:' }).first();
-    await expect(vuidLine).toHaveText(/VUID:\s*\S+/, { timeout: 60000 });
+    await expect(vuidLine).toHaveText(/VUID:\s*\S+/, { timeout: config.budget(60000) });
 }
 
 /**
@@ -234,13 +235,13 @@ async function approveViaEnclavePopup(page, opts) {
 async function commitPolicyViaGovernance(page, opts) {
     const pendingList = page.locator('[data-testid="pending-policies-list"]');
     const reviewButton = page.locator('[data-testid="review-policy-btn"]').first();
-    await expect(reviewButton).toBeVisible({ timeout: 30000 });
+    await expect(reviewButton).toBeVisible({ timeout: config.budget(30000) });
     await approveViaEnclavePopup(page, { trigger: reviewButton });
-    await expect(page.locator('[data-testid="message"]').first()).toContainText('approved', { timeout: 30000 });
+    await expect(page.locator('[data-testid="message"]').first()).toContainText('approved', { timeout: config.budget(30000) });
     await expect(pendingList).toContainText('Ready: Yes', { timeout: 10000 });
 
     await page.locator('[data-testid="commit-policy-btn"]').first().click();
-    await expect(page.locator('[data-testid="message"]').first()).toContainText('committed', { timeout: 30000 });
+    await expect(page.locator('[data-testid="message"]').first()).toContainText('committed', { timeout: config.budget(30000) });
     await expect(pendingList).not.toContainText(opts.policyLabel, { timeout: 10000 });
 }
 
@@ -312,7 +313,7 @@ async function goToForsetiPage(page, opts) {
 
     await page.goto(`${opts.baseUrl}/forseti-crypto`, { waitUntil: 'domcontentloaded', timeout: 90000 });
     await expect(page.getByText('Forseti Policy-Based Encryption')).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('[data-testid="forseti-policy-status"]')).toContainText('Loaded', { timeout: 15000 });
+    await expect(page.locator('[data-testid="forseti-policy-status"]')).toContainText('Loaded', { timeout: config.budget(15000) });
 }
 
 // ─── Assertions ────────────────────────────────────────────────────────────────────────

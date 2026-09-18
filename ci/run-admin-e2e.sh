@@ -15,11 +15,14 @@
 #                     --shard cannot split. Only valid with SUITE_PROJECTS=runtime.
 #   SUITE_GREP, SUITE_GREP_INVERT, SUITE_SHARD (Playwright --shard)
 # Unexpected skips fail the run (REQUIRE_NO_UNEXPECTED_SKIPS=1), and the suite's
-# own ci:summary table is added to the step summary.
-# Never sets DESTRUCTIVE or STACK_MANAGE.
+# own ci:summary table is printed, and added to the Actions step summary when
+# there is one. Never sets DESTRUCTIVE or STACK_MANAGE.
+#
+# The stack is expected to be up already; its shape comes from stack.env.
 # shellcheck source=lib/common.sh
 source "$(dirname "$0")/lib/common.sh"
 need_workspace
+use_stack_env
 lane="${1:-}"
 dir="$TIDE_WORKSPACE/tidecloak-idp-extensions/tidecloak-key-provider/frontend/e2e"
 : "${KC_ADMIN_USER:?}" "${KC_ADMIN_PASSWORD:?}"
@@ -29,12 +32,15 @@ export E2E=1 CI=1 HEADLESS=true REQUIRE_NO_UNEXPECTED_SKIPS=1
 export KC_URL="${KC_URL:-${KC_BASE_URL:-${TIDECLOAK_URL:?}}}"
 mode="$(suite_mode)"
 
-# The suite's own markdown table, next to ours. Best effort.
+# The suite's own markdown table, next to ours. Best effort, and it goes to the
+# step summary only when we are running under Actions.
 suite_summary() {
-    local title=$1 json="$CI_REPORTS_DIR/$2/results.json"
-    if [ -f "$json" ]; then
-        (cd "$dir" && npm run --silent ci:summary -- --input "$json" --title "$title ($CI_SHARD_ID)") || true
-    fi
+    local title=$1 json="$CI_REPORTS_DIR/$2/results.json" md
+    [ -f "$json" ] || return 0
+    md="$( (cd "$dir" && npm run --silent ci:summary -- --input "$json" --title "$title ($CI_SHARD_ID)") || true )"
+    [ -n "$md" ] || return 0
+    printf '%s\n' "$md"
+    step_summary "$md"
 }
 
 case "$lane" in
@@ -47,7 +53,9 @@ case "$lane" in
         ;;
     runtime)
         export RUNTIME_REALM=1
-        export RUN_ID="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-${CI_SHARD_ID}"
+        # Unique per run so parallel lanes never collide. Outside Actions the
+        # timestamp does that job.
+        export RUN_ID="${GITHUB_RUN_ID:-$(date +%s)}-${GITHUB_RUN_ATTEMPT:-1}-${CI_SHARD_ID}"
         projects="${SUITE_PROJECTS:-}"
         if [ "$mode" = smoke ]; then
             projects="${projects:-runtime}"

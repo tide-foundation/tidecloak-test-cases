@@ -243,6 +243,8 @@ Defaults assume an all-localhost stack.
 | `PW_REALM_CACHE_DIR` | per-user temp dir | where the realm cache lives (see above) |
 | `DPOP_USER` / `DPOP_PASSWORD` / `DPOP_CLIENT_A` / `DPOP_CLIENT_B` | recipe values | spec 12 overrides (e.g. a login-capable account) |
 | `PW_JSON_OUTPUT` | unset | also write a Playwright JSON report there (CI uses it for the summary) |
+| `ORK_CONTAINERS` | `Ork-1..Ork-5` | comma separated, from `stack.env`. Only its length is used here, to size the timeouts |
+| `PW_TIMEOUT_SCALE` | derived from `ORK_CONTAINERS` | multiplies every timeout the suite sets. 1 on a 5-ORK stack, 4 on a 20-ORK one |
 
 ---
 
@@ -252,7 +254,8 @@ Defaults assume an all-localhost stack.
 tidecloak-test-cases/
 ├── README.md                 # ← you are here (run + debug)
 ├── .github/workflows/        # pre-release-e2e-tests.yml (the Tide e2e) and checks.yml (PR checks)
-├── ci/                       # the scripts those workflows call (section 8)
+├── ci/                       # the scripts those workflows call, and the pre-release gate (section 8)
+│   └── run-all.sh            # the single entry point: every suite, in series, against a running stack
 ├── test-app/                 # the Next.js app the browser drives (auto-built + started by the suite's webServer → :3000)
 └── tests/
     ├── README.md             # architecture + how to add a new test
@@ -276,18 +279,102 @@ For what a recipe looks like, the `_tideSetup` overlay, and how to add a new tes
 
 ## 8. Continuous integration
 
-Two workflows live in `.github/workflows/`:
+There are two paths, and they run the same `ci/` scripts.
 
-- **`checks.yml`** runs on pull requests to this repo. It needs no stack and no secrets: unit tests,
-  the offline secret-leak check, `node --check`, shellcheck and actionlint.
-- **`pre-release-e2e-tests.yml`** ("Tide e2e") builds the Tide stack from source and runs the
-  suites against it. It runs nightly, by hand (`workflow_dispatch`), when a component repo asks
-  for it (`repository_dispatch`, type `tide-e2e`), and from the release hook in
-  tidecloak-override (`workflow_call`).
+**1. The blocking pre-release gate (20 ORKs, production threshold).**
+tidecloak-override's P1 workflow brings up a 20-ORK stack at T=14/N=20 on the self-hosted
+Proliant runner, exports `stack.env`, and calls `ci/run-all.sh` here. There is no dispatch to
+this repo, no GHCR and no sharding: one runner, the suites in series. That is the run that
+blocks a release.
 
-The workflow YAML mostly calls scripts in `ci/`, so a shard can be reproduced on a laptop.
+**2. This repo's GitHub-hosted workflow (nightly and manual).**
+`pre-release-e2e-tests.yml` ("Tide e2e") builds the stack from source, pushes the images to a
+private GHCR package, and runs the suites in parallel shards. It defaults to a 5-ORK stack at
+T=3/N=5, which is what a hosted runner carries; `ork_count`, `threshold_t` and `threshold_n`
+are inputs, so a 20-ORK nightly is possible later. It runs nightly, by hand
+(`workflow_dispatch`), when a component repo asks for it (`repository_dispatch`, type
+`tide-e2e`), and from the release hook in tidecloak-override (`workflow_call`).
 
-### How a run is put together
+`checks.yml` is the third workflow and needs neither: it runs on pull requests to this repo with
+no stack and no secrets (unit tests, the offline secret-leak check, `node --check`, shellcheck
+and actionlint).
+
+### The scripts are the interface
+
+Every `ci/` script takes its inputs from the environment, writes its reports to files, and exits
+non-zero on failure. None of them needs GitHub Actions: `$GITHUB_STEP_SUMMARY`, `$GITHUB_ENV`,
+`$GITHUB_RUN_ID` and `$RUNNER_TEMP` are all used only when they are set. None of them starts the
+stack either, apart from `ci/stack-up.sh`; the gate brings its own up.
+
+**`ci/run-all.sh [smoke|full]`** is the single entry point, and what the override gate calls.
+It runs the suites in series, keeps going when one fails, writes a status file for every suite
+(including one that got cut off), stages and scans the uploads, prints the summary table, and
+exits non-zero if anything failed.
+
+| Var | Default | Meaning |
+|---|---|---|
+| `TIDE_WORKSPACE` | required | the folder holding the sibling checkouts |
+| `SUITES` | `iga-engine test-cases admin-bootstrap admin-runtime` | which suites, in this order. `docs` is understood but never a default |
+| `SUITE_MODE` | `full` | `smoke` or `full`. The argument wins over the env var |
+| `SUITE_TIMEOUT_MINUTES` | `120` | wall-clock cap per suite; `0` means no cap |
+| `CI_STACK_DIR` | `$RUNNER_TEMP/tide-stack`, else `$TMPDIR/tide-stack` | where `stack.env` and `.env.ci` live |
+| `CI_REPORTS_DIR` | `$RUNNER_TEMP/tide-reports` | one folder per suite, plus `status/<suite>.json` |
+| `CI_UPLOAD_DIR` | `$RUNNER_TEMP/tide-upload` | what `stage-uploads.sh` writes and the scan checks |
+| `CI_SHARD_ID` | `all` | the name this run gets in the summary |
+| `SKIP_UPLOAD_STAGING` | unset | `1` skips staging and scanning, leaving the reports in place |
+
+Exit codes: `0` everything passed, `1` a suite failed or was cut off or the upload scan blocked
+the run, `2` bad usage (a bad argument, an unknown suite, a bad timeout).
+
+**The suite scripts.** Each one runs one suite against a stack that is already up, and each one
+writes `$CI_REPORTS_DIR/<suite>/` and `$CI_REPORTS_DIR/status/<suite>.json`. All of them read
+`TIDE_WORKSPACE`, `KC_ADMIN_PASSWORD` and the stack values below, and all of them take
+`SUITE_MODE`, `SUITE_GREP`, `SUITE_GREP_INVERT` and `SUITE_SHARD` (`k/N`, Playwright `--shard`).
+
+| Script | Suite name | Also takes |
+|---|---|---|
+| `ci/run-iga-engine.sh` | `iga-engine` | |
+| `ci/run-test-cases.sh` | `test-cases` | `SUITE_PARTITION=k/N` (by spec file), `BASE_URL`, `PW_REALM_CACHE_DIR`. Needs `ci/build-sdk.sh` to have built the test-app |
+| `ci/run-admin-e2e.sh bootstrap` | `admin-bootstrap` | |
+| `ci/run-admin-e2e.sh runtime` | `admin-runtime` | `SUITE_PROJECTS`, `SUITE_PARTITION=k/N` (only with `SUITE_PROJECTS=runtime`), `ADMIN_RUNTIME_SMOKE_GREP` |
+| `ci/run-docs.sh` | `docs` | `CI_SUITES`, `CI_CHANNELS`, `DOCS_DIR`. Ignores the grep and shard knobs |
+
+`ci/summarize.sh [dir] [--expect matrix.json] [--builds json]` prints the table and exits 1 if a
+suite failed or an expected one never reported. `ci/stage-uploads.sh` copies the reports and
+scrubbed logs into `$CI_UPLOAD_DIR` (it needs `rsync`). `ci/scan-uploads.sh [dir]` fails, and
+deletes the staged folder, if it finds a secret; `SCAN_SECRET_ENVS` names the env vars whose
+values it looks for.
+
+### Stack size and where it comes from
+
+`stack.env`, which tidecloak-override's `gen-stack.sh` writes next to the running stack, is the
+source of truth for the stack's shape. `ci/run-all.sh` and every suite script load it from
+`$CI_STACK_DIR/stack.env` when the caller has not already exported it, so nothing in `ci/`
+assumes a particular ORK count:
+
+| From `stack.env` | Used for |
+|---|---|
+| `ORK_CONTAINERS` | the container names, and how many ORKs there are |
+| `HOME_ORK_ORIGIN` / `MASTER_ORK_URL` | the enclave and approval-popup origin |
+| `TIDECLOAK_URL`, `KC_BASE_URL`, `KC_ADMIN_USER` | TideCloak and the admin REST API |
+| `TIDECLOAK_CONTAINER`, `POSTGRES_CONTAINER` | the containers the suites exec into |
+| `TIDE_THRESHOLD_T` / `TIDE_THRESHOLD_N` | the tide-js threshold patch in `ci/build-sdk.sh` |
+
+Without a `stack.env` the scripts fall back to a bare 5-ORK localhost stack (`Ork-1..Ork-5`,
+home ORK on `:1001`) and say so in the log. The fallbacks are in `ci/lib/common.sh`; they are
+there so a laptop run works, never a description of the stack under test.
+
+Going the other way, `ci/stack-up.sh` passes `ORK_COUNT` (default 5) and `TIDE_THRESHOLD_T`/`N`
+(default 3/5) through to `gen-stack.sh`, and refuses a combination that cannot reach quorum.
+
+**Timeouts scale with the stack.** Creating a key needs every ORK up, so the same step takes much
+longer on 20 ORKs than on 5. This repo's Playwright budgets are written for 5 and scaled from
+`ORK_CONTAINERS` (see `tests/utils/config.js`); `PW_TIMEOUT_SCALE` overrides the factor, which is
+capped at 4. Two limits live outside this repo and need raising there, not here: tide-js's fixed
+8s browser fan-out budget (`Tools/Utils.ts`, `PromiseRace`) and the ORK per-IP throttle of 100
+requests per 60s, which the override gate lifts with `CI_ORK_IP_ALLOW`.
+
+### How a GitHub-hosted run is put together
 
 | Job | What it does |
 |---|---|
@@ -378,6 +465,11 @@ ci/stack-up.sh                                # gen-stack + compose up (needs ST
 SUITES="iga-engine test-cases" ci/prepare-suites.sh
 ci/build-sdk.sh                               # tide-js, heimdall, tidecloak-js, test-app
 ci/stack-wait.sh
+
+# Everything, the way the override gate calls it:
+SUITE_MODE=smoke ci/run-all.sh          # or: ci/run-all.sh full
+
+# Or one suite at a time:
 SUITE_MODE=smoke ci/run-iga-engine.sh
 SUITE_PARTITION=1/4 ci/run-test-cases.sh
 ci/run-admin-e2e.sh bootstrap
@@ -387,10 +479,10 @@ ci/summarize.sh
 ci/stack-down.sh
 ```
 
-Every `run-*.sh` takes `SUITE_MODE` (`smoke`/`full`), `SUITE_GREP`, `SUITE_GREP_INVERT` and
-`SUITE_SHARD` (`k/N`, Playwright `--shard`). The test-cases and runtime-lane scripts also take
-`SUITE_PARTITION`, and the runtime lane takes `SUITE_PROJECTS`. The admin scripts set
-`REQUIRE_NO_UNEXPECTED_SKIPS=1` and add the suite's own `ci:summary` table to the step summary. Reports land in `$RUNNER_TEMP/tide-reports` (or `$TMPDIR`), one folder per suite.
+The full knob list is in "The scripts are the interface" above. The admin scripts also set
+`REQUIRE_NO_UNEXPECTED_SKIPS=1` and print the suite's own `ci:summary` table, which goes to the
+Actions step summary when there is one. Reports land in `$CI_REPORTS_DIR`, which defaults to
+`$RUNNER_TEMP/tide-reports` (or `$TMPDIR`), one folder per suite.
 
 `ci/build-sdk.sh` and `ci/rewrite-file-deps.js` change `package.json` in the checkouts they build.
 In particular, `test-app/package.json` is repointed from `file:~/...` to `file:$TIDE_WORKSPACE/...`.
@@ -401,7 +493,9 @@ Tests for the CI scripts: `npm run test:ci` (from the repo root).
 
 ### Expected timings
 
-These are modelled, not measured on hosted runners, except where marked.
+These are modelled, not measured on hosted runners, except where marked, and they are for the
+5-ORK hosted stack. The 20-ORK gate runs everything in series on one machine, so its wall clock
+is roughly the sum of the suite rows below, with each suite slower than its 5-ORK figure.
 
 | Piece | Time |
 |---|---|

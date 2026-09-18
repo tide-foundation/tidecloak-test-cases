@@ -18,6 +18,6 @@ rc=0
 node "$CI_DIR/lib/scan-uploads.js" "${args[@]}" || rc=$?
 if [ "$rc" -ne 0 ]; then
     rm -rf "$dir"
-    echo "::error::upload blocked by the secret scan (see the findings above); nothing was uploaded"
+    annotate error "upload blocked by the secret scan (see the findings above); nothing was uploaded"
     exit 1
 fi

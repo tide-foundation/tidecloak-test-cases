@@ -32,7 +32,30 @@ const KC_ADMIN_PASSWORD = process.env.KC_ADMIN_PASSWORD || 'password';
 // realm with RECIPE_REALM, so the login still matches what that realm's identities were given.
 const TIDE_USER_PASSWORD = process.env.TIDE_USER_PASSWORD || '';
 
+// How many ORKs the stack under test has. stack.env gives us ORK_CONTAINERS;
+// without it we assume the small dev stack.
+const ORK_COUNT = Number(process.env.ORK_COUNT) ||
+    (process.env.ORK_CONTAINERS || '').split(',').filter(Boolean).length ||
+    5;
+
+// Every key operation fans out to the whole ORK network, so the same step takes
+// longer on the 20-ORK pre-release stack than on the 5-ORK dev one. Timeouts in
+// the suite are written for 5 ORKs and scaled from here. PW_TIMEOUT_SCALE
+// overrides it; the scale is capped at 4 so a typo cannot hang a run for hours.
+const TIMEOUT_SCALE = Number(process.env.PW_TIMEOUT_SCALE) ||
+    Math.min(4, Math.max(1, ORK_COUNT / 5));
+
+/**
+ * Scale a timeout written for a 5-ORK stack.
+ * @param {number} ms
+ * @returns {number}
+ */
+const budget = (ms) => Math.round(ms * TIMEOUT_SCALE);
+
 module.exports = {
+    ORK_COUNT,
+    TIMEOUT_SCALE,
+    budget,
     BASE_URL,
     TIDECLOAK_URL,
     HOME_ORK_ORIGIN,

@@ -1,6 +1,13 @@
 # Tide e2e: builds the stack from source (only what changed), then runs the
 # suites in parallel shards, each against its own throwaway stack.
 #
+# This is the GitHub-hosted path, for nightly and manual runs. It defaults to a
+# 5-ORK stack at T=3/N=5, which is what a hosted runner can carry. The BLOCKING
+# pre-release gate is a different thing: tidecloak-override runs it on the
+# self-hosted Proliant runner at the production threshold (20 ORKs, T=14/N=20)
+# and calls ci/run-all.sh directly, with no dispatch here and no sharding.
+# Raise ork_count/threshold_t/threshold_n below to do a big nightly run too.
+#
 #   plan     resolve refs to SHAs, work out image keys, find which images are
 #            missing from the registry, pick suites, emit the shard matrix
 #   build    one job per missing image, pushed to a PRIVATE GHCR package
@@ -70,6 +77,21 @@ on:
         description: Change to force a rebuild of every image
         required: false
         type: string
+      ork_count:
+        description: How many ORKs the stack runs (5 fits a hosted runner; the gate uses 20)
+        required: false
+        default: '5'
+        type: string
+      threshold_t:
+        description: Signing threshold T
+        required: false
+        default: '3'
+        type: string
+      threshold_n:
+        description: Cohort size N. Must not be above ork_count
+        required: false
+        default: '5'
+        type: string
   repository_dispatch:
     types: [tide-e2e]
   schedule:
@@ -122,6 +144,15 @@ on:
       key_salt:
         required: false
         type: string
+      ork_count:
+        required: false
+        type: string
+      threshold_t:
+        required: false
+        type: string
+      threshold_n:
+        required: false
+        type: string
       stripe_free_price_id:
         required: false
         type: string
@@ -171,6 +202,11 @@ env:
   # Smoke runs of the admin runtime lane (the suite's own test:smoke selection).
   ADMIN_RUNTIME_SMOKE_GREP: '@smoke'
   CI_REPO: tide-foundation/tidecloak-test-cases
+  # Stack size. The hosted runners get the small stack; the 20-ORK production
+  # threshold runs on the self-hosted gate in tidecloak-override.
+  ORK_COUNT: ${{ inputs.ork_count || github.event.client_payload.ork_count || '5' }}
+  TIDE_THRESHOLD_T: ${{ inputs.threshold_t || github.event.client_payload.threshold_t || '3' }}
+  TIDE_THRESHOLD_N: ${{ inputs.threshold_n || github.event.client_payload.threshold_n || '5' }}
   # No caching anywhere: images come from the private registry, npm and browser
   # downloads are fetched fresh. Caching public npm/Playwright downloads is a
   # possible later speed-up; anything built from private source never is.
@@ -426,6 +462,10 @@ jobs:
       - name: Start the stack
         id: stack
         env:
+          # gen-stack.sh reads these; stack-up.sh checks them first.
+          ORK_COUNT: ${{ env.ORK_COUNT }}
+          TIDE_THRESHOLD_T: ${{ env.TIDE_THRESHOLD_T }}
+          TIDE_THRESHOLD_N: ${{ env.TIDE_THRESHOLD_N }}
           STRIPE_TEST_SK: ${{ secrets.STRIPE_TEST_SK }}
           STRIPE_FREE_PRICE_ID: ${{ inputs.stripe_free_price_id || vars.STRIPE_FREE_PRICE_ID }}
           STRIPE_FREE_PRODUCT_ID: ${{ inputs.stripe_free_product_id || vars.STRIPE_FREE_PRODUCT_ID }}
