@@ -31,8 +31,13 @@
 #   - uploads are test reports and scrubbed logs only, and pass a secret scan first
 #
 # Secrets (names): CHECKOUT_TOKEN, CI_REGISTRY_TOKEN, STRIPE_TEST_SK
-# Variables (names): STRIPE_FREE_PRICE_ID, STRIPE_FREE_PRODUCT_ID,
-#   STRIPE_BUSINESS_PRODUCT_ID, CI_REGISTRY_USER
+# Variables (names): STRIPE_PRICE, STRIPE_FREE_PRODUCT_ID, STRIPE_PRODUCT_ID,
+#   CI_REGISTRY_USER
+#
+# The Stripe names are prod's, from Tidified/prod/.env1, and gen-stack.sh reads
+# exactly those. Do not rename them here on their own: a name this workflow
+# exports that gen-stack.sh does not read is simply dropped, and the free price
+# in particular is optional, so it goes missing without anything failing.
 # Details: README.md, "Continuous integration".
 name: Tide e2e
 # Callers find their run by the request id in this title (ci/caller-template.yml).
@@ -153,13 +158,13 @@ on:
       threshold_n:
         required: false
         type: string
-      stripe_free_price_id:
+      stripe_price:
         required: false
         type: string
       stripe_free_product_id:
         required: false
         type: string
-      stripe_business_product_id:
+      stripe_product_id:
         required: false
         type: string
     secrets:
@@ -466,10 +471,14 @@ jobs:
           ORK_COUNT: ${{ env.ORK_COUNT }}
           TIDE_THRESHOLD_T: ${{ env.TIDE_THRESHOLD_T }}
           TIDE_THRESHOLD_N: ${{ env.TIDE_THRESHOLD_N }}
+          # gen-stack.sh needs the test key and both product ids; the price is
+          # optional (the ORK resolves it from the free product). The trailing
+          # fallbacks read the old variable names and can go once the repo
+          # variables are renamed to match prod.
           STRIPE_TEST_SK: ${{ secrets.STRIPE_TEST_SK }}
-          STRIPE_FREE_PRICE_ID: ${{ inputs.stripe_free_price_id || vars.STRIPE_FREE_PRICE_ID }}
+          STRIPE_PRICE: ${{ inputs.stripe_price || vars.STRIPE_PRICE || vars.STRIPE_FREE_PRICE_ID }}
           STRIPE_FREE_PRODUCT_ID: ${{ inputs.stripe_free_product_id || vars.STRIPE_FREE_PRODUCT_ID }}
-          STRIPE_BUSINESS_PRODUCT_ID: ${{ inputs.stripe_business_product_id || vars.STRIPE_BUSINESS_PRODUCT_ID }}
+          STRIPE_PRODUCT_ID: ${{ inputs.stripe_product_id || vars.STRIPE_PRODUCT_ID || vars.STRIPE_BUSINESS_PRODUCT_ID }}
         run: self/ci/stack-up.sh
 
       - name: Install suite dependencies
