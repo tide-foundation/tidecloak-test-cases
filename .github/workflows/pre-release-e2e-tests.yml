@@ -471,14 +471,13 @@ jobs:
           ORK_COUNT: ${{ env.ORK_COUNT }}
           TIDE_THRESHOLD_T: ${{ env.TIDE_THRESHOLD_T }}
           TIDE_THRESHOLD_N: ${{ env.TIDE_THRESHOLD_N }}
-          # gen-stack.sh needs the test key and both product ids; the price is
-          # optional (the ORK resolves it from the free product). The trailing
-          # fallbacks read the old variable names and can go once the repo
-          # variables are renamed to match prod.
+          # gen-stack.sh needs the test key and both product ids. The price is
+          # optional: the ORK resolves the free price from the free product at
+          # runtime, so an unset one is better than a guessed one.
           STRIPE_TEST_SK: ${{ secrets.STRIPE_TEST_SK }}
-          STRIPE_PRICE: ${{ inputs.stripe_price || vars.STRIPE_PRICE || vars.STRIPE_FREE_PRICE_ID }}
+          STRIPE_PRICE: ${{ inputs.stripe_price || vars.STRIPE_PRICE }}
           STRIPE_FREE_PRODUCT_ID: ${{ inputs.stripe_free_product_id || vars.STRIPE_FREE_PRODUCT_ID }}
-          STRIPE_PRODUCT_ID: ${{ inputs.stripe_product_id || vars.STRIPE_PRODUCT_ID || vars.STRIPE_BUSINESS_PRODUCT_ID }}
+          STRIPE_PRODUCT_ID: ${{ inputs.stripe_product_id || vars.STRIPE_PRODUCT_ID }}
         run: self/ci/stack-up.sh
 
       - name: Install suite dependencies

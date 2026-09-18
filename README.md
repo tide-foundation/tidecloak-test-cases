@@ -426,7 +426,7 @@ in turn.
 |---|---|---|
 | `CHECKOUT_TOKEN` | secret | reading the private Tide repos (`git ls-remote`, checkouts) |
 | `CI_REGISTRY_TOKEN` | secret, org level | `read:packages` + `write:packages` for `ghcr.io/tide-foundation/tide-ci-*` (keep those packages **private**) |
-| `STRIPE_TEST_SK` | secret | the stack's Stripe test key (without it the stack starts, but licensing flows fail) |
+| `STRIPE_TEST_SK` | secret | the stack's Stripe test key. Without it the stack still starts, but licensing is unconfigured and a passing run says nothing about it |
 | `STRIPE_FREE_PRODUCT_ID`, `STRIPE_PRODUCT_ID` | variables | the free and business product ids. `gen-stack.sh` needs both |
 | `STRIPE_PRICE` | variable, optional | the free tier's price. The ORK resolves it from the free product, so this is only a fallback |
 | `CI_REGISTRY_USER` | variable, optional | the user name for `docker login ghcr.io` |
@@ -436,8 +436,8 @@ in turn.
 
 The Stripe names are prod's, from tidecloak-override `Tidified/prod/.env1`, and `gen-stack.sh`
 reads exactly those. A name this repo exports that the generator does not read is dropped in
-silence, so they have to be changed on both sides at once. Until the repo variables are renamed,
-the workflow also falls back to the old `STRIPE_FREE_PRICE_ID` and `STRIPE_BUSINESS_PRODUCT_ID`.
+silence, so they have to be changed on both sides at once. There is deliberately no fallback to
+an older name: that is how a stale value survives a rename.
 
 **Callers.** `ci/caller-template.yml` is a template for component repos. It sends a
 `repository_dispatch` with the repo name, branch and changed paths. It then waits on the run, so

@@ -15,9 +15,10 @@ mkdir -p "$CI_STACK_DIR"
 chmod 700 "$CI_STACK_DIR"
 
 # gen-stack.sh needs the Stripe settings. Without a key the stack still comes
-# up, but licensing flows fail, so say so loudly instead of stopping.
+# up, so say loudly what is missing instead of stopping. The point of the
+# warning is that a green run tells you nothing about licensing either way.
 if [ -z "${STRIPE_TEST_SK:-}" ] && [ -z "${CI_ALLOW_NO_STRIPE:-}" ]; then
-    annotate warning "STRIPE_TEST_SK is not set; starting the stack without Stripe (licensing flows will fail)"
+    annotate warning "STRIPE_TEST_SK is not set: licensing is UNCONFIGURED for this run, and a passing run is not evidence that licensing works"
     export CI_ALLOW_NO_STRIPE=true
 fi
 
