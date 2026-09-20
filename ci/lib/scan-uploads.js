@@ -89,15 +89,37 @@ const safePath = (p) => String(p).replace(/[\x00-\x1F\x7F]/g, '');
 const PREVIEW_MAX = 200;
 
 /**
+ * Cut a window out of an already-masked line, centred on `focus` so the match is
+ * in it. A report's per-test JSON is one long minified line, so a window taken
+ * from the start never reaches the interesting part.
+ *
+ * Only ever called on text that has already been redacted as a WHOLE: slicing
+ * first could start the window inside a secret and hand back a fragment with no
+ * flag in front of it for redaction to recognise, and half a secret is still
+ * half a secret.
+ */
+function windowAround(text, focus) {
+    if (text.length <= PREVIEW_MAX) return text;
+    let at = focus ? text.indexOf(focus) : -1;
+    if (at === -1) at = text.indexOf(MASK);
+    if (at === -1) at = 0;
+    const start = Math.max(0, Math.min(at - Math.floor(PREVIEW_MAX / 2), text.length - PREVIEW_MAX));
+    const end = Math.min(text.length, start + PREVIEW_MAX);
+    return `${start > 0 ? '... ' : ''}${text.slice(start, end)}${end < text.length ? ' ...' : ''}`;
+}
+
+/**
  * The matching line, masked, for the log. Redaction runs FIRST; the result is
  * then treated as hostile the same way a path or a key name is, because this is
  * the third place we print content out of a scanned file into a public log.
+ *
+ * `focus` is the flag or key that matched, so the window lands on it.
  *
  * Returns null when redaction did not clear the line. A line that still looks
  * like a secret after masking is exactly the line not to show, so the caller
  * prints a note instead of guessing.
  */
-function safePreview(line, secrets, skipRules) {
+function safePreview(line, secrets, skipRules, focus) {
     const redacted = redactText(line);
 
     // redactText knows shapes, not values, so check the known ones separately.
@@ -119,7 +141,7 @@ function safePreview(line, secrets, skipRules) {
     // a fresh one that begins with '::'.
     const clean = redacted.replace(/[\x00-\x1F\x7F]/g, ' ').trim();
     if (!clean) return null;
-    return clean.length > PREVIEW_MAX ? `${clean.slice(0, PREVIEW_MAX)} ...` : clean;
+    return windowAround(clean, focus);
 }
 
 // The redaction helpers' patterns, turned into finders. Each returns the
@@ -167,11 +189,9 @@ function scanText(text, file, secrets, skipRules) {
     lines.forEach((line, i) => {
         const where = `${file}:${i + 1}`;
         // Computed here, once, so the unmasked line is never stored on a hit.
-        let preview;
-        const previewFor = () => {
-            if (preview === undefined) preview = safePreview(line, secrets, skipRules);
-            return preview;
-        };
+        // Recomputed per hit rather than cached: each rule centres the window on
+        // its own match. Hits are rare, since one of them fails the run.
+        const previewFor = (focus) => safePreview(line, secrets, skipRules, focus);
         for (const [value, name] of secrets) {
             if (line.includes(value)) hits.push({ where, rule: `value of ${name}`, preview: previewFor() });
         }
@@ -183,7 +203,8 @@ function scanText(text, file, secrets, skipRules) {
             for (const m of line.matchAll(new RegExp(re.source, re.flags))) {
                 const value = pick(m) || '';
                 if (value.replace(/^["']|["']$/g, '').length >= min && !isPlaceholder(value)) {
-                    hits.push({ where, rule, name: safeName(pickName && pickName(m)), preview: previewFor() });
+                    const name = safeName(pickName && pickName(m));
+                    hits.push({ where, rule, name, preview: previewFor(name) });
                     break;
                 }
             }
@@ -303,4 +324,4 @@ if (require.main === module) {
     }
 }
 
-module.exports = { scan, scanText, secretValues, isPlaceholder, firstToken, safeName, safePath, safePreview, TOKEN_RULES };
+module.exports = { scan, scanText, secretValues, isPlaceholder, firstToken, safeName, safePath, safePreview, windowAround, TOKEN_RULES };
