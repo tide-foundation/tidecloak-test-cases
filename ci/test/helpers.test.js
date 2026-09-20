@@ -7,7 +7,7 @@ const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
 const { listTests, partition, toGrep, NO_TESTS } = require('../lib/partition-tests');
-const { scan, isPlaceholder, firstToken, safeName, safePath } = require('../lib/scan-uploads');
+const { scan, isPlaceholder, firstToken, safeName, safePath, safePreview } = require('../lib/scan-uploads');
 const { summarize, collectStatuses } = require('../lib/summarize');
 const { buildStatus, findReports } = require('../lib/suite-status');
 const { rewrite } = require('../rewrite-file-deps');
@@ -209,6 +209,55 @@ test('a crafted path cannot break out of the finding line', () => {
     assert.strictEqual(safePath('a\u0000b'), 'ab');
     // A colon in a path is harmless: the line already starts with spaces.
     assert.strictEqual(safePath('reports/index.html!/0aaad041.json'), 'reports/index.html!/0aaad041.json');
+});
+
+test('a finding shows the matching line masked, so the emitter is named', () => {
+    // A hit used to give a file, a line number and a rule, which is not enough
+    // to tell which of several code paths printed it.
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'run.log'), '[link-user] running --tide-password Str0ngEnclavePw! --realm iga-x\n');
+    const res = spawnSync('node', [path.join(__dirname, '..', 'lib', 'scan-uploads.js'), '--dir', dir], { encoding: 'utf8' });
+    assert.strictEqual(res.status, 1);
+    const out = res.stdout + res.stderr;
+    assert.ok(!out.includes('Str0ngEnclavePw!'), 'the secret must not reach the log');
+    assert.match(out, /--tide-password \*\*\*/);
+    assert.match(out, /\[link-user\] running/, 'the surrounding text is what names the emitter');
+    assert.match(out, /--realm iga-x/);
+});
+
+test('a line redaction cannot clean is withheld rather than shown', () => {
+    const noSecrets = new Map();
+    const none = new Set();
+    // redactText masks shapes, not values, so a known value survives it.
+    const known = new Map([['s3cret-admin-pw', 'KC_ADMIN_PASSWORD']]);
+    assert.strictEqual(safePreview('logged in with s3cret-admin-pw here', known, none), null);
+    // A token shape redaction does not touch is withheld too.
+    assert.strictEqual(safePreview('token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcdefghijk', noSecrets, none), null);
+    // A bare unmasked password= that redaction DOES clean is fine to show.
+    assert.strictEqual(safePreview('password=hunter2hunter2', noSecrets, none), 'password=***');
+});
+
+test('the withheld case is reported, not silently dropped', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'known.log'), 'admin logged in with s3cret-admin-pw here\n');
+    process.env.SCAN_TEST_KNOWN = 's3cret-admin-pw';
+    const res = spawnSync('node', [path.join(__dirname, '..', 'lib', 'scan-uploads.js'), '--dir', dir, '--env-names', 'SCAN_TEST_KNOWN'], { encoding: 'utf8' });
+    delete process.env.SCAN_TEST_KNOWN;
+    const out = res.stdout + res.stderr;
+    assert.strictEqual(res.status, 1);
+    assert.ok(!out.includes('s3cret-admin-pw'), 'the known value must never be printed');
+    assert.match(out, /line withheld: redaction did not clear it/);
+});
+
+test('a preview cannot break out of its line or run away', () => {
+    const noSecrets = new Map();
+    const none = new Set();
+    const preview = safePreview('start\n::error::owned\rmore\u0000end', noSecrets, none);
+    assert.ok(!/[\r\n]/.test(preview), 'no newline, so nothing can start a fresh log line');
+    assert.ok(!/[\x00-\x1F]/.test(preview));
+    const long = safePreview('x'.repeat(900), noSecrets, none);
+    assert.ok(long.length <= 210, `expected a cap, got ${long.length}`);
+    assert.match(long, / \.\.\.$/, 'and says it was cut');
 });
 
 test('the upload scan looks inside zips and HTML-embedded zips, and blocks files by name', () => {
