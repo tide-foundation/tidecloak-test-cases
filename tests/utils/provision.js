@@ -239,7 +239,7 @@ async function provisionScenario(recipePath, opts = {}) {
     await resetTestAppState(request, config.BASE_URL);
 
     // ── 1. Scaffold the realm from the recipe (roles + plain users + grants + testapp client).
-    provisionRealmFromRecipe(recipePath);
+    await provisionRealmFromRecipe(recipePath);
 
     // Discover the realm the recipe just created + a master-admin token for the admin REST API.
     const token = await getKcAdminToken(request, { baseUrl });

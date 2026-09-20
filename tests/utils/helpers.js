@@ -8,7 +8,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execSync } = require('child_process');
+const { spawn } = require('child_process');
 const { redactText } = require('./redact');
 const { fillSecret } = require('./secretInput');
 const { recipeForOrigin } = require('./recipeOrigin');
@@ -365,6 +365,60 @@ function getIgaEngineDir() {
 }
 
 /**
+ * Run a command, putting its output on ours a line at a time, masked.
+ *
+ * Anything a child process prints is captured by Playwright and ends up in the
+ * HTML report, so it has to go through the redaction helpers first. Buffering
+ * until the command finished would also do that, but provisioning takes minutes
+ * and watching it is how you tell a slow step from a hung one, so each line is
+ * masked as it arrives instead.
+ *
+ * Whole lines only: a secret can straddle two chunks, and half of one is still
+ * half of one. A trailing fragment is flushed when the stream ends.
+ *
+ * `stdout` and `stderr` exist so a test can collect what would have been
+ * printed. Everything else is passed through to spawn.
+ *
+ * @param {string} command
+ * @param {string[]} args
+ * @param {{ cwd?: string, env?: NodeJS.ProcessEnv, stdout?: { write: Function }, stderr?: { write: Function } }} opts
+ * @returns {Promise<void>} rejects on a non-zero exit
+ */
+function spawnRedacted(command, args, opts = {}) {
+    const { stdout = process.stdout, stderr = process.stderr, ...spawnOpts } = opts;
+    return new Promise((resolve, reject) => {
+        const child = spawn(command, args, { ...spawnOpts, stdio: ['ignore', 'pipe', 'pipe'] });
+
+        const pump = (stream, out) => {
+            let rest = '';
+            stream.setEncoding('utf-8');
+            stream.on('data', (chunk) => {
+                const text = rest + chunk;
+                const cut = text.lastIndexOf('\n');
+                if (cut === -1) {
+                    rest = text;
+                    return;
+                }
+                rest = text.slice(cut + 1);
+                out.write(redactText(text.slice(0, cut + 1)));
+            });
+            stream.on('end', () => {
+                if (rest) out.write(redactText(rest) + '\n');
+                rest = '';
+            });
+        };
+        pump(child.stdout, stdout);
+        pump(child.stderr, stderr);
+
+        child.on('error', (err) => reject(new Error(`${command} could not start: ${redactText(err.code || err.message)}`)));
+        child.on('close', (code, signal) => {
+            if (code === 0) return resolve();
+            reject(new Error(`Command failed: ${command} ${args.join(' ')} (status=${code}, signal=${signal})`));
+        });
+    });
+}
+
+/**
  * Provision this spec's realm by running its iga-engine recipe through the
  * tidecloak-iga-engine-tests suite:
  *
@@ -378,7 +432,7 @@ function getIgaEngineDir() {
  * @param {string} recipePath - absolute path to the *.recipe.json for this spec
  * @param {{ env?: Record<string,string>, keepRealm?: boolean }} [opts]
  */
-function provisionRealmFromRecipe(recipePath, opts = {}) {
+async function provisionRealmFromRecipe(recipePath, opts = {}) {
     const igaDir = getIgaEngineDir();
     if (!fs.existsSync(igaDir)) {
         throw new Error(
@@ -397,9 +451,8 @@ function provisionRealmFromRecipe(recipePath, opts = {}) {
     }
     const keepRealm = opts.keepRealm !== false;
     console.log(`Provisioning realm via iga-engine recipe: ${effectivePath}`);
-    execSync(`npm run recipe -- "${effectivePath}"`, {
+    await spawnRedacted('npm', ['run', 'recipe', '--', effectivePath], {
         cwd: igaDir,
-        stdio: 'inherit',
         env: { ...process.env, ...(keepRealm ? { KEEP_REALM: '1' } : {}), ...(opts.env || {}) },
     });
 }
@@ -479,6 +532,7 @@ module.exports = {
     goToForsetiPage,
     expectToContainTextWithRefresh,
     provisionRealmFromRecipe,
+    spawnRedacted,
     getKcAdminToken,
     discoverRecipeRealm,
 };
