@@ -7,7 +7,7 @@ const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
 const { listTests, partition, toGrep, NO_TESTS } = require('../lib/partition-tests');
-const { scan, isPlaceholder, firstToken, safeName, safePath, safePreview } = require('../lib/scan-uploads');
+const { scan, isPlaceholder, firstToken, safeName, safePath, safePreview, windowAround } = require('../lib/scan-uploads');
 const { summarize, collectStatuses } = require('../lib/summarize');
 const { buildStatus, findReports } = require('../lib/suite-status');
 const { rewrite } = require('../rewrite-file-deps');
@@ -258,6 +258,66 @@ test('a preview cannot break out of its line or run away', () => {
     const long = safePreview('x'.repeat(900), noSecrets, none);
     assert.ok(long.length <= 210, `expected a cap, got ${long.length}`);
     assert.match(long, / \.\.\.$/, 'and says it was cut');
+});
+
+test('the preview window lands on the match, not on the start of the line', () => {
+    // A report's per-test JSON is one long minified line. A window taken from the
+    // start showed test titles and ids and never reached the match.
+    const dir = tmp();
+    const filler = '"padding":"' + 'x'.repeat(1200) + '",';
+    fs.writeFileSync(
+        path.join(dir, 'report.json'),
+        `{"fileName":"06-policy-signing.spec.js",${filler}"stdout":"link-user --tide-password Str0ngEnclavePw! --grant-realm-admin"}\n`,
+    );
+    const res = spawnSync('node', [path.join(__dirname, '..', 'lib', 'scan-uploads.js'), '--dir', dir], { encoding: 'utf8' });
+    assert.strictEqual(res.status, 1);
+    const out = res.stdout + res.stderr;
+    assert.ok(!out.includes('Str0ngEnclavePw!'), 'still never the secret');
+    assert.match(out, /--tide-password \*\*\*/, 'the match itself is in the window');
+    assert.match(out, /link-user/, 'with enough either side to name the emitter');
+    // The window skipped the head of the line, which is where it used to sit.
+    assert.ok(!out.includes('06-policy-signing.spec.js'), 'the start of the line is no longer what we get');
+    assert.match(out, /\.\.\. /, 'and it says it was cut');
+});
+
+test('a window that was cut says so at each cut end', () => {
+    const middle = `${'a'.repeat(400)} FOCUS ${'b'.repeat(400)}`;
+    const cut = windowAround(middle, 'FOCUS');
+    assert.match(cut, /^\.\.\. /, 'cut at the start');
+    assert.match(cut, / \.\.\.$/, 'and at the end');
+    assert.ok(cut.includes('FOCUS'));
+    // A short line is untouched.
+    assert.strictEqual(windowAround('short and sweet', 'sweet'), 'short and sweet');
+    // No focus, and nothing masked to fall back to: take the head.
+    const head = windowAround('c'.repeat(600), '');
+    assert.match(head, / \.\.\.$/);
+    assert.doesNotMatch(head, /^\.\.\. /);
+});
+
+test('slicing the window cannot expose a fragment of a secret', () => {
+    // The whole line is redacted BEFORE any slicing, so a window edge landing
+    // inside what used to be a secret still only ever cuts the mask.
+    const noSecrets = new Map();
+    const none = new Set();
+    for (let pad = 180; pad < 230; pad++) {
+        const line = `${'p'.repeat(pad)} --tide-password Str0ngEnclavePw! trailing${'q'.repeat(300)}`;
+        const preview = safePreview(line, noSecrets, none, '--tide-password');
+        assert.ok(preview, `expected a preview at pad ${pad}`);
+        assert.ok(!preview.includes('Str0ng'), `leaked a fragment at pad ${pad}: ${preview}`);
+        assert.ok(!preview.includes('EnclavePw'), `leaked a fragment at pad ${pad}`);
+    }
+
+    // The sharp case for the ordering. A known secret sits far enough along that
+    // a window centred on the flag would clip it. Redacting the WHOLE line first
+    // means we notice the value and withhold the line. Slicing first would leave
+    // a partial value that no rule recognises, and print it.
+    const known = new Map([['s3cret-admin-pw-value', 'KC_ADMIN_PASSWORD']]);
+    const clipped = `--tide-password Str0ngPw! ${'x'.repeat(165)} s3cret-admin-pw-value`;
+    assert.strictEqual(
+        safePreview(clipped, known, none, '--tide-password'),
+        null,
+        'a line holding a known value must be withheld however the window would fall',
+    );
 });
 
 test('the upload scan looks inside zips and HTML-embedded zips, and blocks files by name', () => {
