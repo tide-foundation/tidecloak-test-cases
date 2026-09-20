@@ -40,7 +40,14 @@ test.describe('F0: Smoke — provisioning pipeline + app login', () => {
         // The recipe's app-login user is present with its creds.
         expect(ctx.appLoginUser).toBe('admin');
         expect(ctx.users.admin, 'admin user missing from the RealmContext').toBeTruthy();
-        expect(ctx.users.admin.password).toBe('Passw0rd!');
+        expect(ctx.users.admin.tideUsername).toMatch(/^admin-/);
+        // The Tide identity's password is minted per run (utils/enclavePassword.js), so assert its
+        // shape, not a value. It must never fall back to the recipe's Keycloak password.
+        expect(typeof ctx.users.admin.password, 'admin has no enclave password').toBe('string');
+        expect(ctx.users.admin.password.length).toBeGreaterThan(8);
+        if (!config.TIDE_USER_PASSWORD) {
+            expect(ctx.users.admin.password).not.toBe('Passw0rd!');
+        }
 
         // Stage 5 fetched the per-realm Tide adapter config, bound to this realm + the testapp client.
         expect(ctx.adapterConfig, 'no adapter config was fetched').toBeTruthy();

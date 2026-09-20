@@ -93,6 +93,14 @@ test.describe('F12: Multi-client DPoP SSO', () => {
             // RealmContext the test needs: the per-client adapter config (for vendorId/homeOrkUrl) and
             // ssouser's enclave identity, whose tideUsername provision.js derives from the realm suffix.
             console.log(`Reusing pinned realm ${pin}; skipping provisioning.`);
+            // ssouser's Tide password was minted when that realm was provisioned and is not
+            // stored anywhere afterwards, so pinning a realm means pinning the password too.
+            if (!config.TIDE_USER_PASSWORD) {
+                throw new Error(
+                    `RECIPE_REALM/DPOP_REALM pins realm ${pin}, but TIDE_USER_PASSWORD is not set. ` +
+                    'Set it to the value that realm was provisioned with (see the README).',
+                );
+            }
             const { request: apiRequest } = require('@playwright/test');
             const req = await apiRequest.newContext({ ignoreHTTPSErrors: true });
             try {
@@ -103,7 +111,7 @@ test.describe('F12: Multi-client DPoP SSO', () => {
                     realm: pin,
                     appClient: CLIENT_A,
                     appLoginUser: 'ssouser',
-                    users: { ssouser: { kcUsername: 'ssouser', tideUsername: `ssouser-${runToken}`, password: 'Passw0rd!' } },
+                    users: { ssouser: { kcUsername: 'ssouser', tideUsername: `ssouser-${runToken}`, password: config.TIDE_USER_PASSWORD } },
                     adapterConfig,
                     token,
                 };

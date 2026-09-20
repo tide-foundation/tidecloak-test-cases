@@ -1,8 +1,15 @@
 // @ts-check
 const path = require('path');
 const { defineConfig, devices } = require('@playwright/test');
+// Also loads tests/.env, so BASE_URL here matches what the specs read.
+const { budget, ORK_COUNT, TIMEOUT_SCALE, BASE_URL, TEST_APP_PORT } = require('./utils/config');
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+// The budgets below are written for a 5-ORK stack and scaled up for bigger ones
+// (see utils/config.js). Creating a key needs every ORK up, so a 20-ORK stack is
+// a lot slower at the same step.
+if (TIMEOUT_SCALE !== 1) {
+  console.log(`[pw] ${ORK_COUNT} ORKs: timeouts scaled by ${TIMEOUT_SCALE}`);
+}
 
 /**
  * @see https://playwright.dev/docs/test-configuration
@@ -21,13 +28,15 @@ module.exports = defineConfig({
   retries: 1,
   workers: 1,
   maxFailures: 0, // Run the whole suite; don't let one (possibly flaky) failure hide the rest
-  timeout: 60000, // 1 minute max per test
+  timeout: budget(60000), // 1 minute per test on a 5-ORK stack
   expect: {
-    timeout: 15000, // 15 seconds for expect assertions
+    timeout: budget(15000),
   },
   reporter: [
     ['html', { outputFolder: 'reports' }],
-    ['list']
+    ['list'],
+    // CI sets PW_JSON_OUTPUT to collect counts for the run summary.
+    ...(process.env.PW_JSON_OUTPUT ? [['json', { outputFile: process.env.PW_JSON_OUTPUT }]] : []),
   ],
   use: {
     baseURL: BASE_URL,
@@ -37,8 +46,8 @@ module.exports = defineConfig({
     ignoreHTTPSErrors: true,
     permissions: ['geolocation'],
     bypassCSP: true,
-    actionTimeout: 15000, // 15 seconds for actions
-    navigationTimeout: 30000, // 30 seconds for navigation
+    actionTimeout: budget(15000),
+    navigationTimeout: budget(30000),
   },
 
   projects: [
@@ -66,14 +75,21 @@ module.exports = defineConfig({
    * any spec. Playwright waits for /api/health, then tears the server down when the run ends.
    *
    * reuseExistingServer:false => always build + start fresh, so a stale running build can never
-   * mask a code change. Consequence: nothing else may be listening on :3000 when you start a run,
-   * and the app is only up for the duration of the run. Set PW_SKIP_BUILD=1 to skip the rebuild
-   * (start-only) when you're iterating on test code and the app code hasn't changed.
+   * mask a code change. Consequence: nothing else may be listening on the test-app's port when
+   * you start a run, and the app is only up for the duration of the run. Set PW_SKIP_BUILD=1 to
+   * skip the rebuild (start-only) when you're iterating on test code and the app code hasn't
+   * changed. `next start` takes the port from PORT, which is why it is passed through here.
    */
   webServer: {
     command: process.env.PW_SKIP_BUILD ? 'npm run start' : 'npm run build && npm run start',
     url: `${BASE_URL}/api/health`,
     cwd: path.resolve(__dirname, '../test-app'),
+    // ONLY the port. Playwright already merges process.env into the child's
+    // environment (webServerPlugin), so spreading it here changed nothing at
+    // runtime, but the reporters serialise config.webServer verbatim into
+    // results.json and the HTML report's data. That is how KC_ADMIN_PASSWORD,
+    // and every other variable, reached an artifact. Never put secrets here.
+    env: { PORT: String(TEST_APP_PORT) },
     reuseExistingServer: false,
     timeout: 180_000,
     stdout: 'pipe',

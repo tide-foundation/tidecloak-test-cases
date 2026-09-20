@@ -4,7 +4,8 @@
   "main": "index.js",
   "description": "TideCloak E2E test suite for policies, Forseti, and encryption/decryption",
   "scripts": {
-    "test": "npm --prefix tests test"
+    "test": "npm --prefix tests test",
+    "test:ci": "node --test ci/test/*.test.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",

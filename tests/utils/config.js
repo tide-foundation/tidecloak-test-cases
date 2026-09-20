@@ -9,12 +9,16 @@ const path = require('path');
 // Load .env from the tests/ directory.
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
-const PORT = process.env.PORT || '3000';
+// The port the Next.js test-app is served on. One variable feeds the app itself
+// (next start reads PORT), the Playwright baseURL, the port-free check in
+// ci/run-test-cases.sh, and the client origins in the realm recipes. A CI host
+// with something already on 3000 sets TEST_APP_PORT and everything follows.
+const TEST_APP_PORT = process.env.TEST_APP_PORT || process.env.PORT || '3000';
 const TIDECLOAK_PORT = process.env.TIDECLOAK_PORT || '8080';
 const TIDECLOAK_LOCAL_URL = `http://localhost:${TIDECLOAK_PORT}`;
 
 // The Next.js test-app (hosts /admin, /crypto, /signing, /forseti-crypto, /dpop-harness, /api).
-const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const BASE_URL = process.env.BASE_URL || `http://localhost:${TEST_APP_PORT}`;
 
 // TideCloak.
 const TIDECLOAK_URL = process.env.TIDECLOAK_URL || process.env.TIDECLOAK_LOCAL_URL || TIDECLOAK_LOCAL_URL;
@@ -27,10 +31,40 @@ const HOME_ORK_ORIGIN = process.env.HOME_ORK_ORIGIN || process.env.ORK_URL || 'h
 const KC_ADMIN_USER = process.env.KC_ADMIN_USER || 'admin';
 const KC_ADMIN_PASSWORD = process.env.KC_ADMIN_PASSWORD || 'password';
 
+// Pins the password given to every Tide identity the suite provisions. Unset (the default) means
+// a fresh random one per user per run (see utils/enclavePassword.js). Set it when you reuse a
+// realm with RECIPE_REALM, so the login still matches what that realm's identities were given.
+const TIDE_USER_PASSWORD = process.env.TIDE_USER_PASSWORD || '';
+
+// How many ORKs the stack under test has. stack.env gives us ORK_CONTAINERS;
+// without it we assume the small dev stack.
+const ORK_COUNT = Number(process.env.ORK_COUNT) ||
+    (process.env.ORK_CONTAINERS || '').split(',').filter(Boolean).length ||
+    5;
+
+// Every key operation fans out to the whole ORK network, so the same step takes
+// longer on the 20-ORK pre-release stack than on the 5-ORK dev one. Timeouts in
+// the suite are written for 5 ORKs and scaled from here. PW_TIMEOUT_SCALE
+// overrides it; the scale is capped at 4 so a typo cannot hang a run for hours.
+const TIMEOUT_SCALE = Number(process.env.PW_TIMEOUT_SCALE) ||
+    Math.min(4, Math.max(1, ORK_COUNT / 5));
+
+/**
+ * Scale a timeout written for a 5-ORK stack.
+ * @param {number} ms
+ * @returns {number}
+ */
+const budget = (ms) => Math.round(ms * TIMEOUT_SCALE);
+
 module.exports = {
+    TEST_APP_PORT,
+    ORK_COUNT,
+    TIMEOUT_SCALE,
+    budget,
     BASE_URL,
     TIDECLOAK_URL,
     HOME_ORK_ORIGIN,
     KC_ADMIN_USER,
     KC_ADMIN_PASSWORD,
+    TIDE_USER_PASSWORD,
 };
