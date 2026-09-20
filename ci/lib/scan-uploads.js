@@ -15,7 +15,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { patterns, MASK } = require('../../tests/utils/redact');
+const { patterns, MASK, redactText } = require('../../tests/utils/redact');
 
 const MIN_SECRET_LENGTH = 6;
 const SECRET_KEY_RE = /(PASS|SECRET|TOKEN|API|PRIVATE|CREDENTIAL|_SK$|_KEY$)/i;
@@ -84,6 +84,44 @@ function safeName(raw) {
 // that can break out of the line.
 const safePath = (p) => String(p).replace(/[\x00-\x1F\x7F]/g, '');
 
+// How much of a matching line to show. Enough to name the emitter, not enough
+// to quote a document back into the log.
+const PREVIEW_MAX = 200;
+
+/**
+ * The matching line, masked, for the log. Redaction runs FIRST; the result is
+ * then treated as hostile the same way a path or a key name is, because this is
+ * the third place we print content out of a scanned file into a public log.
+ *
+ * Returns null when redaction did not clear the line. A line that still looks
+ * like a secret after masking is exactly the line not to show, so the caller
+ * prints a note instead of guessing.
+ */
+function safePreview(line, secrets, skipRules) {
+    const redacted = redactText(line);
+
+    // redactText knows shapes, not values, so check the known ones separately.
+    for (const [value] of secrets) {
+        if (redacted.includes(value)) return null;
+    }
+    for (const [rule, re] of TOKEN_RULES) {
+        if (!skipRules.has(rule) && re.test(redacted)) return null;
+    }
+    for (const [rule, re, pick, min] of REDACT_RULES) {
+        if (skipRules.has(rule)) continue;
+        for (const m of redacted.matchAll(new RegExp(re.source, re.flags))) {
+            const value = pick(m) || '';
+            if (value.replace(/^["']|["']$/g, '').length >= min && !isPlaceholder(value)) return null;
+        }
+    }
+
+    // No control character survives, so nothing can end the line early and start
+    // a fresh one that begins with '::'.
+    const clean = redacted.replace(/[\x00-\x1F\x7F]/g, ' ').trim();
+    if (!clean) return null;
+    return clean.length > PREVIEW_MAX ? `${clean.slice(0, PREVIEW_MAX)} ...` : clean;
+}
+
 // The redaction helpers' patterns, turned into finders. Each returns the
 // captured secret value for a match.
 // rule, pattern, value picker, minimum length, name picker. The name picker
@@ -128,18 +166,24 @@ function scanText(text, file, secrets, skipRules) {
     const lines = text.split(/\r?\n/);
     lines.forEach((line, i) => {
         const where = `${file}:${i + 1}`;
+        // Computed here, once, so the unmasked line is never stored on a hit.
+        let preview;
+        const previewFor = () => {
+            if (preview === undefined) preview = safePreview(line, secrets, skipRules);
+            return preview;
+        };
         for (const [value, name] of secrets) {
-            if (line.includes(value)) hits.push({ where, rule: `value of ${name}` });
+            if (line.includes(value)) hits.push({ where, rule: `value of ${name}`, preview: previewFor() });
         }
         for (const [rule, re] of TOKEN_RULES) {
-            if (!skipRules.has(rule) && re.test(line)) hits.push({ where, rule });
+            if (!skipRules.has(rule) && re.test(line)) hits.push({ where, rule, preview: previewFor() });
         }
         for (const [rule, re, pick, min, pickName] of REDACT_RULES) {
             if (skipRules.has(rule)) continue;
             for (const m of line.matchAll(new RegExp(re.source, re.flags))) {
                 const value = pick(m) || '';
                 if (value.replace(/^["']|["']$/g, '').length >= min && !isPlaceholder(value)) {
-                    hits.push({ where, rule, name: safeName(pickName && pickName(m)) });
+                    hits.push({ where, rule, name: safeName(pickName && pickName(m)), preview: previewFor() });
                     break;
                 }
             }
@@ -239,7 +283,8 @@ function main() {
     if (result.hits.length) {
         const seen = new Set();
         for (const h of result.hits) {
-            const line = `  ${safePath(h.where)}: ${h.rule}${h.name ? ` (${h.name})` : ''}`;
+            const head = `  ${safePath(h.where)}: ${h.rule}${h.name ? ` (${h.name})` : ''}`;
+            const line = h.preview ? `${head}\n      ${h.preview}` : `${head}\n      (line withheld: redaction did not clear it)`;
             if (!seen.has(line)) console.log(line);
             seen.add(line);
         }
@@ -258,4 +303,4 @@ if (require.main === module) {
     }
 }
 
-module.exports = { scan, scanText, secretValues, isPlaceholder, firstToken, safeName, safePath, TOKEN_RULES };
+module.exports = { scan, scanText, secretValues, isPlaceholder, firstToken, safeName, safePath, safePreview, TOKEN_RULES };
