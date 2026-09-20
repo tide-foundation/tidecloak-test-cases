@@ -10,14 +10,14 @@
   "dependencies": {
     "@tide/js": "file:~/project/tide-js",
     "@tidecloak/js": "file:~/tidecloak-js/packages/tidecloak-js",
-    "better-sqlite3": "^11.8.1",
+    "better-sqlite3": "^13.0.3",
     "heimdall-tide": "file:~/heimdall",
     "next": "16.1.4",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.12",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "typescript": "^5"
