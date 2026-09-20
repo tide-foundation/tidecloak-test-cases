@@ -78,8 +78,8 @@ let _db = openDatabase();
 
 /**
  * The live database handle, exposed as a Proxy so every importer always talks to the CURRENT
- * connection. This lets resetDatabase() swap the underlying handle (close → delete file → reopen)
- * without any module holding a stale, closed connection.
+ * connection. The handle no longer changes (see resetDatabase), but the indirection is harmless
+ * and keeps importers honest if it ever needs to again.
  */
 export const db: Database.Database = new Proxy({} as Database.Database, {
     get(_target, prop) {
@@ -89,15 +89,46 @@ export const db: Database.Database = new Proxy({} as Database.Database, {
 });
 
 /**
- * Give the next spec a brand-new SQLite database: close the current handle, delete the file (and
- * any WAL/journal siblings), then reopen a fresh one with the schema recreated. Test-support only —
- * the Playwright suite calls this once per spec (via /api/test/reset) so NO state can leak between
- * runs. This replaces table-by-table truncation, which kept missing newly-added tables.
+ * Empty the database for the next spec. Test-support only: the Playwright suite calls this once
+ * per spec (via /api/test/reset) so NO state can leak between runs.
+ *
+ * This used to close the handle, delete the file and reopen. That crashed the server. Prepared
+ * statements belonging to the closed handle are finalized later by the garbage collector, and
+ * better-sqlite3's Statement destructor then calls into a Node environment that has gone:
+ *
+ *     node::RemoveEnvironmentCleanupHook ... Assertion failed: (env) != nullptr
+ *     4: Statement::~Statement() [better_sqlite3.node]
+ *     Aborted
+ *
+ * It took a few resets to land, so it killed the app mid-suite and every later test failed with
+ * NS_ERROR_CONNECTION_REFUSED against a server that was no longer there.
+ *
+ * So the one handle now lives for the life of the process and the rows go instead. Table names
+ * come from sqlite_master rather than a list kept here, which is what the close-and-reopen was
+ * really buying: a newly added table cannot be missed.
  */
 export function resetDatabase() {
-    _db.close();
-    for (const f of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`, `${dbPath}-journal`]) {
-        if (fs.existsSync(f)) fs.rmSync(f);
+    createSchema(_db);
+    const tables = _db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+        .all() as { name: string }[];
+
+    const wipe = _db.transaction(() => {
+        for (const { name } of tables) {
+            _db.prepare(`DELETE FROM "${name}"`).run();
+        }
+        // AUTOINCREMENT counters live here, so ids restart at 1 like a fresh file.
+        const hasSequence = _db
+            .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'")
+            .get();
+        if (hasSequence) _db.prepare('DELETE FROM sqlite_sequence').run();
+    });
+
+    // Order does not matter with the constraints off, and a PRAGMA is a no-op inside a transaction.
+    _db.exec('PRAGMA foreign_keys = OFF');
+    try {
+        wipe();
+    } finally {
+        _db.exec('PRAGMA foreign_keys = ON');
     }
-    _db = openDatabase();
 }

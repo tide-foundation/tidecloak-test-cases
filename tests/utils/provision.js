@@ -132,6 +132,20 @@ async function fetchAdapterConfig(request, o) {
 }
 
 /**
+ * True when we are inside a Playwright run, where the webServer owns the test-app's lifetime.
+ * Outside one (`npm run provision`) nobody promised the app would be up.
+ * @returns {boolean}
+ */
+function underPlaywright() {
+    try {
+        require('@playwright/test').test.info();
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Wipe the test-app's policy scratch state (pending requests + decisions, committed policies, the
  * change log) before a scenario runs. The test-app keeps these in one shared, non-realm-scoped
  * SQLite file that survives across runs of the manually-started dev server, so stale rows from
@@ -146,15 +160,26 @@ async function resetTestAppState(request, baseUrl) {
     }));
     if (res.ok()) return;
     const status = res.status();
-    // Best-effort. Two non-fatal cases:
+    // status 0 means nothing answered. Out of band, under `npm run provision`, that just means
+    // the app is not running and the caller does not need it. Inside the suite it means the app
+    // has DIED: the webServer started it, so it was there a moment ago. Carrying on then runs
+    // every remaining test against nothing, which is how one crash turned into 43 useless
+    // failures and 17 minutes of NS_ERROR_CONNECTION_REFUSED. Stop on the first one instead.
+    if (status === 0 && underPlaywright()) {
+        throw new Error(
+            `the test-app is gone: nothing answered at ${baseUrl}/api/test/reset. ` +
+            `The suite's webServer started it, so it has died since. Check the [WebServer] ` +
+            `output above for a crash; the rest of this run would only repeat this error.`
+        );
+    }
+    // Both remaining cases are survivable:
     //   404 => the test-app build predates the /api/test/reset route (needs a rebuild).
-    //   0   => the app is unreachable (not running) — e.g. browserless `npm run provision`.
-    // Under the Playwright suite the webServer guarantees a freshly-built, running app, so this
-    // only bites out-of-band provisioning. Warn loudly and continue; real HTTP errors (5xx) throw.
+    //   0   => out-of-band provisioning with the app deliberately down.
+    // Warn loudly and continue; real HTTP errors (5xx) throw.
     if (status === 404 || status === 0) {
         console.warn(
             `[provision] could not reset test-app policy state at ${baseUrl}/api/test/reset ` +
-            `(status ${status}) — continuing WITHOUT a reset; stale policies from prior runs may ` +
+            `(status ${status}); continuing WITHOUT a reset, so stale policies from prior runs may ` +
             `persist. (Under \`npm test\` the webServer always has a fresh app; this usually only ` +
             `shows up when provisioning out-of-band with the app down or an un-rebuilt app.)`
         );
