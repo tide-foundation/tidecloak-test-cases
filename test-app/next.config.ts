@@ -16,6 +16,14 @@ const nextConfig: NextConfig = {
   },
   outputFileTracingRoot: workspaceRoot,
 
+  // better-sqlite3 is a native addon. Bundling one leaves it bound to a context
+  // Next can dispose, and its Statement destructor then aborts the process from
+  // inside the garbage collector:
+  //   node::RemoveEnvironmentCleanupHook ... Assertion failed: (env) != nullptr
+  // That killed the server partway through a suite run. Keep it external so it
+  // is required at runtime from node_modules like any ordinary Node addon.
+  serverExternalPackages: ["better-sqlite3"],
+
   // ── Tide DPoP resource-server setup (tidecloak-js lib README, steps 3 & 4) ──
   // The Tide Cookie authenticator loads tide_dpop_auth.html cross-origin (popup/iframe)
   // from the CLIENT app origin during login, so it can read the DPoP key the SDK stashed
