@@ -101,9 +101,12 @@ export default function AdminPage() {
             policyParams.set("threshold", threshold);
             policyParams.set("resource", resource);
 
-            // Create the policy using GenericResourceAccessThresholdRoleContract
+            // Create the policy using GenericResourceAccessThresholdRoleContract.
+            // Version 4 is what tide-js accepts: constructing a Policy directly with
+            // anything but the latest version throws (Models/Policy.ts). v4 added an
+            // optional expiry, and we set none, so this serialises as v3 always did.
             const newPolicyRequest = PolicySignRequest.New(new Policy({
-                version: "3",
+                version: "4",
                 modelId: "TestInit:1",
                 contractId: "GenericResourceAccessThresholdRole:1",
                 keyId: vendorId,
@@ -145,7 +148,7 @@ export default function AdminPage() {
             const vendorId = getVendorIdForPolicy();
 
             const newPolicyRequest = PolicySignRequest.New(new Policy({
-                version: "3",
+                version: "4",
                 modelId: ["PolicyEnabledEncryption:1", "PolicyEnabledDecryption:1"],
                 contractId: forsetiContractId,
                 keyId: vendorId,
@@ -186,7 +189,7 @@ export default function AdminPage() {
             const vendorId = getVendorIdForPolicy();
 
             const newPolicyRequest = PolicySignRequest.New(new Policy({
-                version: "3",
+                version: "4",
                 modelId: ["PolicyEnabledEncryption:1", "PolicyEnabledDecryption:1"],
                 contractId: "SimpleTagBasedDecryption:1",
                 keyId: vendorId,
