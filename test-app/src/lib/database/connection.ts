@@ -2,13 +2,22 @@ import path from 'path';
 import fs from 'fs';
 import Database from 'better-sqlite3';
 
-const dbPath: string = process.env.DATABASE_PATH || path.join(process.cwd(), 'db', 'database.sqlite');
-
-// Ensure the directory exists before creating the database
-const dbDir = path.dirname(dbPath);
-if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-}
+/**
+ * Where the database lives. In memory by default: this holds scratch state for
+ * one test run, the suite resets it between specs, and the app is started fresh
+ * every time, so a file on disk buys nothing and costs a lock.
+ *
+ * That lock was not hypothetical. `next build` collects page data by evaluating
+ * route modules, every evaluation opened the file and ran CREATE TABLE against
+ * it, and the build failed with SQLITE_BUSY. With no file there is nothing to
+ * contend over, and no stale -journal left behind by a crashed run either.
+ *
+ * SET DATABASE_PATH TO GET A FILE BACK. If you are debugging a failed run and
+ * want a database to open afterwards, that is the switch; it has not been taken
+ * away, it is just no longer the default.
+ */
+const dbPath: string = process.env.DATABASE_PATH || ':memory:';
+const isFile = dbPath !== ':memory:' && !dbPath.startsWith('file:');
 
 /**
  * Single source of truth for the schema. EVERY table the app uses is created here, so that
@@ -68,13 +77,30 @@ function createSchema(database: Database.Database) {
 }
 
 function openDatabase(): Database.Database {
-    const database = new Database(dbPath);
-    createSchema(database);
+    if (isFile) {
+        const dbDir = path.dirname(dbPath);
+        if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+    }
+    const handle = new Database(dbPath);
+    createSchema(handle);
     console.log('SQLite database initialized at:', dbPath);
-    return database;
+    return handle;
 }
 
-let _db = openDatabase();
+/**
+ * Opened on FIRST USE, not when this module is imported.
+ *
+ * `next build` evaluates every route module to collect page data, but never
+ * calls a handler. Opening at module scope meant the build opened the database
+ * and wrote the schema, once per evaluation, for no reason. Now a build
+ * evaluates this module and opens nothing.
+ */
+let _db: Database.Database | null = null;
+
+function database(): Database.Database {
+    if (_db === null) _db = openDatabase();
+    return _db;
+}
 
 /**
  * The live database handle, exposed as a Proxy so every importer always talks to the CURRENT
@@ -83,8 +109,9 @@ let _db = openDatabase();
  */
 export const db: Database.Database = new Proxy({} as Database.Database, {
     get(_target, prop) {
-        const value = (_db as unknown as Record<string | symbol, unknown>)[prop];
-        return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(_db) : value;
+        const live = database();
+        const value = (live as unknown as Record<string | symbol, unknown>)[prop];
+        return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(live) : value;
     },
 });
 
@@ -108,27 +135,28 @@ export const db: Database.Database = new Proxy({} as Database.Database, {
  * really buying: a newly added table cannot be missed.
  */
 export function resetDatabase() {
-    createSchema(_db);
-    const tables = _db
+    const live = database();
+    createSchema(live);
+    const tables = live
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
         .all() as { name: string }[];
 
-    const wipe = _db.transaction(() => {
+    const wipe = live.transaction(() => {
         for (const { name } of tables) {
-            _db.prepare(`DELETE FROM "${name}"`).run();
+            live.prepare(`DELETE FROM "${name}"`).run();
         }
         // AUTOINCREMENT counters live here, so ids restart at 1 like a fresh file.
-        const hasSequence = _db
+        const hasSequence = live
             .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'")
             .get();
-        if (hasSequence) _db.prepare('DELETE FROM sqlite_sequence').run();
+        if (hasSequence) live.prepare('DELETE FROM sqlite_sequence').run();
     });
 
     // Order does not matter with the constraints off, and a PRAGMA is a no-op inside a transaction.
-    _db.exec('PRAGMA foreign_keys = OFF');
+    live.exec('PRAGMA foreign_keys = OFF');
     try {
         wipe();
     } finally {
-        _db.exec('PRAGMA foreign_keys = ON');
+        live.exec('PRAGMA foreign_keys = ON');
     }
 }
