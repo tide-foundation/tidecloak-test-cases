@@ -15,6 +15,7 @@ import {
 } from "@/lib/tidecloakApi";
 import { bytesToBase64, base64ToBytes } from "@/lib/tideSerialization";
 import { contract as forsetiContract, contractid as forsetiContractId } from "@/lib/forsetiDecryptionContract";
+import { errorText } from "@/lib/errorText";
 
 interface PendingPolicy {
     id: string;
@@ -52,7 +53,7 @@ export default function AdminPage() {
         try {
             await fetchPendingPolicies();
         } catch (error: any) {
-            setMessage(`Error: ${error.message}`);
+            setMessage(`Error: ${errorText(error)}`);
         }
     };
 
@@ -135,7 +136,7 @@ export default function AdminPage() {
             setPolicyThreshold("2");
             await fetchPendingPolicies();
         } catch (error: any) {
-            setMessage(`Error creating policy: ${error.message}`);
+            setMessage(`Error creating policy: ${errorText(error)}`);
         }
     };
 
@@ -176,7 +177,7 @@ export default function AdminPage() {
             setMessage("Forseti encryption policy (custom contract) created. Review and commit it below.");
             await fetchPendingPolicies();
         } catch (error: any) {
-            setMessage(`Error creating Forseti encryption policy: ${error.message}`);
+            setMessage(`Error creating Forseti encryption policy: ${errorText(error)}`);
         }
     };
 
@@ -216,7 +217,7 @@ export default function AdminPage() {
             setMessage("Encryption policy (SimpleTagBasedDecryption:1) created. Review and commit it below.");
             await fetchPendingPolicies();
         } catch (error: any) {
-            setMessage(`Error creating encryption policy: ${error.message}`);
+            setMessage(`Error creating encryption policy: ${errorText(error)}`);
         }
     };
 
@@ -267,7 +268,7 @@ export default function AdminPage() {
 
             await fetchPendingPolicies();
         } catch (error: any) {
-            setMessage(`Error reviewing policy: ${error.message}`);
+            setMessage(`Error reviewing policy: ${errorText(error)}`);
         }
     };
 
@@ -296,7 +297,7 @@ export default function AdminPage() {
             setMessage(`Policy ${policy.id.substring(0, 8)}... committed successfully!`);
             await fetchPendingPolicies();
         } catch (error: any) {
-            setMessage(`Error committing policy: ${error.message}`);
+            setMessage(`Error committing policy: ${errorText(error)}`);
         }
     };
 
@@ -309,7 +310,7 @@ export default function AdminPage() {
             await refreshToken();
             setMessage("Token refreshed");
         } catch (error: any) {
-            setMessage(`Error refreshing token: ${error.message}`);
+            setMessage(`Error refreshing token: ${errorText(error)}`);
         }
     };
 

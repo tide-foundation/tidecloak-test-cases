@@ -6,6 +6,7 @@ import { Models } from "@tide/js";
 const Policy = Models.Policy;
 import { useAuth } from "@/hooks/useAuth";
 import { base64ToBytes } from "@/lib/tideSerialization";
+import { errorText } from "@/lib/errorText";
 
 interface CommittedPolicy {
     data: string;
@@ -78,7 +79,7 @@ export default function CryptoPage() {
             setEncryptedData(encrypted);
             setMessage("Encryption successful!");
         } catch (error: any) {
-            setMessage(`Encryption error: ${error.message}`);
+            setMessage(`Encryption error: ${errorText(error)}`);
         }
     };
 
@@ -95,7 +96,7 @@ export default function CryptoPage() {
             setDecryptedData(decrypted as string);
             setMessage("Decryption successful!");
         } catch (error: any) {
-            setMessage(`Decryption error: ${error.message}`);
+            setMessage(`Decryption error: ${errorText(error)}`);
         }
     };
 
@@ -118,7 +119,7 @@ export default function CryptoPage() {
             setPolicyMessage("Policy-based encryption successful!");
         } catch (error: any) {
             console.error(error);
-            setPolicyMessage(`Policy encryption error: ${error.message}`);
+            setPolicyMessage(`Policy encryption error: ${errorText(error)}`);
         }
     };
 
@@ -141,7 +142,7 @@ export default function CryptoPage() {
             setPolicyMessage("Policy-based decryption successful!");
         } catch (error: any) {
             console.error(error);
-            setPolicyMessage(`Policy decryption error: ${error.message}`);
+            setPolicyMessage(`Policy decryption error: ${errorText(error)}`);
         }
     };
 

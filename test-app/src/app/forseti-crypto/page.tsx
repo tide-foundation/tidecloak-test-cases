@@ -7,6 +7,7 @@ const Policy = Models.Policy;
 import { useAuth } from "@/hooks/useAuth";
 import { base64ToBytes, bytesToBase64 } from "@/lib/tideSerialization";
 import { contractid as forsetiContractId } from "@/lib/forsetiDecryptionContract";
+import { errorText } from "@/lib/errorText";
 
 interface CommittedPolicy {
     data: string;
@@ -145,7 +146,7 @@ export default function ForsetiCryptoPage() {
             await fetchPendingRequests();
         } catch (error: any) {
             console.error(error);
-            setMessage(`Draft encryption error: ${error.message}`);
+            setMessage(`Draft encryption error: ${errorText(error)}`);
         }
     };
 
@@ -194,7 +195,7 @@ export default function ForsetiCryptoPage() {
 
             await fetchPendingRequests();
         } catch (error: any) {
-            setMessage(`Error approving request: ${error.message}`);
+            setMessage(`Error approving request: ${errorText(error)}`);
         }
     };
 
@@ -219,7 +220,7 @@ export default function ForsetiCryptoPage() {
             await fetchPendingRequests();
         } catch (error: any) {
             console.error(error);
-            setMessage(`Commit encryption error: ${error.message}`);
+            setMessage(`Commit encryption error: ${errorText(error)}`);
         }
     };
 
@@ -265,7 +266,7 @@ export default function ForsetiCryptoPage() {
             await fetchPendingDecryptRequests();
         } catch (error: any) {
             console.error(error);
-            setMessage(`Draft decryption error: ${error.message}`);
+            setMessage(`Draft decryption error: ${errorText(error)}`);
         }
     };
 
@@ -314,7 +315,7 @@ export default function ForsetiCryptoPage() {
 
             await fetchPendingDecryptRequests();
         } catch (error: any) {
-            setMessage(`Error approving decryption request: ${error.message}`);
+            setMessage(`Error approving decryption request: ${errorText(error)}`);
         }
     };
 
@@ -340,7 +341,7 @@ export default function ForsetiCryptoPage() {
             await fetchPendingDecryptRequests();
         } catch (error: any) {
             console.error(error);
-            setMessage(`Commit decryption error: ${error.message}`);
+            setMessage(`Commit decryption error: ${errorText(error)}`);
         }
     };
 

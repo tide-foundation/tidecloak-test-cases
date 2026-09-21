@@ -16,7 +16,7 @@
 const { test, expect } = require('@playwright/test');
 const path = require('path');
 const config = require('../utils/config');
-const { createScreenshotHelper, signInToRealm, approveViaEnclavePopup, waitForAdminAuthReady } = require('../utils/helpers');
+const { createScreenshotHelper, signInToRealm, approveViaEnclavePopup, waitForAdminAuthReady, capturePageProblems } = require('../utils/helpers');
 const { provisionScenario } = require('../utils/provision');
 
 const REALM_SETUP_RECIPE = path.join(__dirname, '..', 'realm-setup', '04-policy-management.recipe.json');
@@ -68,6 +68,9 @@ test.describe('F4: Policy Management', () => {
             netLog.push(line);
             if (netLog.length > 50) netLog.shift();
         };
+        // What the page itself reported. The handler catches the rejection and
+        // renders it, so anything the thrown value did not carry is only here.
+        const pageProblems = capturePageProblems(page);
         page.on('requestfailed', (req) => {
             const url = req.url();
             if (url.includes('/api/') || url.includes(':8080')) {
@@ -155,6 +158,12 @@ test.describe('F4: Policy Management', () => {
                     messageText ? `UI message: ${messageText}` : 'UI message: (none)',
                     `Observed network events (last ${netLog.length}):`,
                     ...netLog,
+                    ...(() => {
+                        const problems = pageProblems();
+                        return problems.length
+                            ? [`Browser reported (last ${problems.length}):`, ...problems]
+                            : ['Browser reported: (nothing)'];
+                    })(),
                 ].join('\n')
             );
         }
