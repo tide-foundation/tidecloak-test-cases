@@ -7,6 +7,7 @@ const Policy = Models.Policy;
 const BaseTideRequest = Models.BaseTideRequest;
 import { useAuth } from "@/hooks/useAuth";
 import { bytesToBase64, base64ToBytes } from "@/lib/tideSerialization";
+import { errorText } from "@/lib/errorText";
 
 interface PendingSigningRequest {
     id: string;
@@ -94,7 +95,7 @@ export default function SigningPage() {
             setMessage("TestInit:1 signing request created successfully!");
             await fetchPendingRequests();
         } catch (error: any) {
-            setMessage(`Error creating request: ${error.message}`);
+            setMessage(`Error creating request: ${errorText(error)}`);
         }
     };
 
@@ -144,7 +145,7 @@ export default function SigningPage() {
 
             await fetchPendingRequests();
         } catch (error: any) {
-            setMessage(`Error reviewing request: ${error.message}`);
+            setMessage(`Error reviewing request: ${errorText(error)}`);
         }
     };
 
@@ -183,7 +184,7 @@ export default function SigningPage() {
             setMessage(`SUCCESS! Request ${request.id.substring(0, 8)}... signed successfully!`);
             await fetchPendingRequests();
         } catch (error: any) {
-            setMessage(`Error executing request: ${error.message}`);
+            setMessage(`Error executing request: ${errorText(error)}`);
         }
     };
 
@@ -196,7 +197,7 @@ export default function SigningPage() {
             await refreshToken();
             setMessage("Token refreshed successfully");
         } catch (error: any) {
-            setMessage(`Error refreshing token: ${error.message}`);
+            setMessage(`Error refreshing token: ${errorText(error)}`);
         }
     };
 

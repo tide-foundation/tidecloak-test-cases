@@ -365,6 +365,40 @@ function getIgaEngineDir() {
 }
 
 /**
+ * Collect what the browser reported but the page never showed: uncaught page
+ * errors and console errors. When a handler catches a rejection and renders it,
+ * anything the thrown value did not carry is lost, which is how a real failure
+ * reached the UI as "Error creating policy: undefined" and stayed there for
+ * several runs.
+ *
+ * Every line goes through the redaction helpers on the way IN, not on the way
+ * out, because these end up in a failure message and from there in the
+ * published HTML report. Whatever the page logs is not ours to vouch for.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {{ max?: number }} [opts]
+ * @returns {() => string[]} the lines collected so far
+ */
+function capturePageProblems(page, opts = {}) {
+    const max = opts.max ?? 25;
+    /** @type {string[]} */
+    const lines = [];
+    const push = (line) => {
+        lines.push(redactText(line));
+        if (lines.length > max) lines.shift();
+    };
+    page.on('pageerror', (err) => {
+        push(`pageerror ${(err && err.message) || String(err)}`);
+    });
+    page.on('console', (msg) => {
+        const type = msg.type();
+        if (type !== 'error' && type !== 'warning') return;
+        push(`console.${type} ${msg.text()}`);
+    });
+    return () => lines.slice();
+}
+
+/**
  * Run a command, putting its output on ours a line at a time, masked.
  *
  * Anything a child process prints is captured by Playwright and ends up in the
@@ -533,6 +567,7 @@ module.exports = {
     expectToContainTextWithRefresh,
     provisionRealmFromRecipe,
     spawnRedacted,
+    capturePageProblems,
     getKcAdminToken,
     discoverRecipeRealm,
 };
