@@ -7,7 +7,7 @@ const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
 const { listTests, partition, toGrep, NO_TESTS } = require('../lib/partition-tests');
-const { scan, isPlaceholder, firstToken, safeName, safePath, safePreview, windowAround } = require('../lib/scan-uploads');
+const { scan, isPlaceholder, firstToken, trimJsonTail, safeName, safePath, safePreview, windowAround } = require('../lib/scan-uploads');
 const { summarize, collectStatuses } = require('../lib/summarize');
 const { buildStatus, findReports } = require('../lib/suite-status');
 const { rewrite } = require('../rewrite-file-deps');
@@ -318,6 +318,45 @@ test('slicing the window cannot expose a fragment of a secret', () => {
         null,
         'a line holding a known value must be withheld however the window would fall',
     );
+});
+
+// A console line stored in a report JSON becomes `... --tide-password ***\n","next`,
+// and the value pattern ran through the escape, the quote and into the following
+// array element. Properly masked output then read as a finding, which is what the
+// five long-standing --tide-password hits turned out to be.
+const reportWith = (lines) => JSON.stringify({ fileName: '10-forseti.spec.js', stdout: lines });
+
+test('masked output stored in a report JSON is not a finding', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'report.json'), reportWith([
+        'tide-admin-cli link-user --realm iga-10 --kc-user admin2 --tide-password ***\n',
+        'tide-admin-cli link-user --realm iga-10 --kc-user user3 --tide-password ***\n',
+        'tide-admin-cli link-user --realm iga-10 --kc-user user4 --tide-password ***\n',
+    ]));
+    assert.deepStrictEqual(scan({ dir, envNames: [] }).hits, [], 'a masked line is masked, wherever it is stored');
+});
+
+test('a real secret in the same shape is still caught, and the preview lands on it', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'report.json'), reportWith([
+        'tide-admin-cli link-user --realm iga-10 --kc-user admin2 --tide-password ***\n',
+        'tide-admin-cli link-user --realm iga-10 --kc-user user3 --tide-password ***\n',
+        'tide-admin-cli link-user --realm iga-10 --kc-user LEAKY --tide-password Str0ngRealPw!\n',
+    ]));
+    const res = spawnSync('node', [path.join(__dirname, '..', 'lib', 'scan-uploads.js'), '--dir', dir], { encoding: 'utf8' });
+    assert.strictEqual(res.status, 1);
+    const out = res.stdout + res.stderr;
+    assert.ok(!out.includes('Str0ngRealPw!'));
+    // The window must show the occurrence that matched, not the first one. A
+    // preview pointing at a different command sends you looking in the wrong place.
+    assert.match(out, /LEAKY/, 'the preview names the command that leaked');
+});
+
+test('a value is cut at JSON syntax, and a quoted one is taken from inside', () => {
+    assert.strictEqual(trimJsonTail('***\\n","tide-admin-cli'), '***');
+    assert.strictEqual(trimJsonTail('hunter2hunter2\\n","next'), 'hunter2hunter2', 'only ever shortens');
+    assert.strictEqual(trimJsonTail('"hunter2"'), 'hunter2', 'a quoted value keeps its contents');
+    assert.strictEqual(trimJsonTail('hunter2hunter2'), 'hunter2hunter2', 'plain text is untouched');
 });
 
 test('the upload scan looks inside zips and HTML-embedded zips, and blocks files by name', () => {

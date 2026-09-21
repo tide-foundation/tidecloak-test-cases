@@ -64,6 +64,25 @@ function isPlaceholder(value) {
 // Only the scanner narrows. Redaction keeps the wider pattern on purpose.
 const firstToken = (value) => String(value).split(/[;,)}\]]/)[0];
 
+// A value captured out of a JSON document runs straight into the container's
+// syntax. A console line stored in a Playwright report becomes
+//   ... --tide-password ***\n","tide-admin-cli link-user ...
+// and the value pattern, which only stops at whitespace, swallows the escape,
+// the closing quote and the start of the NEXT array element. A properly masked
+// *** then stops looking like the placeholder it is, and a masked line reads as
+// a finding.
+//
+// Cut the value at the first piece of JSON syntax instead. This cannot hide a
+// real secret: it only ever shortens the value, so a leaked
+// `--tide-password hunter2hunter2` still reads as hunter2hunter2.
+const trimJsonTail = (value) => {
+    const v = String(value);
+    // A fully quoted value was captured intact; take what is inside it.
+    const quoted = /^(["'])([\s\S]*)\1$/.exec(v);
+    if (quoted) return quoted[2];
+    return v.split(/[\\"]/)[0];
+};
+
 // A finding names the flag or key that matched, never what it matched, so a
 // hit can be triaged from the job log without fetching the artifact and
 // without publishing the secret. The name comes out of a scanned file, and
@@ -88,6 +107,25 @@ const safePath = (p) => String(p).replace(/[\x00-\x1F\x7F]/g, '');
 // to quote a document back into the log.
 const PREVIEW_MAX = 200;
 
+/** The index of the nth (0 based) occurrence of `needle`, or -1. */
+function nthIndexOf(text, needle, n) {
+    let i = text.indexOf(needle);
+    for (let k = 0; k < n && i !== -1; k += 1) i = text.indexOf(needle, i + needle.length);
+    return i;
+}
+
+/** How many occurrences of `needle` start before `before`. */
+function occurrenceIndex(text, needle, before) {
+    if (!needle) return 0;
+    let n = 0;
+    let i = text.indexOf(needle);
+    while (i !== -1 && i < before) {
+        n += 1;
+        i = text.indexOf(needle, i + needle.length);
+    }
+    return n;
+}
+
 /**
  * Cut a window out of an already-masked line, centred on `focus` so the match is
  * in it. A report's per-test JSON is one long minified line, so a window taken
@@ -98,9 +136,9 @@ const PREVIEW_MAX = 200;
  * flag in front of it for redaction to recognise, and half a secret is still
  * half a secret.
  */
-function windowAround(text, focus) {
+function windowAround(text, focus, nth = 0) {
     if (text.length <= PREVIEW_MAX) return text;
-    let at = focus ? text.indexOf(focus) : -1;
+    let at = focus ? nthIndexOf(text, focus, nth) : -1;
     if (at === -1) at = text.indexOf(MASK);
     if (at === -1) at = 0;
     const start = Math.max(0, Math.min(at - Math.floor(PREVIEW_MAX / 2), text.length - PREVIEW_MAX));
@@ -113,13 +151,16 @@ function windowAround(text, focus) {
  * then treated as hostile the same way a path or a key name is, because this is
  * the third place we print content out of a scanned file into a public log.
  *
- * `focus` is the flag or key that matched, so the window lands on it.
+ * `focus` is the flag or key that matched and `nth` is which occurrence of it,
+ * so the window lands on the one the rule matched. A single report line can
+ * hold several commands, and showing a different one than the rule matched is
+ * worse than showing none: it sends you looking in the wrong place.
  *
  * Returns null when redaction did not clear the line. A line that still looks
  * like a secret after masking is exactly the line not to show, so the caller
  * prints a note instead of guessing.
  */
-function safePreview(line, secrets, skipRules, focus) {
+function safePreview(line, secrets, skipRules, focus, nth = 0) {
     const redacted = redactText(line);
 
     // redactText knows shapes, not values, so check the known ones separately.
@@ -132,7 +173,7 @@ function safePreview(line, secrets, skipRules, focus) {
     for (const [rule, re, pick, min] of REDACT_RULES) {
         if (skipRules.has(rule)) continue;
         for (const m of redacted.matchAll(new RegExp(re.source, re.flags))) {
-            const value = pick(m) || '';
+            const value = trimJsonTail(pick(m) || '');
             if (value.replace(/^["']|["']$/g, '').length >= min && !isPlaceholder(value)) return null;
         }
     }
@@ -141,7 +182,7 @@ function safePreview(line, secrets, skipRules, focus) {
     // a fresh one that begins with '::'.
     const clean = redacted.replace(/[\x00-\x1F\x7F]/g, ' ').trim();
     if (!clean) return null;
-    return windowAround(clean, focus);
+    return windowAround(clean, focus, nth);
 }
 
 // The redaction helpers' patterns, turned into finders. Each returns the
@@ -191,7 +232,7 @@ function scanText(text, file, secrets, skipRules) {
         // Computed here, once, so the unmasked line is never stored on a hit.
         // Recomputed per hit rather than cached: each rule centres the window on
         // its own match. Hits are rare, since one of them fails the run.
-        const previewFor = (focus) => safePreview(line, secrets, skipRules, focus);
+        const previewFor = (focus, nth) => safePreview(line, secrets, skipRules, focus, nth);
         for (const [value, name] of secrets) {
             if (line.includes(value)) hits.push({ where, rule: `value of ${name}`, preview: previewFor() });
         }
@@ -201,10 +242,10 @@ function scanText(text, file, secrets, skipRules) {
         for (const [rule, re, pick, min, pickName] of REDACT_RULES) {
             if (skipRules.has(rule)) continue;
             for (const m of line.matchAll(new RegExp(re.source, re.flags))) {
-                const value = pick(m) || '';
+                const value = trimJsonTail(pick(m) || '');
                 if (value.replace(/^["']|["']$/g, '').length >= min && !isPlaceholder(value)) {
                     const name = safeName(pickName && pickName(m));
-                    hits.push({ where, rule, name, preview: previewFor(name) });
+                    hits.push({ where, rule, name, preview: previewFor(name, occurrenceIndex(line, name, m.index)) });
                     break;
                 }
             }
@@ -324,4 +365,4 @@ if (require.main === module) {
     }
 }
 
-module.exports = { scan, scanText, secretValues, isPlaceholder, firstToken, safeName, safePath, safePreview, windowAround, TOKEN_RULES };
+module.exports = { scan, scanText, secretValues, isPlaceholder, firstToken, trimJsonTail, safeName, safePath, safePreview, windowAround, TOKEN_RULES };
