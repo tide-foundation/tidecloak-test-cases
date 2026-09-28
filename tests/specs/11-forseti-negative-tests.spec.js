@@ -19,7 +19,8 @@ const { test, expect } = require('@playwright/test');
 const path = require('path');
 const config = require('../utils/config');
 const { createScreenshotHelper, signInToRealm, approveViaEnclavePopup, commitPolicyViaGovernance, goToForsetiPage, cleanupPendingRequests, expectToContainTextWithRefresh } = require('../utils/helpers');
-const { provisionScenario } = require('../utils/provision');
+const { provisionScenario, readScenario } = require('../utils/provision');
+const { writeRealmCache } = require('../utils/realmCache');
 
 const REALM_SETUP_RECIPE = path.join(__dirname, '..', 'realm-setup', '11-forseti-negative-tests.recipe.json');
 const testTag = 'ingredients';
@@ -31,7 +32,11 @@ test.describe('F11: Forseti Contract Negative Tests', () => {
     let ctx;
     /** @type {{ kcUsername: string, tideUsername: string, password: string }} */
     let adminCreds, admin2Creds, user3Creds, user4Creds, user5Creds;
-    /** the real ciphertext minted in SETUP, used by the NEG-2/NEG-3 decrypt cases */
+    /**
+     * The real ciphertext minted in SETUP, used by the NEG-2/NEG-3 decrypt cases. A worker restart
+     * re-evaluates this module and resets it to null, so SETUP-6 also parks it in the realm cache
+     * that already survives a restart, and beforeAll reads it back.
+     */
     let forsetiCiphertext = null;
 
     /**
@@ -79,6 +84,7 @@ test.describe('F11: Forseti Contract Negative Tests', () => {
         user3Creds = ctx.users.user3;
         user4Creds = ctx.users.user4;
         user5Creds = ctx.users.user5;
+        forsetiCiphertext = ctx.forsetiCiphertext || null;
         console.log(`Realm ${ctx.realm}; admin + admin2/user3 (exec) + user4/user5 (proc)`);
     });
 
@@ -149,6 +155,10 @@ test.describe('F11: Forseti Contract Negative Tests', () => {
         const encryptedOutput = await page.locator('[data-testid="forseti-encrypted-output"]').inputValue();
         expect(encryptedOutput.length).toBeGreaterThan(0);
         forsetiCiphertext = encryptedOutput;
+        // The realm is only half of what the negatives need; keep the ciphertext with it so a
+        // worker restart gets both back instead of reusing the realm against a null ciphertext.
+        ctx.forsetiCiphertext = encryptedOutput;
+        writeRealmCache(readScenario(REALM_SETUP_RECIPE).name, ctx);
         console.log(`SETUP: ciphertext minted (${encryptedOutput.length} chars) — negatives can now run`);
     });
 
