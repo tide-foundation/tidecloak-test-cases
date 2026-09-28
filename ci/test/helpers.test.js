@@ -404,6 +404,33 @@ test('suite status counts Playwright JSON stats', () => {
     assert.strictEqual(buildStatus({ suite: 'x', exit: 0, files: [] }).reported, false);
 });
 
+test('a lane with no readable report still writes a status file, but exits non-zero', () => {
+    const dir = tmp();
+    const out = path.join(dir, 'status', 'admin-runtime.json');
+    const script = path.join(__dirname, '..', 'lib', 'suite-status.js');
+    const args = ['--suite', 'admin-runtime', '--exit', '0', '--seconds', '3114', '--out', out];
+
+    const none = spawnSync(process.execPath, [script, ...args, '--json', path.join(dir, 'results.json')], { encoding: 'utf8' });
+    assert.notStrictEqual(none.status, 0, 'unknown counts must not be reported as a clean run');
+    assert.match(none.stderr, /no test report/);
+    assert.strictEqual(JSON.parse(fs.readFileSync(out, 'utf8')).reported, false);
+
+    // A lane that really selected no tests still has a report, and stays green.
+    const empty = path.join(dir, 'results.json');
+    fs.writeFileSync(empty, JSON.stringify({ stats: { expected: 0, unexpected: 0, flaky: 0, skipped: 0 } }));
+    const ok = spawnSync(process.execPath, [script, ...args, '--json', empty], { encoding: 'utf8' });
+    assert.strictEqual(ok.status, 0);
+    assert.strictEqual(JSON.parse(fs.readFileSync(out, 'utf8')).reported, true);
+});
+
+test('summary calls out a suite that reported no counts, even when it exited clean', () => {
+    const green = { suite: 'iga-engine', shard: 'iga-engine', result: 'passed', exit: 0, seconds: 61, reported: true, counts: { passed: 3 } };
+    const silent = { suite: 'admin-runtime', shard: 'local', result: 'passed', exit: 0, seconds: 3114, reported: false, counts: {} };
+    const res = summarize({ statuses: [green, silent] });
+    assert.strictEqual(res.ok, false);
+    assert.match(res.markdown, /admin-runtime.*counts are unknown/);
+});
+
 test('summary fails on a failed or missing suite and passes when all report green', () => {
     const ok = { suite: 'iga-engine', shard: 'iga-engine', result: 'passed', exit: 0, seconds: 61, reported: true, counts: { passed: 3 } };
     const expect = [{ id: 'iga-engine', suites: 'iga-engine' }, { id: 'test-cases-1', suites: 'test-cases' }];

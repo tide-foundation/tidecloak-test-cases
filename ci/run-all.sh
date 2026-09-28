@@ -61,9 +61,10 @@ ensure_status() {
     local file="$CI_REPORTS_DIR/status/$name.json"
     [ ! -f "$file" ] || return 0
     mkdir -p "$CI_REPORTS_DIR/status"
+    # Already a failed row, so a missing report here needs no second alarm.
     node "$CI_DIR/lib/suite-status.js" \
         --suite "$name" --exit "$rc" --seconds "$seconds" \
-        --json "$CI_REPORTS_DIR/$name" --out "$file"
+        --json "$CI_REPORTS_DIR/$name" --out "$file" || true
 }
 
 failed=()
