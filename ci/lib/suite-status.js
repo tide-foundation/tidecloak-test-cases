@@ -4,6 +4,10 @@
 //
 //   node suite-status.js --suite iga-engine --exit 0 --seconds 312 \
 //        --json <file-or-dir> --out status/iga-engine.json
+//
+// The status file is always written, but a run with no readable report exits
+// non-zero. Unknown counts must never pass for zero counts: a lane that ran 64
+// tests and a lane that selected none would otherwise write the same file.
 'use strict';
 
 const fs = require('fs');
@@ -90,6 +94,9 @@ function main() {
     });
     fs.mkdirSync(path.dirname(args.out), { recursive: true });
     fs.writeFileSync(args.out, JSON.stringify(status, null, 2) + '\n');
+    if (!status.reported) {
+        throw new Error(`${args.suite}: no test report under ${args.json.join(', ')}; its counts are unknown, not zero`);
+    }
 }
 
 if (require.main === module) {

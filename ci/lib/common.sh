@@ -181,10 +181,17 @@ run_suite() {
         cp -r "$workdir/$html_src" "$out/html"
     fi
 
+    # Unknown counts are not zero counts. If the report cannot be read, say so
+    # and fail the lane rather than publishing a row that claims nothing ran.
+    local status_rc=0
     node "$CI_DIR/lib/suite-status.js" \
         --suite "$suite" --exit "$rc" --seconds "$seconds" \
         --json "$out/results.json" \
-        --out "$CI_REPORTS_DIR/status/$suite.json"
+        --out "$CI_REPORTS_DIR/status/$suite.json" || status_rc=$?
+    if [ "$status_rc" -ne 0 ]; then
+        annotate error "$suite ran but left no readable test report; its counts are unknown"
+        [ "$rc" -ne 0 ] || rc=1
+    fi
     log "$suite finished with exit $rc after ${seconds}s"
     return "$rc"
 }

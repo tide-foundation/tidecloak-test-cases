@@ -70,6 +70,8 @@ function summarize({ statuses, expect, builds }) {
             note: s.reported ? '' : 'no test report',
         });
         if (s.result !== 'passed') problems.push(`${s.suite} (${s.shard}) failed with exit ${s.exit}`);
+        // Zeros next to a real duration read as "nothing ran". Say it is unknown.
+        if (!s.reported) problems.push(`${s.suite} (${s.shard}) left no test report; its counts are unknown`);
     }
 
     for (const shard of expect || []) {

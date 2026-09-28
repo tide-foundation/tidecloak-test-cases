@@ -7,12 +7,16 @@
 # Selection:
 #   SUITE_MODE        smoke | full. Runtime smoke is `--project=runtime` with
 #                     ADMIN_RUNTIME_SMOKE_GREP (default "@smoke").
-#   SUITE_PROJECTS    runtime projects to run (default for a full run: runtime,
-#                     runtime-serial and runtime-social). runtime-setup always
-#                     runs as their dependency.
+#   SUITE_PROJECTS    runtime projects to run. The default is whichever of
+#                     runtime, runtime-serial and runtime-social the suite
+#                     defines: we ask Playwright instead of keeping a copy of
+#                     its project list here, because the suite is in another
+#                     repo on its own branch and the set moves. runtime-setup
+#                     always runs as their dependency.
 #   SUITE_PARTITION   k/N: split the `runtime` project's recipes by title. The
 #                     project is one non-parallel file, which Playwright's
-#                     --shard cannot split. Only valid with SUITE_PROJECTS=runtime.
+#                     --shard cannot split. Only valid when the selection is
+#                     just runtime.
 #   SUITE_GREP, SUITE_GREP_INVERT, SUITE_SHARD (Playwright --shard)
 # Unexpected skips fail the run (REQUIRE_NO_UNEXPECTED_SKIPS=1), and the suite's
 # own ci:summary table is printed, and added to the Actions step summary when
@@ -43,6 +47,40 @@ suite_summary() {
     step_summary "$md"
 }
 
+# Every Playwright project the suite defines, space separated. `--list` parses
+# the config and discovers tests without running any.
+suite_projects() {
+    local out names
+    out="$(mktemp)"
+    (cd "$dir" && PLAYWRIGHT_JSON_OUTPUT_NAME="$out" npx playwright test --list --reporter=json) >/dev/null 2>&1 || true
+    names="$(node -e '
+const fs = require("fs");
+let report;
+try { report = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch (e) { process.exit(1); }
+const names = ((report.config || {}).projects || []).map((p) => p.name).filter(Boolean);
+process.stdout.write([...new Set(names)].join(" "));
+' "$out" 2>/dev/null)" || true
+    rm -f "$out"
+    [ -n "$names" ] || return 1
+    printf '%s\n' "$names"
+}
+
+# Asked for once, and only when something needs it.
+available=""
+need_projects() {
+    if [ -z "$available" ]; then
+        available="$(suite_projects)" || die "could not list the suite's Playwright projects in $dir"
+    fi
+}
+
+has_project() {
+    local p
+    for p in $1; do
+        if [ "$p" = "$2" ]; then return 0; fi
+    done
+    return 1
+}
+
 case "$lane" in
     bootstrap)
         pw_selection_args
@@ -63,7 +101,17 @@ case "$lane" in
                 export SUITE_GREP="${ADMIN_RUNTIME_SMOKE_GREP:-@smoke}"
             fi
         fi
-        projects="${projects:-runtime runtime-serial runtime-social}"
+        if [ -z "$projects" ]; then
+            need_projects
+            # Whichever of ours the suite has, in this order. A consolidated
+            # suite that folded the serial and social specs into `runtime`
+            # leaves just that one, and nothing is lost.
+            for p in runtime runtime-serial runtime-social; do
+                if has_project "$available" "$p"; then projects="${projects:+$projects }$p"; fi
+            done
+            [ -n "$projects" ] || die "the suite defines no runtime project; it has: $available"
+            log "runtime projects: $projects"
+        fi
         if [ -n "${SUITE_PARTITION:-}" ]; then
             [ "$projects" = runtime ] || die "SUITE_PARTITION only splits the runtime project (got: $projects)"
             list="$(mktemp)"
@@ -77,7 +125,10 @@ case "$lane" in
         fi
         project_args=()
         for p in $projects; do
-            case "$p" in runtime|runtime-serial|runtime-social) project_args+=("--project=$p") ;; *) die "unknown runtime project: $p" ;; esac
+            case "$p" in runtime|runtime-*) ;; *) die "not a runtime project: $p" ;; esac
+            need_projects
+            has_project "$available" "$p" || die "the suite has no Playwright project '$p'; it has: $available"
+            project_args+=("--project=$p")
         done
         pw_selection_args
         rc=0
