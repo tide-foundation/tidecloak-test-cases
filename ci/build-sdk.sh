@@ -44,12 +44,9 @@ build_heimdall() {
 
 build_tidecloak_js() {
     cd "$ws/tidecloak-js/packages/tidecloak-js" || exit 1
-    # Registry versions of heimdall/tide-js would be installed here; swap in ours.
+    # Point at our builds before installing: a release bumps them to versions not on npm yet.
+    npm pkg set "dependencies.heimdall-tide=file:$ws/heimdall" "dependencies.@tideorg/js=file:$ws/tide-js"
     npm install --no-audit --no-fund --ignore-scripts
-    mkdir -p node_modules/@tideorg
-    rm -rf node_modules/heimdall-tide node_modules/@tideorg/js
-    ln -s "$ws/heimdall" node_modules/heimdall-tide
-    ln -s "$ws/tide-js" node_modules/@tideorg/js
     npm run build
 }
 
