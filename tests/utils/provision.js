@@ -34,6 +34,7 @@ const { linkUser, addTideRealmAdmin } = require('./tideAdminCli');
 const { readRealmCache, writeRealmCache } = require('./realmCache');
 const { enclavePassword } = require('./enclavePassword');
 const { redactText } = require('./redact');
+const { recoveryAddress } = require('./gmailInbox');
 
 /**
  * A user in the RealmContext. A Tide identity is GLOBAL to the ORK network (it spans realms),
@@ -42,12 +43,16 @@ const { redactText } = require('./redact');
  * Keycloak username (stable, from the recipe) used for REST lookups, role grants, and `--kc-user`.
  * `password` goes with `tideUsername`: it is the Tide identity's password, minted per run (see
  * utils/enclavePassword.js), NOT the Keycloak password the recipe's user.create step sets.
- * @typedef {{ kcUsername: string, tideUsername: string, password: string }} UserCred
+ * `recoveryEmail` is set only for the users named in `_tideSetup.gmailRecoveryUsers`: a per-run
+ * plus-address of GMAIL_ADDRESS (utils/gmailInbox.js), registered as the Tide identity's recovery
+ * email at sign-up. Everyone else gets tide-admin-cli's default, which no one can read.
+ * @typedef {{ kcUsername: string, tideUsername: string, password: string, recoveryEmail?: string }} UserCred
  * @typedef {{
  *   appClient: string,
  *   appLoginUser: string,
  *   linkUsers: string[],
  *   realmAdmins: string[],
+ *   gmailRecoveryUsers?: string[],
  * }} TideSetup
  * @typedef {{
  *   realm: string,
@@ -218,6 +223,7 @@ async function provisionScenario(recipePath, opts = {}) {
     }
     const linkUsers = tideSetup.linkUsers || [];
     const realmAdmins = tideSetup.realmAdmins || [];
+    const gmailRecoveryUsers = tideSetup.gmailRecoveryUsers || [];
 
     // ── Retry reuse: if THIS recipe was already provisioned earlier in this run (i.e. a prior
     //    worker that Playwright restarted for a retry), reuse that realm instead of building a
@@ -257,6 +263,8 @@ async function provisionScenario(recipePath, opts = {}) {
     const userCtx = {};
     for (const n of Object.keys(users)) {
         userCtx[n] = { kcUsername: n, tideUsername: `${n}-${runToken}`, password: enclavePassword() };
+        // Tagged with the tideUsername, so it is unique per run like the identity itself.
+        if (gmailRecoveryUsers.includes(n)) userCtx[n].recoveryEmail = recoveryAddress(userCtx[n].tideUsername);
     }
 
     /** look up an enriched user (must exist as a recipe user.create) */
@@ -275,7 +283,7 @@ async function provisionScenario(recipePath, opts = {}) {
     const nonAdminLinks = linkUsers.filter((u) => !realmAdmins.includes(u));
     for (const u of nonAdminLinks) {
         const c = cred(u);
-        linkUser({ realm, kcUser: c.kcUsername, tideUsername: c.tideUsername, tidePassword: c.password });
+        linkUser({ realm, kcUser: c.kcUsername, tideUsername: c.tideUsername, tidePassword: c.password, tideEmail: c.recoveryEmail });
     }
 
     // ── 4. Elevate ONLY the realmAdmins. The first one links + grants in one call (firstAdmin);
@@ -284,10 +292,10 @@ async function provisionScenario(recipePath, opts = {}) {
     realmAdmins.forEach((u, i) => {
         const c = cred(u);
         if (i === 0) {
-            linkUser({ realm, kcUser: c.kcUsername, tideUsername: c.tideUsername, tidePassword: c.password, grantRealmAdmin: true });
+            linkUser({ realm, kcUser: c.kcUsername, tideUsername: c.tideUsername, tidePassword: c.password, tideEmail: c.recoveryEmail, grantRealmAdmin: true });
             firstAdminCred = c;
         } else {
-            linkUser({ realm, kcUser: c.kcUsername, tideUsername: c.tideUsername, tidePassword: c.password, approverAdmins: [enclaveCred(firstAdminCred)] });
+            linkUser({ realm, kcUser: c.kcUsername, tideUsername: c.tideUsername, tidePassword: c.password, tideEmail: c.recoveryEmail, approverAdmins: [enclaveCred(firstAdminCred)] });
             addTideRealmAdmin({ realm, kcUser: c.kcUsername, existingAdmins: [enclaveCred(firstAdminCred)] });
         }
     });

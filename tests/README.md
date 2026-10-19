@@ -146,6 +146,7 @@ Then: `npm test` (or `npm run test:headed`).
 | `RECIPE_REALM` | - | pin the realm name (skip discovery) |
 | `TIDE_USER_PASSWORD` | (unset) | pin the password of every provisioned Tide identity (default: random per user per run) |
 | `PW_REALM_CACHE_DIR` | per-user temp dir | where the retry realm cache lives |
+| `GMAIL_ADDRESS` / `GMAIL_APP_PASSWORD` | (unset) | the inbox spec 13 reads recovery emails from (root README, "Account recovery email") |
 
 ## Spec map
 
@@ -159,3 +160,4 @@ Then: `npm test` (or `npm run test:headed`).
 | 10 | Forseti EXPLICIT encrypt + decrypt paths | `admin` | 5 linked users; 4 approvers are not admins |
 | 11 | Forseti negative paths | `admin` | self-contained: SETUP mints the policy + ciphertext (3 executives) |
 | 12 | multi-client DPoP SSO | *(none)* | uses the `/dpop-harness` page; provisions via `provisionRealmFromRecipe` directly |
+| 13 | account recovery over real email | *(none)* | `_tideSetup.gmailRecoveryUsers` registers a Gmail plus-address as the recovery email; skips without `GMAIL_*` |
