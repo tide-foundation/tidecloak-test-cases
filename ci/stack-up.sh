@@ -57,7 +57,64 @@ load_stack_env "$stack_env" || die "gen-stack.sh did not write $stack_env"
 stack_defaults
 log "stack: $(ork_count) ORKs ($ORK_CONTAINERS), home ORK $HOME_ORK_ORIGIN, threshold ${TIDE_THRESHOLD_T:-?} of ${TIDE_THRESHOLD_N:-?}"
 
+# The ORKs send the account-recovery emails themselves, over SMTP. The image's
+# appsettings only hold placeholders, so without this nothing is delivered and
+# spec 13 (account recovery) cannot pass. ORK_SMTP_HOST picks any relay; with
+# only GMAIL_ADDRESS + GMAIL_APP_PASSWORD set, the ORKs send through that Gmail
+# account, the same one spec 13 reads. The values go into .env.ci (0600) and
+# the override only references them, so it stays safe to print like
+# compose.ci.yml.
+compose_files=(-f "$compose")
+smtp_host="${ORK_SMTP_HOST:-}"
+smtp_user="${ORK_SMTP_USER:-}"
+smtp_pass="${ORK_SMTP_PASSWORD:-}"
+if [ -z "$smtp_host" ] && [ -n "${GMAIL_ADDRESS:-}" ] && [ -n "${GMAIL_APP_PASSWORD:-}" ]; then
+    smtp_host=smtp.gmail.com
+    smtp_user="$GMAIL_ADDRESS"
+    smtp_pass="$GMAIL_APP_PASSWORD"
+fi
+if [ -n "$smtp_host" ]; then
+    [ -n "$smtp_user" ] && [ -n "$smtp_pass" ] || die "ORK_SMTP_HOST is set but ORK_SMTP_USER or ORK_SMTP_PASSWORD is not"
+    mask "$smtp_pass"
+    smtp_port="${ORK_SMTP_PORT:-587}"
+    [[ "$smtp_port" =~ ^[1-9][0-9]*$ ]] || die "ORK_SMTP_PORT must be a port number, got: $smtp_port"
+    smtp_ssl="${ORK_SMTP_SSL:-true}"
+    [[ "$smtp_ssl" =~ ^(true|false)$ ]] || die "ORK_SMTP_SSL must be true or false, got: $smtp_ssl"
+    # Gmail rewrites any other From to the account anyway.
+    smtp_from="${ORK_SMTP_FROM:-$smtp_user}"
+    for v in "$smtp_host" "$smtp_user" "$smtp_pass" "$smtp_from"; do
+        case "$v" in *"'"*|*$'\n'*|*$'\r'*) die "the ORK SMTP settings cannot contain a quote or a newline" ;; esac
+    done
+    {
+        printf "ORK_SMTP_HOST='%s'\n" "$smtp_host"
+        printf "ORK_SMTP_PORT='%s'\n" "$smtp_port"
+        printf "ORK_SMTP_SSL='%s'\n" "$smtp_ssl"
+        printf "ORK_SMTP_USER='%s'\n" "$smtp_user"
+        printf "ORK_SMTP_PASSWORD='%s'\n" "$smtp_pass"
+        printf "ORK_SMTP_FROM='%s'\n" "$smtp_from"
+    } >> "$env_ci"
+    smtp_compose="$CI_STACK_DIR/compose.smtp.yml"
+    {
+        echo "services:"
+        for n in $(seq 1 "$(ork_count)"); do
+            # shellcheck disable=SC2016  # compose fills these in, not bash
+            printf '  ork%s:\n    environment:\n' "$n"
+            printf '      %s\n' \
+                'Email__SmtpClient: ${ORK_SMTP_HOST:?}' \
+                'Email__OrkEmail: ${ORK_SMTP_FROM:?}' \
+                'Email__NetworkCredentials__Username: ${ORK_SMTP_USER:?}' \
+                'Email__NetworkCredentials__Password: ${ORK_SMTP_PASSWORD:?}' \
+                'Email__NetworkCredentials__Port: ${ORK_SMTP_PORT:?}' \
+                'Email__NetworkCredentials__EnableSsl: ${ORK_SMTP_SSL:?}'
+        done
+    } > "$smtp_compose"
+    compose_files+=(-f "$smtp_compose")
+    log "ORK recovery email: SMTP via $smtp_host:$smtp_port"
+else
+    log "ORK recovery email: no SMTP override (set ORK_SMTP_* or GMAIL_*), so recovery emails will not be delivered"
+fi
+
 # Never print `docker compose config`: it resolves the secrets.
 start=$(date +%s)
-docker compose -p "$COMPOSE_PROJECT_NAME" -f "$compose" --env-file "$env_ci" up -d --quiet-pull
+docker compose -p "$COMPOSE_PROJECT_NAME" "${compose_files[@]}" --env-file "$env_ci" up -d --quiet-pull
 log "compose up returned after $(( $(date +%s) - start ))s"

@@ -175,6 +175,9 @@ on:
         required: false
       TEMP_EMAIL_PASSWORD:
         required: false
+      GMAIL_APP_PASSWORD:
+        required: false
+        description: App password for the vars.GMAIL_ADDRESS inbox; without it the account-recovery spec skips
       STRIPE_TEST_SK:
         required: false
         description: Stripe test-mode key for the stack; without it licensing flows fail
@@ -478,6 +481,9 @@ jobs:
           STRIPE_PRICE: ${{ inputs.stripe_price || vars.STRIPE_PRICE }}
           STRIPE_FREE_PRODUCT_ID: ${{ inputs.stripe_free_product_id || vars.STRIPE_FREE_PRODUCT_ID }}
           STRIPE_PRODUCT_ID: ${{ inputs.stripe_product_id || vars.STRIPE_PRODUCT_ID }}
+          # The ORKs send the account-recovery emails through this Gmail account.
+          GMAIL_ADDRESS: ${{ vars.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         run: self/ci/stack-up.sh
 
       - name: Install suite dependencies
@@ -503,6 +509,10 @@ jobs:
         id: test_cases
         if: always() && steps.ready.outcome == 'success' && contains(format(' {0} ', matrix.suites), ' test-cases ')
         timeout-minutes: 90
+        env:
+          # Spec 13 reads the recovery emails from this inbox over IMAP.
+          GMAIL_ADDRESS: ${{ vars.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         run: self/ci/run-test-cases.sh
 
       - name: 'Suite: tide-admin-ui bootstrap'
@@ -535,12 +545,13 @@ jobs:
         id: scan
         if: always()
         env:
-          SCAN_SECRET_ENVS: KC_ADMIN_PASSWORD STRIPE_TEST_SK CHECKOUT_TOKEN CI_REGISTRY_TOKEN MAILSLURP_API TEMP_EMAIL_PASSWORD
+          SCAN_SECRET_ENVS: KC_ADMIN_PASSWORD STRIPE_TEST_SK CHECKOUT_TOKEN CI_REGISTRY_TOKEN MAILSLURP_API TEMP_EMAIL_PASSWORD GMAIL_APP_PASSWORD
           STRIPE_TEST_SK: ${{ secrets.STRIPE_TEST_SK }}
           CHECKOUT_TOKEN: ${{ secrets.CHECKOUT_TOKEN }}
           CI_REGISTRY_TOKEN: ${{ secrets.CI_REGISTRY_TOKEN }}
           MAILSLURP_API: ${{ secrets.MAILSLURP_API }}
           TEMP_EMAIL_PASSWORD: ${{ secrets.TEMP_EMAIL_PASSWORD }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         run: self/ci/scan-uploads.sh "$RUNNER_TEMP/tide-upload"
 
       - name: Upload reports

@@ -133,6 +133,7 @@ Notes that will save you confusion:
 | [10-forseti-policy-encryption](tests/specs/10-forseti-policy-encryption.spec.js) | Forseti EXPLICIT encrypt + 2 decrypt paths | admin + admin2/user3/user4/user5 | admin only | `… specs/10-*` |
 | [11-forseti-negative-tests](tests/specs/11-forseti-negative-tests.spec.js) | Forseti rejects under-threshold / wrong-tag commits | admin + admin2/user3/user4/user5 | admin only | `… specs/11-*` |
 | [12-dpop-multi-client-sso](tests/specs/12-dpop-multi-client-sso.spec.js) | DPoP-bound tokens + silent SSO across 2 clients | ssouser | no | `… specs/12-*` |
+| [13-account-recovery](tests/specs/13-account-recovery.spec.js) | "Forgot password": a threshold of real emailed links (read from Gmail) resets the password, which then signs in | recoverer | no | `… specs/13-*` (needs [Gmail](#account-recovery-email)) |
 
 Each spec's realm is defined by a matching recipe in
 [tests/realm-setup/](tests/realm-setup/) (e.g. `10-forseti-policy-encryption.recipe.json`).
@@ -246,6 +247,40 @@ Defaults assume an all-localhost stack.
 | `PW_JSON_OUTPUT` | unset | also write a Playwright JSON report there (CI uses it for the summary) |
 | `ORK_CONTAINERS` | `Ork-1..Ork-5` | comma separated, from `stack.env`. Only its length is used here, to size the timeouts |
 | `PW_TIMEOUT_SCALE` | derived from `ORK_CONTAINERS` | multiplies every timeout the suite sets. 1 on a 5-ORK stack, 4 on a 20-ORK one |
+| `GMAIL_ADDRESS` / `GMAIL_APP_PASSWORD` | unset (spec 13 skips) | the inbox spec 13 reads recovery emails from, over IMAP. See below |
+| `RECOVERY_EMAIL_TIMEOUT_MS` | `300000` | how long spec 13 waits for the recovery emails |
+| `TIDE_THRESHOLD_T` | unset | the stack's threshold. When set, spec 13 checks that exactly this many links were needed |
+
+### Account recovery email
+
+Spec 13 tests the real email loop. The ORKs send each recovery email over SMTP. Gmail delivers
+it, and the spec reads it back over IMAP and opens the links. Nothing is mocked.
+
+1. **A Gmail account for the suite.** Use a dedicated one, never a person's. Turn on 2-Step
+   Verification, then create an app password (Google Account > Security > App passwords). IMAP
+   is on by default.
+2. **The suite reads it.** Set `GMAIL_ADDRESS` and `GMAIL_APP_PASSWORD`. Each run registers the
+   user's recovery email as a plus-address (`you+recoverer-<run>@gmail.com`), so runs never read
+   each other's mail. The spec deletes the messages it read when it finishes.
+3. **The ORKs must send real mail.** The SMTP settings baked into the ORK image are
+   placeholders, so on a stack you start yourself nothing is delivered. `ci/stack-up.sh`
+   overrides them on every ORK (`compose.smtp.yml`). With only the two `GMAIL_*` values set, the
+   ORKs send through that same Gmail account (`smtp.gmail.com:587`). To use another relay, set
+   `ORK_SMTP_HOST`, `ORK_SMTP_USER` and `ORK_SMTP_PASSWORD` (plus `ORK_SMTP_PORT` (`587`),
+   `ORK_SMTP_SSL` (`true`) and `ORK_SMTP_FROM` (the user) if needed). On a stack you run another
+   way, give each ORK container the same settings as environment variables:
+   `Email__SmtpClient`, `Email__OrkEmail`, `Email__NetworkCredentials__Username`, `__Password`,
+   `__Port` and `__EnableSsl`.
+
+4. **The ORKs must know their own URL.** On a dev or CI stack the enclave is served from
+   `localhost` while the ORKs register `hostgateway`. Before tide-foundation/ork#521 every ORK
+   rejected the recovery request (`Ork not found` in `StartRecovery`) and sent nothing. Spec 13
+   needs ORK images with that fix. The emailed links then point at `hostgateway`, and the spec
+   opens them through `localhost` when that name does not resolve.
+
+If the emails never arrive, the spec fails with a count of how many did. Look at the ORK logs
+for an SMTP error from `AccountRecoveryController`. Mail that lands in Gmail's Spam still counts,
+but the run gets a warning annotation, because a real user would not see it.
 
 ---
 
@@ -432,8 +467,11 @@ in turn.
 | `STRIPE_PRICE` | variable, optional | the free tier's price. The ORK resolves it from the free product, so this is only a fallback |
 | `CI_REGISTRY_USER` | variable, optional | the user name for `docker login ghcr.io` |
 | `TIDE_E2E_DISPATCH_TOKEN` | secret, in each **calling** repo | sending `repository_dispatch` here and watching the run (see `ci/caller-template.yml`) |
+| `GMAIL_ADDRESS` | variable | the suite's Gmail inbox. The ORKs send recovery email through it and spec 13 reads it ([Account recovery email](#account-recovery-email)) |
+| `GMAIL_APP_PASSWORD` | secret | that account's app password. Without it spec 13 skips and the ORKs keep their placeholder SMTP settings |
 
 `MAILSLURP_API` and `TEMP_EMAIL_PASSWORD` are still accepted from the release hook but unused.
+Gmail replaced MailSlurp for the recovery emails.
 
 The Stripe names are prod's, from tidecloak-override `Tidified/prod/.env1`, and `gen-stack.sh`
 reads exactly those. A name this repo exports that the generator does not read is dropped in
