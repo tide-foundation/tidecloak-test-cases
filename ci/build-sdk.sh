@@ -6,6 +6,11 @@
 # same threshold patch the stack build applies, so the browser side agrees with
 # a small local ORK network. The file: deps are rewritten to $TIDE_WORKSPACE,
 # which edits package.json in those checkouts; that is fine on a CI runner.
+#
+# heimdall and tidecloak-js pin the other SDK packages by version, and a release
+# bumps those versions before they reach npmjs (P2a keeps them in its stage
+# registry until the gate passes). So their Tide deps are repointed at the
+# checkouts (--local) before npm install, never resolved from the registry.
 # shellcheck source=lib/common.sh
 source "$(dirname "$0")/lib/common.sh"
 need_workspace
@@ -37,19 +42,16 @@ build_tide_js() {
 
 build_heimdall() {
     cd "$ws/heimdall" || exit 1
-    rewrite package.json
+    rewrite --local package.json
     npm install --no-audit --no-fund
     npm run build
 }
 
 build_tidecloak_js() {
     cd "$ws/tidecloak-js/packages/tidecloak-js" || exit 1
-    # Registry versions of heimdall/tide-js would be installed here; swap in ours.
+    # heimdall-tide and @tideorg/js become file: links to our checkouts.
+    rewrite --local package.json
     npm install --no-audit --no-fund --ignore-scripts
-    mkdir -p node_modules/@tideorg
-    rm -rf node_modules/heimdall-tide node_modules/@tideorg/js
-    ln -s "$ws/heimdall" node_modules/heimdall-tide
-    ln -s "$ws/tide-js" node_modules/@tideorg/js
     npm run build
 }
 

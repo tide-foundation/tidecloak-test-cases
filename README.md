@@ -526,6 +526,9 @@ Actions step summary when there is one. Reports land in `$CI_REPORTS_DIR`, which
 
 `ci/build-sdk.sh` and `ci/rewrite-file-deps.js` change `package.json` in the checkouts they build.
 In particular, `test-app/package.json` is repointed from `file:~/...` to `file:$TIDE_WORKSPACE/...`.
+heimdall's and tidecloak-js's version ranges for the other SDK packages (`heimdall-tide`, `@tideorg/js`)
+are repointed the same way with `--local`, so the SDK is always built from the checkouts and never from
+npmjs, where a version a release just bumped does not exist yet.
 Use them in a scratch workspace, or undo with `git checkout -- test-app/package.json`. To preview:
 `TIDE_WORKSPACE=... node ci/rewrite-file-deps.js --dry-run test-app/package.json`.
 

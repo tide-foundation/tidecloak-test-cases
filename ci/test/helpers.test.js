@@ -473,3 +473,24 @@ test('file: deps are pointed at the workspace', () => {
     assert.strictEqual(rewrite(pkg, '/ws').length, 0);
     assert.throws(() => rewrite({ dependencies: { mystery: 'file:../x' } }, '/ws'), /no workspace folder/);
 });
+
+test('--local also points registry specs of SDK packages at the workspace', () => {
+    // tidecloak-js as P1 stamps it: heimdall-tide was bumped by the release, so
+    // ^0.14.41 is not on npmjs yet.
+    const pkg = {
+        dependencies: { 'heimdall-tide': '^0.14.41', '@tideorg/js': '^0.14.29', jose: '^6.0.0' },
+        peerDependencies: { '@tidecloak/js': '^0.14.41' },
+    };
+    const before = JSON.parse(JSON.stringify(pkg));
+    assert.strictEqual(rewrite(before, '/ws').length, 0, 'without --local registry specs stay');
+
+    const changes = rewrite(pkg, '/ws', { local: true });
+    assert.strictEqual(changes.length, 2);
+    assert.strictEqual(pkg.dependencies['heimdall-tide'], `file:${path.join('/ws', 'heimdall')}`);
+    assert.strictEqual(pkg.dependencies['@tideorg/js'], `file:${path.join('/ws', 'tide-js')}`);
+    assert.strictEqual(pkg.peerDependencies['@tidecloak/js'], '^0.14.41', 'peer ranges are not installed, so they stay');
+    assert.strictEqual(pkg.dependencies.jose, '^6.0.0', 'non-Tide packages are left alone');
+    assert.strictEqual(rewrite(pkg, '/ws', { local: true }).length, 0);
+    // An unknown registry package is just not ours; only an unknown file: dep is an error.
+    assert.strictEqual(rewrite({ dependencies: { left: '^1.0.0' } }, '/ws', { local: true }).length, 0);
+});
