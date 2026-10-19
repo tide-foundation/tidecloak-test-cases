@@ -31,12 +31,12 @@ KC_ADMIN_PASSWORD=password
 # Spec 13 (account recovery) reads real recovery emails from this Gmail inbox
 # over IMAP and skips without it. Use a dedicated account with 2-Step
 # Verification on and an app password. The ORKs must be able to send mail too:
-# ci/stack-up.sh points them at this account's SMTP. See README.md,
+# gen-stack.sh points them at this account's SMTP. See README.md,
 # "Account recovery email".
 # GMAIL_ADDRESS=
 # GMAIL_APP_PASSWORD=
 # RECOVERY_EMAIL_TIMEOUT_MS=300000
-# Optional: send through a relay other than Gmail (read by ci/stack-up.sh).
+# Optional: send through a relay other than Gmail (read by gen-stack.sh).
 # ORK_SMTP_HOST=
 # ORK_SMTP_PORT=587
 # ORK_SMTP_SSL=true

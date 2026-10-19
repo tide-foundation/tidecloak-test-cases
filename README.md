@@ -262,16 +262,11 @@ it, and the spec reads it back over IMAP and opens the links. Nothing is mocked.
 2. **The suite reads it.** Set `GMAIL_ADDRESS` and `GMAIL_APP_PASSWORD`. Each run registers the
    user's recovery email as a plus-address (`you+recoverer-<run>@gmail.com`), so runs never read
    each other's mail. The spec deletes the messages it read when it finishes.
-3. **The ORKs must send real mail.** The SMTP settings baked into the ORK image are
-   placeholders, so on a stack you start yourself nothing is delivered. `ci/stack-up.sh`
-   overrides them on every ORK (`compose.smtp.yml`). With only the two `GMAIL_*` values set, the
-   ORKs send through that same Gmail account (`smtp.gmail.com:587`). To use another relay, set
-   `ORK_SMTP_HOST`, `ORK_SMTP_USER` and `ORK_SMTP_PASSWORD` (plus `ORK_SMTP_PORT` (`587`),
-   `ORK_SMTP_SSL` (`true`) and `ORK_SMTP_FROM` (the user) if needed). On a stack you run another
-   way, give each ORK container the same settings as environment variables:
-   `Email__SmtpClient`, `Email__OrkEmail`, `Email__NetworkCredentials__Username`, `__Password`,
-   `__Port` and `__EnableSsl`.
-
+3. **The ORKs must send real mail.** The image only has placeholder SMTP settings.
+   tidecloak-override's `gen-stack.sh` (tide-foundation/tidecloak-override#340) gives every ORK
+   Gmail SMTP when `GMAIL_*` is set, or another relay via `ORK_SMTP_*`. On a stack you run another
+   way, set `Email__SmtpClient`, `Email__OrkEmail` and `Email__NetworkCredentials__Username`,
+   `__Password`, `__Port`, `__EnableSsl` on each ORK container.
 4. **The ORKs must know their own URL.** On a dev or CI stack the enclave is served from
    `localhost` while the ORKs register `hostgateway`. Before tide-foundation/ork#521 every ORK
    rejected the recovery request (`Ork not found` in `StartRecovery`) and sent nothing. Spec 13

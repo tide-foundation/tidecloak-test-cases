@@ -16,7 +16,7 @@
  * threshold is met, and that the new password signs in.
  *
  * The ORKs must be able to deliver mail to Gmail. The committed ORK appsettings only hold
- * placeholder SMTP values, so the stack needs the ORK_SMTP_* override (README, "Account
+ * placeholder SMTP values, so the stack needs gen-stack.sh's SMTP settings (README, "Account
  * recovery email"). On a localhost/hostgateway stack it also needs ORK images with
  * tide-foundation/ork#521, without which every ORK rejects the request and sends nothing.
  * Without GMAIL_ADDRESS and GMAIL_APP_PASSWORD the spec is skipped.
