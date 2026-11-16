@@ -515,6 +515,158 @@ jobs:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         run: self/ci/run-test-cases.sh
 
+      # ---- Spec 16 (Asgard ResourceToResourceDelegation) -------------------------------------
+      # Runs automatically alongside the rest of the test-cases suite, on whichever shard draws
+      # it - it needs its own checkouts (five extra repos) and docker-compose stack, which the
+      # main test-cases run (ci/run-test-cases.sh, below) doesn't set up, so it is its own step
+      # group rather than one more spec file in that run. Spec 16 needs two REQUEST_SERVER_CERT
+      # change requests approved in the Tide enclave: the webapp_backend client and the analytics
+      # client. The spec itself authorizes them (realm-setup grants asgard-tide-user
+      # tide-realm-admin, and the spec drives the real admin console's Change Requests page
+      # through the enclave popup) - see utils/asgardExample.js's approveServerCertRequests -
+      # so no manual approval or opt-in flag is needed.
+      - name: 'Spec 16 setup: check out the Asgard repo'
+        id: r2r_asgard
+        if: always() && steps.ready.outcome == 'success' && contains(format(' {0} ', matrix.suites), ' test-cases ')
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: tide-foundation/asgard
+          token: ${{ secrets.CHECKOUT_TOKEN }}
+          path: ws/asgard
+          persist-credentials: false
+
+      - name: 'Spec 16 setup: check out the build contexts (ork, tide-js, heimdall, tidecloak-js)'
+        id: r2r_contexts
+        if: always() && steps.r2r_asgard.outcome == 'success'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: tide-foundation/ork
+          token: ${{ secrets.CHECKOUT_TOKEN }}
+          path: ws/project/ork
+          persist-credentials: false
+
+      - name: 'Spec 16 setup: check out tide-js (both the SDK build path and the image path)'
+        id: r2r_tidejs
+        if: always() && steps.r2r_contexts.outcome == 'success'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: tide-foundation/tide-js
+          token: ${{ secrets.CHECKOUT_TOKEN }}
+          path: ws/tide-js
+          persist-credentials: false
+
+      - name: 'Spec 16 setup: check out tide-js into the image path'
+        id: r2r_tidejs_image
+        if: always() && steps.r2r_tidejs.outcome == 'success'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: tide-foundation/tide-js
+          token: ${{ secrets.CHECKOUT_TOKEN }}
+          path: ws/project/tide-js
+          persist-credentials: false
+
+      - name: 'Spec 16 setup: check out heimdall and tidecloak-js'
+        id: r2r_sdk_repos
+        if: always() && steps.r2r_tidejs_image.outcome == 'success'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: tide-foundation/heimdall
+          token: ${{ secrets.CHECKOUT_TOKEN }}
+          path: ws/heimdall
+          persist-credentials: false
+
+      - name: 'Spec 16 setup: check out tidecloak-js'
+        id: r2r_tidecloak_js
+        if: always() && steps.r2r_sdk_repos.outcome == 'success'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: tide-foundation/tidecloak-js
+          token: ${{ secrets.CHECKOUT_TOKEN }}
+          path: ws/tidecloak-js
+          persist-credentials: false
+
+      - name: 'Spec 16 setup: build the SDK packages for the image contexts'
+        id: r2r_sdk_build
+        if: always() && steps.r2r_tidecloak_js.outcome == 'success'
+        env:
+          SDK_STEPS: tide-js heimdall tidecloak-js
+        run: self/ci/build-sdk.sh
+
+      - name: 'Spec 16 setup: point the SDK links at the image layout'
+        id: r2r_links
+        if: always() && steps.r2r_sdk_build.outcome == 'success'
+        run: |
+          # Inside the image the SDK packages sit at /root/<name>, and tide-js at /root/project/tide-js
+          # (the Dockerfiles' COPY layout). The host links point at the workspace, so re-point the two
+          # that go through tide-js. Same fix as the scratch copies used locally.
+          ws="$TIDE_WORKSPACE"
+          ln -sfn ../../../project/tide-js "$ws/heimdall/node_modules/@tideorg/js"
+          ln -sfn ../../../../../project/tide-js "$ws/tidecloak-js/packages/tidecloak-js/node_modules/@tideorg/js"
+
+      - name: 'Spec 16 setup: provision the Asgard realm (setup output, reused by the spec)'
+        id: r2r_realm
+        if: always() && steps.r2r_links.outcome == 'success'
+        run: |
+          stack_dir="$RUNNER_TEMP/tide-stack"
+          set -a
+          . "$stack_dir/.env.ci"
+          . "$stack_dir/stack.env"
+          set +a
+          # Per-run password for the Tide user: generated here, masked, never stored in the repo.
+          pw="$(openssl rand -hex 16)"
+          echo "::add-mask::$pw"
+          echo "TIDE_USER_PASSWORD=$pw" >> "$GITHUB_ENV"
+          export TIDE_USER_PASSWORD="$pw"
+          cd "$GITHUB_WORKSPACE/self/tests"
+          realm="$(node -e "require('./utils/asgardExample').provisionAsgardRealm().then(r => process.stdout.write(r.realm))")"
+          test -n "$realm" || { echo "no realm from setup"; exit 1; }
+          echo "TIDECLOAK_REALM=$realm" >> "$GITHUB_ENV"
+          echo "Provisioned realm: $realm"
+
+      - name: 'Spec 16 example: start the ResourceToResourceDelegation compose stack'
+        id: r2r_up
+        if: always() && steps.r2r_realm.outcome == 'success'
+        working-directory: ws/asgard/aspnet/Tide.Asgard.AspNetCore/Examples/ResourceToResourceDelegation
+        run: |
+          printf 'TIDECLOAK_REALM=%s\n' "$TIDECLOAK_REALM" > .env
+          docker compose -f compose.yaml up -d --build
+          for i in $(seq 1 60); do
+            state="$(docker compose -f compose.yaml ps --format '{{.Service}} {{.State}}')"
+            echo "$state"
+            if echo "$state" | grep -q '^webapp running' && echo "$state" | grep -q '^analytics running'; then
+              exit 0
+            fi
+            sleep 5
+          done
+          docker compose -f compose.yaml logs --no-color || true
+          exit 1
+
+      - name: 'Suite: spec 16 (ResourceToResourceDelegation)'
+        id: r2r_spec
+        if: always() && steps.r2r_up.outcome == 'success'
+        timeout-minutes: 30
+        env:
+          CI: 'true'
+          HEADLESS: 'true'
+          PW_SKIP_BUILD: '1'
+          TEST_APP_PORT: '3100'
+        working-directory: self/tests
+        run: |
+          stack_dir="$RUNNER_TEMP/tide-stack"
+          set -a
+          . "$stack_dir/.env.ci"
+          . "$stack_dir/stack.env"
+          set +a
+          export ASGARD_REALM="$TIDECLOAK_REALM" PORT="$TEST_APP_PORT" BASE_URL="http://localhost:$TEST_APP_PORT"
+          npx playwright test specs/16-asgard-resource-to-resource-delegation.spec.js --project=firefox
+
+      - name: 'Spec 16 teardown: stop the compose stack (no volumes)'
+        if: always() && steps.r2r_asgard.outcome == 'success'
+        working-directory: ws/asgard/aspnet/Tide.Asgard.AspNetCore/Examples/ResourceToResourceDelegation
+        run: |
+          if [ -f compose.yaml ]; then docker compose -f compose.yaml down --remove-orphans || true; fi
+          rm -f .env
+
       - name: 'Suite: tide-admin-ui bootstrap'
         id: admin_bootstrap
         if: always() && steps.ready.outcome == 'success' && contains(format(' {0} ', matrix.suites), ' admin-bootstrap ')
@@ -597,6 +749,7 @@ jobs:
             ready=${{ steps.ready.outcome }}
             iga-engine=${{ steps.iga_engine.outcome }}
             test-cases=${{ steps.test_cases.outcome }}
+            r2r-spec16=${{ steps.r2r_spec.outcome }}
             admin-bootstrap=${{ steps.admin_bootstrap.outcome }}
             admin-runtime=${{ steps.admin_runtime.outcome }}
             docs=${{ steps.docs.outcome }}
