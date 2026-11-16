@@ -1,0 +1,329 @@
+{
+  "name": "asgard-examples",
+  "_testAppOrigin": "http://localhost:3000",
+  "hypothesis": "The three Asgard examples (StandardResourceDelegation, LockingUserDataWithTide, ResourceToResourceDelegation) run against one Tide realm with the clients their appsettings.json and tidecloak.json name, the audience mappers their README asks for, and one Tide-linked user who can list realm users and holds the policy roles.",
+  "tags": [
+    "asgard",
+    "realm-setup"
+  ],
+  "setup": [
+    {
+      "kind": "client.create",
+      "args": {
+        "clientId": "browser-login-page",
+        "publicClient": true,
+        "standardFlowEnabled": true,
+        "directAccessGrantsEnabled": true,
+        "redirectUris": [
+          "http://localhost:3000/*"
+        ],
+        "webOrigins": [
+          "http://localhost:3000"
+        ],
+        "attributes": {
+          "pkce.code.challenge.method": "S256",
+          "post.logout.redirect.uris": "+"
+        }
+      }
+    },
+    {
+      "kind": "client.create",
+      "args": {
+        "clientId": "webapp_login",
+        "publicClient": true,
+        "standardFlowEnabled": true,
+        "directAccessGrantsEnabled": true,
+        "redirectUris": [
+          "http://localhost:3000/*"
+        ],
+        "webOrigins": [
+          "http://localhost:3000"
+        ],
+        "attributes": {
+          "pkce.code.challenge.method": "S256",
+          "post.logout.redirect.uris": "+"
+        }
+      }
+    },
+    {
+      "kind": "client.create",
+      "args": {
+        "clientId": "backend",
+        "publicClient": false,
+        "directAccessGrantsEnabled": false,
+        "standardFlowEnabled": false,
+        "attributes": {
+          "standard.token.exchange.enabled": "true"
+        }
+      }
+    },
+    {
+      "kind": "client.update",
+      "args": {
+        "clientId": "backend",
+        "patch": {
+          "clientAuthenticatorType": "tide-mtls"
+        }
+      }
+    },
+    {
+      "kind": "client.create",
+      "args": {
+        "clientId": "lock_backend",
+        "publicClient": false,
+        "directAccessGrantsEnabled": false,
+        "standardFlowEnabled": false
+      }
+    },
+    {
+      "kind": "client.update",
+      "args": {
+        "clientId": "lock_backend",
+        "patch": {
+          "clientAuthenticatorType": "tide-mtls"
+        }
+      }
+    },
+    {
+      "kind": "client.create",
+      "args": {
+        "clientId": "webapp_backend",
+        "publicClient": false,
+        "directAccessGrantsEnabled": false,
+        "standardFlowEnabled": false,
+        "attributes": {
+          "standard.token.exchange.enabled": "true"
+        }
+      }
+    },
+    {
+      "kind": "client.update",
+      "args": {
+        "clientId": "webapp_backend",
+        "patch": {
+          "clientAuthenticatorType": "tide-mtls"
+        }
+      }
+    },
+    {
+      "kind": "client.create",
+      "args": {
+        "clientId": "analytics",
+        "publicClient": false,
+        "directAccessGrantsEnabled": false,
+        "standardFlowEnabled": false
+      }
+    },
+    {
+      "kind": "client.update",
+      "args": {
+        "clientId": "analytics",
+        "patch": {
+          "clientAuthenticatorType": "tide-mtls"
+        }
+      }
+    },
+    {
+      "kind": "client.addProtocolMapper",
+      "args": {
+        "clientId": "browser-login-page",
+        "mapper": {
+          "name": "backend-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "backend",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      }
+    },
+    {
+      "kind": "client.addProtocolMapper",
+      "args": {
+        "clientId": "browser-login-page",
+        "mapper": {
+          "name": "lock_backend-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "lock_backend",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      }
+    },
+    {
+      "kind": "client.addProtocolMapper",
+      "args": {
+        "clientId": "webapp_login",
+        "mapper": {
+          "name": "webapp_backend-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "webapp_backend",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      }
+    },
+    {
+      "kind": "user.create",
+      "args": {
+        "username": "asgard-tide-user",
+        "password": "Passw0rd!"
+      },
+      "as": "asgard"
+    },
+    {
+      "kind": "user.assignClientRole",
+      "args": {
+        "user": "asgard-tide-user",
+        "clientId": "realm-management",
+        "role": "view-users"
+      }
+    },
+    {
+      "kind": "user.assignClientRole",
+      "args": {
+        "user": "asgard-tide-user",
+        "clientId": "realm-management",
+        "role": "query-users"
+      }
+    },
+    {
+      "kind": "role.create",
+      "args": {
+        "name": "_tide_name.encrypt"
+      }
+    },
+    {
+      "kind": "role.create",
+      "args": {
+        "name": "_tide_name.decrypt"
+      }
+    },
+    {
+      "kind": "role.create",
+      "args": {
+        "name": "_tide_age.encrypt"
+      }
+    },
+    {
+      "kind": "role.create",
+      "args": {
+        "name": "_tide_age.decrypt"
+      }
+    },
+    {
+      "kind": "role.create",
+      "args": {
+        "name": "_tide_address.encrypt"
+      }
+    },
+    {
+      "kind": "role.create",
+      "args": {
+        "name": "_tide_address.decrypt"
+      }
+    },
+    {
+      "kind": "role.create",
+      "args": {
+        "name": "_tide_medical.encrypt"
+      }
+    },
+    {
+      "kind": "role.create",
+      "args": {
+        "name": "_tide_medical.decrypt"
+      }
+    },
+    {
+      "kind": "user.assignRealmRole",
+      "args": {
+        "user": "asgard-tide-user",
+        "role": "_tide_name.encrypt"
+      }
+    },
+    {
+      "kind": "user.assignRealmRole",
+      "args": {
+        "user": "asgard-tide-user",
+        "role": "_tide_name.decrypt"
+      }
+    },
+    {
+      "kind": "user.assignRealmRole",
+      "args": {
+        "user": "asgard-tide-user",
+        "role": "_tide_age.encrypt"
+      }
+    },
+    {
+      "kind": "user.assignRealmRole",
+      "args": {
+        "user": "asgard-tide-user",
+        "role": "_tide_age.decrypt"
+      }
+    },
+    {
+      "kind": "user.assignRealmRole",
+      "args": {
+        "user": "asgard-tide-user",
+        "role": "_tide_address.encrypt"
+      }
+    },
+    {
+      "kind": "user.assignRealmRole",
+      "args": {
+        "user": "asgard-tide-user",
+        "role": "_tide_address.decrypt"
+      }
+    },
+    {
+      "kind": "user.assignRealmRole",
+      "args": {
+        "user": "asgard-tide-user",
+        "role": "_tide_medical.encrypt"
+      }
+    },
+    {
+      "kind": "user.assignRealmRole",
+      "args": {
+        "user": "asgard-tide-user",
+        "role": "_tide_medical.decrypt"
+      }
+    }
+  ],
+  "probe": {
+    "kind": "token.request",
+    "args": {
+      "grant": "password",
+      "clientId": "admin-cli",
+      "user": "$asgard",
+      "password": "Passw0rd!"
+    }
+  },
+  "expect": {
+    "side": "ork",
+    "outcome": "sign"
+  },
+  "_backs": "tests/specs/14-asgard-standard-resource-delegation.spec.js, tests/specs/15-asgard-locking-user-data.spec.js, tests/specs/16-asgard-resource-to-resource-delegation.spec.js",
+  "_provides": "One Tide realm for the three Asgard examples: public clients browser-login-page and webapp_login (origin http://localhost:3000) with audience mappers to backend, lock_backend and webapp_backend; confidential tide-mtls clients backend, lock_backend, webapp_backend and analytics (token exchange on backend and webapp_backend); one Tide-linked user asgard-tide-user with realm-management view-users and query-users and the eight _tide_*.encrypt/.decrypt realm roles.",
+  "_tideSetup": {
+    "appClient": "browser-login-page",
+    "appLoginUser": "asgard-tide-user",
+    "linkUsers": [
+      "asgard-tide-user"
+    ],
+    "realmAdmins": [
+      "asgard-tide-user"
+    ]
+  },
+  "_asgardNotes": "Realm name is chosen by the iga-engine (iga-asgard-examples-<suffix>), not 'a'. The example adapter configs are baked for realm 'a' and must be regenerated for this realm before the examples can log in. Enrollment tokens and adapter keys are not part of this recipe. asgard-tide-user is also the realm's tide-realm-admin (firstAdmin grant, pure REST, no enclave) so it can authorize the backends' REQUEST_SERVER_CERT change requests from the real TideCloak admin console's Change Requests page — see utils/asgardExample.js's approveServerCertRequests, used by spec 16."
+}

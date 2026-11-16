@@ -57,44 +57,19 @@ async function injectRealmAdapter(page, adapterConfig) {
 }
 
 /**
- * Sign into the test-app and wait until the Admin Dashboard is ready.
- * This is written to be resilient in slow CI environments.
- *
- * In the default mode this navigates to `baseUrl`, clicks Login, fills the Tide enclave
- * widget, and waits for the Admin Dashboard. Pass `fillOnly: true` when the caller has
- * ALREADY landed on the realm login page (e.g. the DPoP harness redirect): the navigation,
- * the Login-button click, and the Admin-Dashboard wait are all skipped — only the enclave
- * widget on the current page is filled and submitted. In that mode it returns `'tide'`.
+ * Fill and submit the Tide login widget on whatever page it currently appears on (the
+ * test-app's own login page, a realm's OIDC login screen, or the TideCloak admin console's
+ * per-realm login) and wait for the submit click. Does not wait for whatever the submit
+ * redirects to — callers own that.
  *
  * @param {import('@playwright/test').Page} page
  * @param {{
- *   baseUrl?: string,
  *   username: string,
  *   password: string,
  *   takeScreenshot?: ((name: string) => Promise<void>) | null,
- *   timeoutMs?: number,
- *   fillOnly?: boolean,
  * }} opts
- * @returns {Promise<'tide'|void>}
  */
-async function signInToAdmin(page, opts) {
-    // The login round trip goes through every ORK, so it scales with the stack.
-    const timeoutMs = opts.timeoutMs ?? config.budget(120000);
-
-    if (!opts.fillOnly) {
-        if (!opts.baseUrl) throw new Error('signInToAdmin: opts.baseUrl is required unless fillOnly is set');
-        await page.goto(opts.baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
-        await page.getByRole('button', { name: 'Login' }).click();
-        if (opts.takeScreenshot) await opts.takeScreenshot('02_login_form');
-
-        // If already authenticated, the app may redirect immediately.
-        const alreadyOnAdmin = await page
-            .waitForURL(/\/admin(\?|$)/, { timeout: 5000, waitUntil: 'domcontentloaded' })
-            .then(() => true)
-            .catch(() => false);
-        if (alreadyOnAdmin) return;
-    }
-
+async function fillTideLoginWidget(page, opts) {
     try{
         console.log('[runtime-fixture] clicking Tide social-login button (#social-tide) …');
         await page.locator('#social-tide').first().click();
@@ -141,6 +116,48 @@ async function signInToAdmin(page, opts) {
     await page.waitForTimeout(1000);
     await signInBtn.click();
     if (opts.takeScreenshot) await opts.takeScreenshot('04_after_signin');
+}
+
+/**
+ * Sign into the test-app and wait until the Admin Dashboard is ready.
+ * This is written to be resilient in slow CI environments.
+ *
+ * In the default mode this navigates to `baseUrl`, clicks Login, fills the Tide enclave
+ * widget, and waits for the Admin Dashboard. Pass `fillOnly: true` when the caller has
+ * ALREADY landed on the realm login page (e.g. the DPoP harness redirect): the navigation,
+ * the Login-button click, and the Admin-Dashboard wait are all skipped — only the enclave
+ * widget on the current page is filled and submitted. In that mode it returns `'tide'`.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {{
+ *   baseUrl?: string,
+ *   username: string,
+ *   password: string,
+ *   takeScreenshot?: ((name: string) => Promise<void>) | null,
+ *   timeoutMs?: number,
+ *   fillOnly?: boolean,
+ * }} opts
+ * @returns {Promise<'tide'|void>}
+ */
+async function signInToAdmin(page, opts) {
+    // The login round trip goes through every ORK, so it scales with the stack.
+    const timeoutMs = opts.timeoutMs ?? config.budget(120000);
+
+    if (!opts.fillOnly) {
+        if (!opts.baseUrl) throw new Error('signInToAdmin: opts.baseUrl is required unless fillOnly is set');
+        await page.goto(opts.baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+        await page.getByRole('button', { name: 'Login' }).click();
+        if (opts.takeScreenshot) await opts.takeScreenshot('02_login_form');
+
+        // If already authenticated, the app may redirect immediately.
+        const alreadyOnAdmin = await page
+            .waitForURL(/\/admin(\?|$)/, { timeout: 5000, waitUntil: 'domcontentloaded' })
+            .then(() => true)
+            .catch(() => false);
+        if (alreadyOnAdmin) return;
+    }
+
+    await fillTideLoginWidget(page, opts);
 
     // fillOnly: the caller owns whatever the post-login redirect lands on (e.g. the DPoP
     // harness), so don't wait for the Admin Dashboard — just report which form we filled.
@@ -220,7 +237,14 @@ async function approveViaEnclavePopup(page, opts) {
     await opts.trigger.click();
     const popup = await popupPromise;
     await popup.waitForLoadState('domcontentloaded');
-    await popup.getByRole('button', { name: 'Y' }).click({ force });
+    // One card per item in the batch, each with its own Y/N - a single-CR trigger renders one,
+    // a bulk-authorize trigger (multiple CRs signed in one doken) renders one per CR. Re-query
+    // and always take the first: clicking one can make the popup re-render the rest, so a
+    // snapshot count/index taken up front can point at the wrong element by the time it's used.
+    const yButton = popup.getByRole('button', { name: 'Y' });
+    while (await yButton.count() > 0) {
+        await yButton.first().click({ force });
+    }
     await popup.getByRole('button', { name: 'Submit Approvals' }).click({ force });
     await popup.close().catch(() => {});
 }
@@ -479,7 +503,10 @@ async function provisionRealmFromRecipe(recipePath, opts = {}) {
     }
     // The client's redirectUris and webOrigins have to match wherever the
     // test-app actually is, or the spec fails at the login redirect instead.
-    const effectivePath = recipeForOrigin(recipePath, config.BASE_URL);
+    // A recipe can pin its own test-app origin (e.g. "_testAppOrigin": "http://localhost:3000") when
+    // something else serves that origin, such as the Asgard examples. Every other recipe follows BASE_URL.
+    const pinned = JSON.parse(fs.readFileSync(recipePath, 'utf-8'))._testAppOrigin;
+    const effectivePath = recipeForOrigin(recipePath, pinned || config.BASE_URL);
     if (effectivePath !== recipePath) {
         console.log(`Rewrote the recipe's test-app origin to ${config.BASE_URL}: ${effectivePath}`);
     }
@@ -555,6 +582,7 @@ async function discoverRecipeRealm(request, recipeName, opts) {
 module.exports = {
     createScreenshotHelper,
     injectRealmAdapter,
+    fillTideLoginWidget,
     signInToAdmin,
     signInToRealm,
     waitForAdminAuthReady,
