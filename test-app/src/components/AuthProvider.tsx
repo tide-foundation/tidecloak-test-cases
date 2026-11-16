@@ -170,27 +170,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const doEncrypt = async (payloads: EncryptPayload[], decryptionPolicy?: Uint8Array | null): Promise<string[]> => {
-        return await (IAMService as any).doEncrypt(payloads, decryptionPolicy);
+        return await IAMService.tide.encrypt(payloads, decryptionPolicy ?? null) as any;
     };
 
     const doDecrypt = async (payloads: DecryptPayload[], decryptionPolicy?: Uint8Array | null): Promise<(string | Uint8Array)[]> => {
-        return await (IAMService as any).doDecrypt(payloads, decryptionPolicy);
+        return await IAMService.tide.decrypt(payloads, decryptionPolicy ?? null) as any;
     };
 
     const doDraftEncryption = async (payloads: DraftEncryptPayload[]): Promise<Uint8Array> => {
-        return await (IAMService as any).doDraftEncryption(payloads);
+        return await IAMService.tide.draftEncryption(payloads) as any;
     };
 
     const doCommitEncryption = async (request: Uint8Array, policy: Uint8Array): Promise<Uint8Array[]> => {
-        return await (IAMService as any).doCommitEncryption(request, policy);
+        return await IAMService.tide.commitEncryption(request, policy) as any;
     };
 
     const doDraftDecryption = async (data: DraftDecryptPayload[]): Promise<Uint8Array> => {
-        return await (IAMService as any).doDraftDecryption(data);
+        return await IAMService.tide.draftDecryption(data) as any;
     };
 
     const doCommitDecryption = async (request: Uint8Array, policy: Uint8Array): Promise<Uint8Array[]> => {
-        return await (IAMService as any).doCommitDecryption(request, policy);
+        return await IAMService.tide.commitDecryption(request, policy) as any;
     };
 
     return (
