@@ -80,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             IAMService
                 .on("tokenExpired", async () => {
                     try {
-                        await IAMService.updateIAMToken();
+                        await IAMService.updateToken();
                     } catch (error) {
                         setIsAuthenticated(false);
                     }
@@ -89,18 +89,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     setIsAuthenticated(false);
                 });
 
-            await IAMService.initIAM(config, async (_event: string, authenticated: boolean) => {
-                setIsAuthenticated(authenticated);
-                setIsLoading(false);
+            const authenticated = await IAMService.init(config);
+            setIsAuthenticated(authenticated);
+            setIsLoading(false);
 
-                if (authenticated) {
-                    const vuidFromToken = IAMService.getValueFromIDToken("vuid");
-                    setVuid(vuidFromToken ?? "");
-                    const subFromToken = IAMService.getValueFromToken("sub");
-                    setUserId(subFromToken ?? "");
-                    updateTokenRoles();
-                }
-            });
+            if (authenticated) {
+                const vuidFromToken = IAMService.getIdClaim("vuid");
+                setVuid(vuidFromToken ?? "");
+                const subFromToken = IAMService.getClaim("sub");
+                setUserId(subFromToken ?? "");
+                updateTokenRoles();
+            }
         };
 
         initAuth();
@@ -121,13 +120,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const allRoles: string[] = [];
 
         // Get realm_access from token which contains realm roles
-        const realmAccess = IAMService.getValueFromToken("realm_access");
+        const realmAccess = IAMService.getClaim("realm_access");
         if (realmAccess?.roles) {
             allRoles.push(...realmAccess.roles);
         }
 
         // Get resource_access from token which contains client roles
-        const resourceAccess = IAMService.getValueFromToken("resource_access");
+        const resourceAccess = IAMService.getClaim("resource_access");
         if (resourceAccess) {
             // Collect all roles from all clients
             for (const clientId of Object.keys(resourceAccess)) {
@@ -140,12 +139,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const refreshToken = async (): Promise<void> => {
-        await IAMService.updateIAMToken();
+        await IAMService.updateToken();
         updateTokenRoles();
     };
 
     const initializeTideRequest = async (request: Models.BaseTideRequest): Promise<Models.BaseTideRequest> => {
-        return BaseTideRequest.decode(await IAMService._tc?.createTideRequest(request.encode()) as any);
+        return BaseTideRequest.decode(await IAMService.tide.createTideRequest(request.encode()) as any);
     };
 
     const approveTideRequests = async (requests: { id: string, request: Uint8Array }[]): Promise<{
@@ -154,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         denied?: boolean;
         pending?: boolean;
     }[]> => {
-        const response = await IAMService._tc?.requestTideOperatorApproval(requests) as any;
+        const response = await IAMService.tide.requestTideOperatorApproval(requests) as any;
         return response.map((res: any) => {
             if (res.status === Status.approved) {
                 return { id: res.id, approved: { request: res.request } };
@@ -167,7 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const executeTideRequest = async (request: Uint8Array): Promise<Uint8Array[]> => {
-        return await IAMService._tc?.executeSignRequest(request) as any;
+        return await IAMService.tide.executeSignRequest(request, false) as any;
     };
 
     const doEncrypt = async (payloads: EncryptPayload[], decryptionPolicy?: Uint8Array | null): Promise<string[]> => {
