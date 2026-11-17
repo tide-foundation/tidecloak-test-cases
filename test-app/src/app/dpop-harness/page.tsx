@@ -9,8 +9,8 @@
  *   /dpop-harness?url=<kc>&realm=<realm>&clientId=<client>&mode=strict&alg=ES256
  *
  * Per the keycloak-js DPoP guide + the lib README:
- *   - Enable DPoP by passing `useDPoP: { mode, alg }` to `init()`.
- *   - Access a DPoP-protected resource with `secureFetch`, which REQUIRES an
+ *   - Enable DPoP by passing `dpopConfig: { mode, alg }` to `init()`.
+ *   - Access a DPoP-protected resource with `tc.fetch`, which REQUIRES an
  *     `Authorization: Bearer <tc.token>` header (it swaps Bearer -> DPoP + attaches the proof,
  *     and handles the use_dpop_nonce retry).
  *
@@ -68,7 +68,7 @@ export default function DpopHarness() {
                     checkLoginIframe: false,
                     pkceMethod: "S256",
                     enableLogging: true, // DEBUG: emit the SDK's own [TIDECLOAK] logs to the console
-                    useDPoP: { mode, alg } as any,
+                    dpopConfig: { mode, alg } as any,
                 } as any);
                 clearTimeout(watchdog);
 
@@ -79,13 +79,13 @@ export default function DpopHarness() {
 
                 const claims: any = tc.tokenParsed || {};
 
-                // 3. Access a DPoP-protected resource with secureFetch. The userinfo endpoint
-                //    requires a matching DPoP proof for a DPoP-bound token; secureFetch supplies it
-                //    (note the REQUIRED Bearer header that secureFetch upgrades to the DPoP scheme).
+                // 3. Access a DPoP-protected resource with tc.fetch (DPoP-aware fetch). The userinfo endpoint
+                //    requires a matching DPoP proof for a DPoP-bound token; tc.fetch supplies it
+                //    (the REQUIRED Bearer header is upgraded to the DPoP scheme).
                 const userinfoUrl = `${url}/realms/${realm}/protocol/openid-connect/userinfo`;
                 let resourceStatus: number | string = "";
                 try {
-                    const resp = await (tc as any).secureFetch(userinfoUrl, {
+                    const resp = await tc.fetch(userinfoUrl, {
                         headers: { Authorization: `Bearer ${tc.token}`, accept: "application/json" },
                     });
                     resourceStatus = resp.status;

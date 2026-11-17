@@ -8,7 +8,7 @@
  *
  * DPoP is exercised the DOCUMENTED @tidecloak/js way (keycloak-js DPoP guide + lib README):
  * the test-app page /dpop-harness constructs `new TideCloak({...})`, calls
- * `init({ useDPoP: { mode, alg } })`, and accesses a DPoP-protected resource with `secureFetch`.
+ * `init({ dpopConfig: { mode, alg } })`, and accesses a DPoP-protected resource with `secureFetch`.
  * The Playwright spec only DRIVES that harness (login + the SSO redirect) and reads the result.
  *
  * Scenario:
