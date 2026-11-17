@@ -242,7 +242,13 @@ async function approveViaEnclavePopup(page, opts) {
     // and always take the first: clicking one can make the popup re-render the rest, so a
     // snapshot count/index taken up front can point at the wrong element by the time it's used.
     const yButton = popup.getByRole('button', { name: 'Y' });
-    while (await yButton.count() > 0) {
+    // The enclave renders the approval cards asynchronously after domcontentloaded; wait for the
+    // first Y to appear before the loop, otherwise the loop sees zero cards and submits nothing.
+    await yButton.first().waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+    // Bounded: a Y click may not remove its card from the DOM, so an unbounded loop would spin
+    // on the same button until the test times out. Click at most one Y per rendered card.
+    const maxCards = await yButton.count();
+    for (let i = 0; i < maxCards && await yButton.count() > 0; i++) {
         await yButton.first().click({ force });
     }
     await popup.getByRole('button', { name: 'Submit Approvals' }).click({ force });
