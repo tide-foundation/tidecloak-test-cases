@@ -630,7 +630,7 @@ jobs:
         run: |
           printf 'TIDECLOAK_REALM=%s\n' "$TIDECLOAK_REALM" > .env
           docker compose -f compose.yaml up -d --build
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             state="$(docker compose -f compose.yaml ps --format '{{.Service}} {{.State}}')"
             echo "$state"
             if echo "$state" | grep -q '^webapp running' && echo "$state" | grep -q '^analytics running'; then
