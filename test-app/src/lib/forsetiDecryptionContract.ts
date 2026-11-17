@@ -1,6 +1,6 @@
 export const contract = `using Ork.Forseti.Sdk;
 using Cryptide.Tools;
-using Ork.Shared.Models.Contracts;
+using Cryptide.Models;
 using System;
 using System.Collections.Generic;
 using System.Text;
