@@ -227,7 +227,7 @@ jobs:
       github.repository_owner == 'tide-foundation' &&
       ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') ||
        github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
@@ -295,7 +295,7 @@ jobs:
     name: build (${{ matrix.image }})
     needs: plan
     if: needs.plan.result == 'success' && needs.plan.outputs.build_images != '[]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: ${{ matrix.image == 'tidecloak' && 90 || 40 }}
     strategy:
       fail-fast: false
@@ -384,7 +384,7 @@ jobs:
       needs.plan.result == 'success' &&
       needs.plan.outputs.has_shards == 'true' &&
       (needs.build.result == 'success' || needs.build.result == 'skipped')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: ${{ matrix.timeout }}
     strategy:
       fail-fast: false
@@ -630,7 +630,7 @@ jobs:
         run: |
           printf 'TIDECLOAK_REALM=%s\n' "$TIDECLOAK_REALM" > .env
           docker compose -f compose.yaml up -d --build
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             state="$(docker compose -f compose.yaml ps --format '{{.Service}} {{.State}}')"
             echo "$state"
             if echo "$state" | grep -q '^webapp running' && echo "$state" | grep -q '^analytics running'; then
@@ -764,7 +764,7 @@ jobs:
     name: summary
     needs: [plan, build, e2e]
     if: always() && needs.plan.result != 'skipped'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Stop if planning failed
