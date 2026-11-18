@@ -33,6 +33,10 @@ const PATIENT = {
 };
 
 test.describe('Asgard example 3: ResourceToResourceDelegation', () => {
+    // Optional: these need the Asgard example served on :3000 for the realm.
+    // They run only when ASGARD_EXAMPLES=1 (CI does not start the examples for them).
+    test.skip(process.env.ASGARD_EXAMPLES !== '1', 'Asgard example specs are optional; set ASGARD_EXAMPLES=1 to run them.');
+
     /** @type {{ username: string, password: string }} */
     let cred;
     /** @type {string} */
