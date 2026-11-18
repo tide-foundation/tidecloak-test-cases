@@ -78,6 +78,11 @@ on:
         required: false
         default: false
         type: boolean
+      asgard_examples:
+        description: Run the three Asgard example specs (14, 15, 16). Off by default; they need the example stacks
+        required: false
+        default: false
+        type: boolean
       key_salt:
         description: Change to force a rebuild of every image
         required: false
@@ -215,6 +220,9 @@ env:
   ORK_COUNT: ${{ inputs.ork_count || github.event.client_payload.ork_count || '5' }}
   TIDE_THRESHOLD_T: ${{ inputs.threshold_t || github.event.client_payload.threshold_t || '3' }}
   TIDE_THRESHOLD_N: ${{ inputs.threshold_n || github.event.client_payload.threshold_n || '5' }}
+  # The Asgard example specs (14, 15, 16) are opt-in: '1' runs them, anything else skips them.
+  # Set by the asgard_examples input (manual run) or the asgard_examples client_payload field (override dispatch).
+  ASGARD_EXAMPLES: ${{ (inputs.asgard_examples || github.event.client_payload.asgard_examples) && '1' || '' }}
   # No caching anywhere: images come from the private registry, npm and browser
   # downloads are fetched fresh. Caching public npm/Playwright downloads is a
   # possible later speed-up; anything built from private source never is.
@@ -524,10 +532,11 @@ jobs:
       # client. The spec itself authorizes them (realm-setup grants asgard-tide-user
       # tide-realm-admin, and the spec drives the real admin console's Change Requests page
       # through the enclave popup) - see utils/asgardExample.js's approveServerCertRequests -
-      # so no manual approval or opt-in flag is needed.
+      # so no manual approval is needed. The whole group is opt-in via the asgard_examples flag
+      # (env ASGARD_EXAMPLES=1); every later step in the group depends on this first step's outcome.
       - name: 'Spec 16 setup: check out the Asgard repo'
         id: r2r_asgard
-        if: always() && steps.ready.outcome == 'success' && contains(format(' {0} ', matrix.suites), ' test-cases ')
+        if: always() && env.ASGARD_EXAMPLES == '1' && steps.ready.outcome == 'success' && contains(format(' {0} ', matrix.suites), ' test-cases ')
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: tide-foundation/asgard
