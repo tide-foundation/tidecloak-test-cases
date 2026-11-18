@@ -659,6 +659,8 @@ jobs:
           HEADLESS: 'true'
           PW_SKIP_BUILD: '1'
           TEST_APP_PORT: '3100'
+          # spec 16 runs only with its compose stack, which this step builds (the S2 gate sets ASGARD_EXAMPLES alone)
+          ASGARD_R2R: '1'
         working-directory: self/tests
         run: |
           stack_dir="$RUNNER_TEMP/tide-stack"
