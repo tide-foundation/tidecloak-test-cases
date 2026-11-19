@@ -691,6 +691,153 @@ jobs:
           if [ -f compose.yaml ]; then docker compose -f compose.yaml down --remove-orphans || true; fi
           rm -f .env
 
+      # ---- Specs 14 and 15 (Asgard StandardResourceDelegation and LockingUserDataWithTide) ----------
+      # Each example is a .NET app served on :3000, so they run one after the other, after spec 16's
+      # stack is down. They share one realm (the recipe covers all three examples). The generic
+      # test-cases run skips them: they need ASGARD_EXAMPLE_SERVERS=1, which only these steps set.
+      - name: 'Spec 14/15 setup: install .NET 10 for the example servers'
+        id: ex_dotnet
+        if: always() && env.ASGARD_EXAMPLES == '1' && steps.r2r_sdk_build.outcome == 'success' && contains(format(' {0} ', matrix.suites), ' test-cases ')
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: 'Spec 14/15 setup: provision one Asgard realm for both examples'
+        id: ex_realm
+        if: always() && steps.ex_dotnet.outcome == 'success'
+        working-directory: self/tests
+        run: |
+          stack_dir="$RUNNER_TEMP/tide-stack"
+          set -a
+          . "$stack_dir/.env.ci"
+          . "$stack_dir/stack.env"
+          set +a
+          pw="$(openssl rand -hex 16)"
+          echo "::add-mask::$pw"
+          echo "TIDE_USER_PASSWORD=$pw" >> "$GITHUB_ENV"
+          export TIDE_USER_PASSWORD="$pw"
+          realm="$(node -e "require('./utils/asgardExample').provisionAsgardRealm().then(r => process.stdout.write(r.realm))")"
+          test -n "$realm" || { echo "no realm from setup"; exit 1; }
+          echo "ASGARD_REALM=$realm" >> "$GITHUB_ENV"
+          echo "Provisioned realm: $realm"
+
+      - name: 'Spec 14/15 setup: name the realm and hostgateway on the runner (as the example README says)'
+        if: always() && steps.ex_realm.outcome == 'success'
+        run: |
+          sudo sh -c "echo '127.0.0.1 $ASGARD_REALM.client.localhost' >> /etc/hosts"
+          sudo sh -c "echo '127.0.0.1 hostgateway' >> /etc/hosts"
+
+      - name: 'Spec 14/15 setup: point the example client links at the workspace tidecloak-js'
+        id: ex_links
+        if: always() && steps.ex_realm.outcome == 'success'
+        run: |
+          for dir in ws/asgard/aspnet/Tide.Asgard.AspNetCore/Examples/StandardResourceDelegation/standardresourcedelegation.client ws/asgard/aspnet/Tide.Asgard.AspNetCore/Examples/LockingUserDataWithTide/lockinguserdatawithtide.client; do
+            sed -i "s#\"@tidecloak/js\": \"file:[^\"]*\"#\"@tidecloak/js\": \"file:$TIDE_WORKSPACE/tidecloak-js/packages/tidecloak-js\"#" "$GITHUB_WORKSPACE/$dir/package.json"
+            grep -q "$TIDE_WORKSPACE/tidecloak-js" "$GITHUB_WORKSPACE/$dir/package.json"
+          done
+
+      - name: 'Spec 14 example: write its adapter configs, build the client and server, start it'
+        id: ex14_up
+        if: always() && steps.ex_links.outcome == 'success'
+        working-directory: self/tests
+        run: |
+          stack_dir="$RUNNER_TEMP/tide-stack"
+          set -a
+          . "$stack_dir/.env.ci"
+          . "$stack_dir/stack.env"
+          set +a
+          ex="$GITHUB_WORKSPACE/ws/asgard/aspnet/Tide.Asgard.AspNetCore/Examples/StandardResourceDelegation"
+          node -e "require('./utils/asgardExample').writeExampleAdapterConfigs(process.env.ASGARD_REALM, process.argv[1], [
+            { clientId: 'backend', file: 'StandardResourceDelegation.Server/appsettings.json', kind: 'keycloak' },
+            { clientId: 'browser-login-page', file: 'standardresourcedelegation.client/tidecloak.json', kind: 'client' },
+          ]).then(r => console.log('written', r.written))" "$ex"
+          (cd "$ex/standardresourcedelegation.client" && npm install --no-audit --no-fund && npx vite build)
+          (cd "$ex/StandardResourceDelegation.Server" && dotnet build -c Debug)
+          for i in $(seq 1 30); do ss -ltn | grep -q ':3000 ' || break; sleep 1; done
+          cd "$ex/StandardResourceDelegation.Server"; nohup dotnet run --no-build --launch-profile http > "$RUNNER_TEMP/ex14.log" 2>&1 & echo $! > "$RUNNER_TEMP/ex14.pid"; cd "$GITHUB_WORKSPACE"
+          for i in $(seq 1 60); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ || true)"
+            [ "$code" = "200" ] && exit 0
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/ex14.log" || true
+          exit 1
+
+      - name: 'Suite: spec 14 (StandardResourceDelegation)'
+        id: ex14_spec
+        if: always() && steps.ex14_up.outcome == 'success'
+        timeout-minutes: 30
+        env:
+          CI: 'true'
+          HEADLESS: 'true'
+          PW_SKIP_BUILD: '1'
+          TEST_APP_PORT: '3100'
+          ASGARD_EXAMPLES: '1'
+          ASGARD_EXAMPLE_SERVERS: '1'
+        working-directory: self/tests
+        run: npx playwright test specs/14-asgard-standard-resource-delegation.spec.js --project=firefox
+
+      - name: 'Spec 14 example: stop the server'
+        if: always() && steps.ex14_up.outcome == 'success'
+        run: |
+          pid="$(cat "$RUNNER_TEMP/ex14.pid" 2>/dev/null || true)"
+          [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+          kill_tree() { for c in $(pgrep -P "$1" 2>/dev/null); do kill_tree "$c"; done; kill "$1" 2>/dev/null || true; }
+          pid="$(cat "$RUNNER_TEMP/ex14.pid" 2>/dev/null || true)"
+          [ -n "$pid" ] && kill_tree "$pid"
+          for i in $(seq 1 30); do ss -ltn | grep -q ':3000 ' || break; sleep 1; done
+
+      - name: 'Spec 15 example: write its adapter configs, build the client and server, start it'
+        id: ex15_up
+        if: always() && steps.ex_links.outcome == 'success'
+        working-directory: self/tests
+        run: |
+          stack_dir="$RUNNER_TEMP/tide-stack"
+          set -a
+          . "$stack_dir/.env.ci"
+          . "$stack_dir/stack.env"
+          set +a
+          ex="$GITHUB_WORKSPACE/ws/asgard/aspnet/Tide.Asgard.AspNetCore/Examples/LockingUserDataWithTide"
+          node -e "require('./utils/asgardExample').writeExampleAdapterConfigs(process.env.ASGARD_REALM, process.argv[1], [
+            { clientId: 'lock_backend', file: 'LockingUserDataWithTide.Server/appsettings.json', kind: 'keycloak' },
+            { clientId: 'browser-login-page', file: 'lockinguserdatawithtide.client/tidecloak.json', kind: 'client' },
+          ]).then(r => console.log('written', r.written))" "$ex"
+          (cd "$ex/lockinguserdatawithtide.client" && npm install --no-audit --no-fund && npx vite build)
+          (cd "$ex/LockingUserDataWithTide.Server" && dotnet build -c Debug)
+          for i in $(seq 1 30); do ss -ltn | grep -q ':3000 ' || break; sleep 1; done
+          cd "$ex/LockingUserDataWithTide.Server"; nohup dotnet run --no-build --launch-profile http > "$RUNNER_TEMP/ex15.log" 2>&1 & echo $! > "$RUNNER_TEMP/ex15.pid"; cd "$GITHUB_WORKSPACE"
+          for i in $(seq 1 60); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ || true)"
+            [ "$code" = "200" ] && exit 0
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/ex15.log" || true
+          exit 1
+
+      - name: 'Suite: spec 15 (LockingUserDataWithTide)'
+        id: ex15_spec
+        if: always() && steps.ex15_up.outcome == 'success'
+        timeout-minutes: 30
+        env:
+          CI: 'true'
+          HEADLESS: 'true'
+          PW_SKIP_BUILD: '1'
+          TEST_APP_PORT: '3100'
+          ASGARD_EXAMPLES: '1'
+          ASGARD_EXAMPLE_SERVERS: '1'
+        working-directory: self/tests
+        run: npx playwright test specs/15-asgard-locking-user-data.spec.js --project=firefox
+
+      - name: 'Spec 15 example: stop the server'
+        if: always() && steps.ex15_up.outcome == 'success'
+        run: |
+          pid="$(cat "$RUNNER_TEMP/ex15.pid" 2>/dev/null || true)"
+          [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+          kill_tree() { for c in $(pgrep -P "$1" 2>/dev/null); do kill_tree "$c"; done; kill "$1" 2>/dev/null || true; }
+          pid="$(cat "$RUNNER_TEMP/ex15.pid" 2>/dev/null || true)"
+          [ -n "$pid" ] && kill_tree "$pid"
+          for i in $(seq 1 30); do ss -ltn | grep -q ':3000 ' || break; sleep 1; done
+
       - name: 'Suite: tide-admin-ui bootstrap'
         id: admin_bootstrap
         if: always() && steps.ready.outcome == 'success' && contains(format(' {0} ', matrix.suites), ' admin-bootstrap ')
