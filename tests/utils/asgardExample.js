@@ -181,4 +181,38 @@ async function writeR2RAdapterConfigs(realm, exampleDir) {
     }
 }
 
-module.exports = { EXAMPLE_URL, ASGARD_RECIPE, provisionAsgardRealm, signInToExample, approveServerCertRequests, writeR2RAdapterConfigs };
+/**
+ * Write realm adapter configs into an example's folder (the README's "put each app's adapter config in
+ * its appsettings.json / tidecloak.json" step). Each entry is downloaded fresh, because an enrollment_token
+ * is spent by the server's first start - call this right before the server starts.
+ * @param {string} realm
+ * @param {string} exampleDir the example's folder in an asgard checkout
+ * @param {Array<{ clientId: string, file: string, kind: 'keycloak' | 'client' }>} entries
+ *   kind 'keycloak' puts the config under the "Keycloak" section of a server appsettings.json, 'client' writes the
+ *   whole config as the client's tidecloak.json. file is relative to exampleDir.
+ */
+async function writeExampleAdapterConfigs(realm, exampleDir, entries) {
+    const fs = require('fs');
+    const { request } = require('@playwright/test');
+    const ctx = await request.newContext();
+    try {
+        const token = await getKcAdminToken(ctx, { baseUrl: config.TIDECLOAK_URL });
+        for (const e of entries) {
+            const cfg = await fetchAdapterConfig(ctx, { baseUrl: config.TIDECLOAK_URL, realm, token, clientId: e.clientId });
+            if (cfg.realm !== realm) throw new Error(`adapter config for ${e.clientId} names realm ${cfg.realm}, expected ${realm}`);
+            const target = path.join(exampleDir, e.file);
+            if (e.kind === 'keycloak') {
+                const json = JSON.parse(fs.readFileSync(target, 'utf8'));
+                json.Keycloak = cfg;
+                fs.writeFileSync(target, JSON.stringify(json, null, 2) + '\n');
+            } else {
+                fs.writeFileSync(target, JSON.stringify(cfg, null, 2) + '\n');
+            }
+        }
+        return { realm, written: entries.map(e => e.file) };
+    } finally {
+        await ctx.dispose();
+    }
+}
+
+module.exports = { EXAMPLE_URL, ASGARD_RECIPE, provisionAsgardRealm, signInToExample, approveServerCertRequests, writeR2RAdapterConfigs, writeExampleAdapterConfigs };

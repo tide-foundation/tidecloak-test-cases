@@ -28,9 +28,9 @@ const { provisionAsgardRealm, signInToExample, approveServerCertRequests } = req
 const PLAINTEXT = 'asgard example two';
 
 test.describe('Asgard example 2: LockingUserDataWithTide', () => {
-    // Optional: these need the Asgard example served on :3000 for the realm.
-    // They run only when ASGARD_EXAMPLES=1 (CI does not start the examples for them).
-    test.skip(process.env.ASGARD_EXAMPLES !== '1', 'Asgard example specs are optional; set ASGARD_EXAMPLES=1 to run them.');
+    // These need their example server on :3000 for the realm. The pre-release workflow starts it and sets
+    // ASGARD_EXAMPLE_SERVERS=1; the generic test-cases run does not, so they skip there.
+    test.skip(process.env.ASGARD_EXAMPLE_SERVERS !== '1', 'Asgard example specs need their example server; set ASGARD_EXAMPLE_SERVERS=1.');
 
     /** @type {{ username: string, password: string }} */
     let cred;
