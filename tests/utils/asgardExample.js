@@ -16,8 +16,8 @@
 const path = require('path');
 const { expect } = require('@playwright/test');
 const config = require('./config');
-const { signInToAdmin, fillTideLoginWidget, approveViaEnclavePopup } = require('./helpers');
-const { provisionScenario } = require('./provision');
+const { signInToAdmin, fillTideLoginWidget, approveViaEnclavePopup, getKcAdminToken } = require('./helpers');
+const { provisionScenario, fetchAdapterConfig } = require('./provision');
 
 /** Where the example's frontend is served. Its origin must match the realm's client (see README). */
 const EXAMPLE_URL = process.env.ASGARD_EXAMPLE_URL || 'http://localhost:3000';
@@ -59,6 +59,16 @@ async function provisionAsgardRealm() {
  */
 async function signInToExample(page, cred, takeScreenshot = null) {
     await page.goto(EXAMPLE_URL, { waitUntil: 'domcontentloaded', timeout: config.budget(90000) });
+    // The Tide DPoP confirmation page ("Secure Session Verification") asks the browser to
+    // confirm its key before login. Press "Verify Session" when it appears; it opens a short
+    // verification window, which we wait for to close.
+    const verify = page.getByText('Verify Session', { exact: true }).first();
+    if (await verify.waitFor({ state: 'visible', timeout: 20000 }).then(() => true, () => false)) {
+        const popupPromise = page.waitForEvent('popup', { timeout: 10000 }).catch(() => null);
+        await verify.click();
+        const popup = await popupPromise;
+        if (popup) await popup.waitForEvent('close', { timeout: 60000 }).catch(() => {});
+    }
     await signInToAdmin(page, {
         fillOnly: true,
         username: cred.username,
@@ -109,19 +119,66 @@ async function approveServerCertRequests(page, { realm, cred, takeScreenshot = n
         console.log('asgard-examples: no pending change requests to authorize');
         return;
     }
-    await selectAll.check();
+    // One request per enclave popup. A bulk approval of several requests in one popup can close the
+    // popup before it sends the approvals ("Enclave popup closed before sending approvals"), so each
+    // round checks the first pending row, authorizes it alone, and reloads to see what is left.
+    for (let round = 0; round < 8; round++) {
+        const rowBox = page.locator('tbody input[type="checkbox"]').first();
+        if (!(await rowBox.isVisible().catch(() => false))) break;
+        await rowBox.check();
 
-    const bulkAuthorize = page.getByRole('button', { name: /^Bulk Authorize \(\d+\)$/ });
-    await expect(bulkAuthorize, 'selecting every pending row left nothing authorizable').toBeVisible({ timeout: 10000 });
-    await bulkAuthorize.click();
+        const bulkAuthorize = page.getByRole('button', { name: /^Bulk Authorize \(\d+\)$/ });
+        await expect(bulkAuthorize, 'selecting a pending row left nothing authorizable').toBeVisible({ timeout: 10000 });
+        await bulkAuthorize.click();
 
-    const confirmAuthorize = page.getByRole('button', { name: 'Authorize', exact: true });
-    await expect(confirmAuthorize, 'the Authorize confirmation dialog did not open').toBeVisible({ timeout: 10000 });
-    await approveViaEnclavePopup(page, { trigger: confirmAuthorize });
+        const confirmAuthorize = page.getByRole('button', { name: 'Authorize', exact: true });
+        await expect(confirmAuthorize, 'the Authorize confirmation dialog did not open').toBeVisible({ timeout: 10000 });
+        await approveViaEnclavePopup(page, { trigger: confirmAuthorize });
 
-    await expect(page.getByText(/change requests? authorized/i), 'the enclave approval did not report success')
-        .toBeVisible({ timeout: config.budget(60000) });
-    if (takeScreenshot) await takeScreenshot('cert_change_requests_authorized');
+        await expect(page.getByText(/change requests? authorized/i), 'the enclave approval did not report success')
+            .toBeVisible({ timeout: config.budget(60000) });
+        if (takeScreenshot) await takeScreenshot(`cert_change_requests_authorized_${round + 1}`);
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: config.budget(90000) });
+        await page.waitForTimeout(2000);
+    }
+    const left = await page.locator('tbody input[type="checkbox"]').count();
+    if (left > 0) throw new Error(`asgard-examples: ${left} change request(s) still pending after authorizing`);
 }
 
-module.exports = { EXAMPLE_URL, ASGARD_RECIPE, provisionAsgardRealm, signInToExample, approveServerCertRequests };
+/**
+ * Write this realm's adapter configs into the ResourceToResourceDelegation example, the way its README
+ * asks (step 1, "Put each app's adapter config in its appsettings.json"): the webapp's backend and analytics
+ * configs go into their appsettings.json "Keycloak" section, and the webapp's login config becomes
+ * tidecloak.json. Each download issues a fresh enrollment_token, which the container spends on its first
+ * start - so this must run right before the compose stack starts.
+ * @param {string} realm
+ * @param {string} exampleDir the ResourceToResourceDelegation folder of an asgard checkout
+ */
+async function writeR2RAdapterConfigs(realm, exampleDir) {
+    const fs = require('fs');
+    const { request } = require('@playwright/test');
+    const ctx = await request.newContext();
+    try {
+        const token = await getKcAdminToken(ctx, { baseUrl: config.TIDECLOAK_URL });
+        const fetch = (clientId) => fetchAdapterConfig(ctx, { baseUrl: config.TIDECLOAK_URL, realm, token, clientId });
+        const backend = await fetch('webapp_backend');
+        const login = await fetch('webapp_login');
+        const analytics = await fetch('analytics');
+        const writeKeycloak = (file, cfg) => {
+            const json = JSON.parse(fs.readFileSync(file, 'utf8'));
+            json.Keycloak = cfg;
+            fs.writeFileSync(file, JSON.stringify(json, null, 2) + '\n');
+        };
+        writeKeycloak(path.join(exampleDir, 'WebApplication', 'WebApp.Server', 'appsettings.json'), backend);
+        writeKeycloak(path.join(exampleDir, 'AnalyticsService', 'appsettings.json'), analytics);
+        fs.writeFileSync(path.join(exampleDir, 'WebApplication', 'webapp.client', 'tidecloak.json'), JSON.stringify(login, null, 2) + '\n');
+        if (backend.realm !== realm || login.realm !== realm || analytics.realm !== realm) {
+            throw new Error(`adapter configs name realm ${backend.realm}/${login.realm}/${analytics.realm}, expected ${realm}`);
+        }
+        return { realm };
+    } finally {
+        await ctx.dispose();
+    }
+}
+
+module.exports = { EXAMPLE_URL, ASGARD_RECIPE, provisionAsgardRealm, signInToExample, approveServerCertRequests, writeR2RAdapterConfigs };

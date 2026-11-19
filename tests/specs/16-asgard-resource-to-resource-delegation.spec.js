@@ -52,7 +52,7 @@ test.describe('Asgard example 3: ResourceToResourceDelegation', () => {
         ({ cred, realm } = await provisionAsgardRealm());
     });
 
-    test('add a patient, then get the personal, medical and average-age summaries', async ({ page }) => {
+    test('add a patient, then get the personal, medical and average-age summaries', async ({ page, browser }) => {
         test.setTimeout(config.budget(600000));
         const takeScreenshot = createScreenshotHelper(page, 'A16_resource_to_resource');
 
@@ -61,17 +61,40 @@ test.describe('Asgard example 3: ResourceToResourceDelegation', () => {
         // is this realm's tide-realm-admin (asgard-examples.recipe.json), so clear them here instead
         // of relying on the manual enclave approval the CI workflow's asgard-r2r environment gate
         // used to require.
-        await approveServerCertRequests(page, {
-            realm,
-            cred: /** @type {{username: string, password: string}} */ (cred),
-            takeScreenshot,
-        });
+        // Authorize in its own browser context, so the admin console session does not leak into the
+        // example's Tide sign-in below (in one context the Tide widget never appears).
+        const adminContext = await browser.newContext();
+        try {
+            await approveServerCertRequests(await adminContext.newPage(), {
+                realm,
+                cred: /** @type {{username: string, password: string}} */ (cred),
+                takeScreenshot,
+            });
+        } finally {
+            await adminContext.close();
+        }
 
         await signInToExample(page, /** @type {{username: string, password: string}} */ (cred), takeScreenshot);
 
         // the policy is added on first load: the page only enables the forms once it is live
         const status = page.locator('#status');
-        await expect(status, 'the locking policy is not live (waiting for approval, or the backend has no certificate yet)')
+        await expect(status, 'the locking policy never reached live or waiting-for-approval')
+            .toContainText(/the locking policy is live|the locking policy is waiting for approval/, { timeout: config.budget(180000) });
+        if (!(await status.textContent())?.includes('the locking policy is live')) {
+            // the first load filed the policy as a change request: authorize it like the cert requests, then reload
+            const adminContext = await browser.newContext();
+            try {
+                await approveServerCertRequests(await adminContext.newPage(), {
+                    realm,
+                    cred: /** @type {{username: string, password: string}} */ (cred),
+                    takeScreenshot,
+                });
+            } finally {
+                await adminContext.close();
+            }
+            await page.reload({ waitUntil: 'domcontentloaded' });
+        }
+        await expect(status, 'the locking policy is not live after its change request was authorized')
             .toContainText('the locking policy is live', { timeout: config.budget(180000) });
 
         // add a patient: the backend locks the data and stores only the ciphers, and returns the id

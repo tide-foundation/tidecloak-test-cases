@@ -23,7 +23,7 @@
 const { test, expect } = require('@playwright/test');
 const config = require('../utils/config');
 const { createScreenshotHelper } = require('../utils/helpers');
-const { provisionAsgardRealm, signInToExample } = require('../utils/asgardExample');
+const { provisionAsgardRealm, signInToExample, approveServerCertRequests } = require('../utils/asgardExample');
 
 const PLAINTEXT = 'asgard example two';
 
@@ -34,16 +34,31 @@ test.describe('Asgard example 2: LockingUserDataWithTide', () => {
 
     /** @type {{ username: string, password: string }} */
     let cred;
+    /** @type {string} */
+    let realm;
 
     test.beforeAll(async () => {
         // The recipe run + the Tide link-user + the firstAdmin elevate each take a while.
         test.setTimeout(20 * 60 * 1000);
-        ({ cred } = await provisionAsgardRealm());
+        ({ realm, cred } = await provisionAsgardRealm());
     });
 
-    test('the Tide Network locks submitted text under the policy and returns a cipher', async ({ page }) => {
+    test('the Tide Network locks submitted text under the policy and returns a cipher', async ({ page, browser }) => {
         test.setTimeout(config.budget(300000));
         const takeScreenshot = createScreenshotHelper(page, 'A15_locking_user_data');
+
+        // the example's lock_backend cert request sits pending until an admin authorizes it. Authorize in
+        // its own browser context so the admin session does not leak into the example's Tide sign-in.
+        const adminContext = await browser.newContext();
+        try {
+            await approveServerCertRequests(await adminContext.newPage(), {
+                realm,
+                cred: /** @type {{username: string, password: string}} */ (cred),
+                takeScreenshot,
+            });
+        } finally {
+            await adminContext.close();
+        }
 
         await signInToExample(page, /** @type {{username: string, password: string}} */ (cred), takeScreenshot);
         await expect(page.locator('#status')).toContainText('Logged in as', { timeout: config.budget(120000) });

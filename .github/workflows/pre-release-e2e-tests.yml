@@ -632,9 +632,22 @@ jobs:
           echo "TIDECLOAK_REALM=$realm" >> "$GITHUB_ENV"
           echo "Provisioned realm: $realm"
 
+      - name: 'Spec 16 setup: write the realm adapter configs into the example (fresh enrollment tokens)'
+        id: r2r_configs
+        if: always() && steps.r2r_realm.outcome == 'success'
+        working-directory: self/tests
+        run: |
+          stack_dir="$RUNNER_TEMP/tide-stack"
+          set -a
+          . "$stack_dir/.env.ci"
+          . "$stack_dir/stack.env"
+          set +a
+          node -e "require('./utils/asgardExample').writeR2RAdapterConfigs(process.env.TIDECLOAK_REALM, process.argv[1]).then(r => console.log('adapter configs written for', r.realm))" \
+            "$GITHUB_WORKSPACE/ws/asgard/aspnet/Tide.Asgard.AspNetCore/Examples/ResourceToResourceDelegation"
+
       - name: 'Spec 16 example: start the ResourceToResourceDelegation compose stack'
         id: r2r_up
-        if: always() && steps.r2r_realm.outcome == 'success'
+        if: always() && steps.r2r_configs.outcome == 'success'
         working-directory: ws/asgard/aspnet/Tide.Asgard.AspNetCore/Examples/ResourceToResourceDelegation
         run: |
           printf 'TIDECLOAK_REALM=%s\n' "$TIDECLOAK_REALM" > .env

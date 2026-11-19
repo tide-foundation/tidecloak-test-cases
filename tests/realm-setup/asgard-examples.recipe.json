@@ -72,7 +72,10 @@
         "clientId": "lock_backend",
         "publicClient": false,
         "directAccessGrantsEnabled": false,
-        "standardFlowEnabled": false
+        "standardFlowEnabled": false,
+        "attributes": {
+          "standard.token.exchange.enabled": "true"
+        }
       }
     },
     {
@@ -111,7 +114,10 @@
         "clientId": "analytics",
         "publicClient": false,
         "directAccessGrantsEnabled": false,
-        "standardFlowEnabled": false
+        "standardFlowEnabled": false,
+        "attributes": {
+          "standard.token.exchange.enabled": "true"
+        }
       }
     },
     {
@@ -165,6 +171,22 @@
           "protocolMapper": "oidc-audience-mapper",
           "config": {
             "included.client.audience": "webapp_backend",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      }
+    },
+    {
+      "kind": "client.addProtocolMapper",
+      "args": {
+        "clientId": "webapp_backend",
+        "mapper": {
+          "name": "analytics-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "analytics",
             "access.token.claim": "true",
             "id.token.claim": "false"
           }
