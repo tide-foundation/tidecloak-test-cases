@@ -22,7 +22,7 @@
 const { test, expect } = require('@playwright/test');
 const config = require('../utils/config');
 const { createScreenshotHelper } = require('../utils/helpers');
-const { provisionAsgardRealm, signInToExample } = require('../utils/asgardExample');
+const { provisionAsgardRealm, signInToExample, approveServerCertRequests } = require('../utils/asgardExample');
 
 test.describe('Asgard example 1: StandardResourceDelegation', () => {
     // Optional: these need the Asgard example served on :3000 for the realm.
@@ -31,16 +31,33 @@ test.describe('Asgard example 1: StandardResourceDelegation', () => {
 
     /** @type {{ username: string, password: string }} */
     let cred;
+    /** @type {string} */
+    let realm;
 
     test.beforeAll(async () => {
         // The recipe run + the Tide link-user + the firstAdmin elevate each take a while.
         test.setTimeout(20 * 60 * 1000);
-        ({ cred } = await provisionAsgardRealm());
+        ({ realm, cred } = await provisionAsgardRealm());
     });
 
-    test('the backend fetches the realm user list on behalf of the logged-in user', async ({ page }) => {
+    test('the backend fetches the realm user list on behalf of the logged-in user', async ({ page, browser }) => {
         test.setTimeout(config.budget(300000));
         const takeScreenshot = createScreenshotHelper(page, 'A14_standard_resource_delegation');
+
+        // the example's backend cert request sits pending until an admin authorizes it (same as spec 16).
+        // Authorize in its own browser context, so the admin console session does not leak into the
+        // example's Tide sign-in below (in one context the Tide widget never appears).
+        const adminContext = await browser.newContext();
+        try {
+            const adminPage = await adminContext.newPage();
+            await approveServerCertRequests(adminPage, {
+                realm,
+                cred: /** @type {{username: string, password: string}} */ (cred),
+                takeScreenshot,
+            });
+        } finally {
+            await adminContext.close();
+        }
 
         await signInToExample(page, /** @type {{username: string, password: string}} */ (cred), takeScreenshot);
 
