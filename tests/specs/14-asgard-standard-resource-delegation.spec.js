@@ -25,9 +25,7 @@ const { createScreenshotHelper } = require('../utils/helpers');
 const { provisionAsgardRealm, signInToExample, approveServerCertRequests } = require('../utils/asgardExample');
 
 test.describe('Asgard example 1: StandardResourceDelegation', () => {
-    // These need their example server on :3000 for the realm. The pre-release workflow starts it and sets
-    // ASGARD_EXAMPLE_SERVERS=1; the generic test-cases run does not, so they skip there.
-    test.skip(process.env.ASGARD_EXAMPLE_SERVERS !== '1', 'Asgard example specs need their example server; set ASGARD_EXAMPLE_SERVERS=1.');
+    // Needs the example server on :3000 for the realm. The pre-release workflow starts it before this spec runs.
 
     /** @type {{ username: string, password: string }} */
     let cred;
