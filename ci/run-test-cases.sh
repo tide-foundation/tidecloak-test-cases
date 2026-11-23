@@ -35,13 +35,18 @@ fi
 
 pw_selection_args
 files=()
+# The Asgard example specs (14-16) need their example servers and compose stack, which their own
+# workflow steps start, so this run leaves them out.
 if [ "$(suite_mode)" = smoke ]; then
     files=(specs/00-smoke.spec.js)
 elif [ -n "${SUITE_PARTITION:-}" ]; then
     [[ "$SUITE_PARTITION" =~ ^([1-9][0-9]*)/([1-9][0-9]*)$ ]] || die "SUITE_PARTITION must look like 1/4"
     k=${BASH_REMATCH[1]} n=${BASH_REMATCH[2]}
-    mapfile -t files < <(cd "$dir" && find specs -maxdepth 1 -name '*.spec.js' | sort | awk -v k="$k" -v n="$n" '(NR - 1) % n == k - 1')
+    mapfile -t files < <(cd "$dir" && find specs -maxdepth 1 -name '*.spec.js' ! -name '1[456]-*' | sort | awk -v k="$k" -v n="$n" '(NR - 1) % n == k - 1')
     [ ${#files[@]} -gt 0 ] || die "partition $SUITE_PARTITION has no spec files"
     log "partition $SUITE_PARTITION: ${files[*]}"
+else
+    mapfile -t files < <(cd "$dir" && find specs -maxdepth 1 -name '*.spec.js' ! -name '1[456]-*' | sort)
+    [ ${#files[@]} -gt 0 ] || die "no spec files to run"
 fi
 run_suite test-cases "$dir" reports -- npx playwright test "${files[@]}" "${PW_ARGS[@]}"

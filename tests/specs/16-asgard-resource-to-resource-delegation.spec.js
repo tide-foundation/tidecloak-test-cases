@@ -33,13 +33,7 @@ const PATIENT = {
 };
 
 test.describe('Asgard example 3: ResourceToResourceDelegation', () => {
-    // Optional: these need the Asgard example served on :3000 for the realm.
-    // They run only when ASGARD_EXAMPLES=1 AND ASGARD_R2R=1. ASGARD_R2R is set only by the pre-release
-    // workflow's spec 16 step, which builds the compose stack this spec needs; S2 sets ASGARD_EXAMPLES alone.
-    test.skip(
-        process.env.ASGARD_EXAMPLES !== '1' || process.env.ASGARD_R2R !== '1',
-        'Asgard spec 16 is optional; set ASGARD_EXAMPLES=1 and ASGARD_R2R=1 to run it.',
-    );
+    // Needs the compose stack (webapp, analytics, postgres) that the pre-release workflow's spec 16 steps build.
 
     /** @type {{ username: string, password: string }} */
     let cred;
